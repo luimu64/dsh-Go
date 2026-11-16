@@ -1,8 +1,10 @@
 #!/usr/bin/env node
-// Builds the app's bundled skill app/assets/skills/dsh-go-plugin/ from skill/ (SKILL.md and the
-// plugin template) and the checker (bin/check.mjs, lib/, schema/). Flutter bundles a flat asset
-// directory, so each file is stored under a flat name and manifest.json maps it to its place in
-// the installed skill folder ($DSH_HOME/skills/dsh-go-plugin/…), like the dsh-go-ui skill.
+// Builds the app's bundled skill app/assets/skills/dsh-go-plugin/ from skill/ (SKILL.md,
+// SKILL.en.md and the plugin template) and the checker (bin/check.mjs, lib/, schema/). Flutter
+// bundles a flat asset directory, so each file is stored under a flat name and manifest.json maps
+// it to its place in the installed skill folder ($DSH_HOME/skills/dsh-go-plugin/…), like the
+// dsh-go-ui skill. SKILL.en.md ships as an `en` locale variant of SKILL.md: the app installs the
+// variant that matches its language, and the Chinese source stays the default.
 //
 //   node scripts/sync-skill.mjs           write
 //   node scripts/sync-skill.mjs --check   exit 1 when out of date
@@ -13,6 +15,11 @@ import { fileURLToPath } from 'node:url'
 const here = dirname(fileURLToPath(import.meta.url))
 const kit = join(here, '..')
 export const SKILL_DIR = join(kit, '..', '..', 'app', 'assets', 'skills', 'dsh-go-plugin')
+
+/** English asset name → source file; replaces the same target path for English. */
+export function locales() {
+  return { 'en-SKILL.md': join(kit, 'skill', 'SKILL.en.md') }
+}
 
 /** target path inside the installed skill → source file. */
 export function sources() {
@@ -36,7 +43,12 @@ export function render() {
     files[name] = readFileSync(src, 'utf8')
     map[name] = target
   }
-  files['manifest.json'] = `${JSON.stringify({ name: 'dsh-go-plugin', files: map }, null, 2)}\n`
+  const en = {}
+  for (const [name, src] of Object.entries(locales())) {
+    files[name] = readFileSync(src, 'utf8')
+    en[name] = 'SKILL.md'
+  }
+  files['manifest.json'] = `${JSON.stringify({ name: 'dsh-go-plugin', files: map, locales: { en } }, null, 2)}\n`
   return files
 }
 

@@ -61,7 +61,7 @@ host.emitEvent('session/event', session, event)
 | `node scripts/sync-bridge.mjs` | The bridge's `lib/native/{limits,util,effects,manifest,capabilities}.js` changed |
 | `node scripts/sync-messages.mjs` | The app's `view` / `plugview` ARB files changed |
 | `node scripts/gen-parity.mjs` | `lib/view-check.js` changed (after the app's parser did); review the diff |
-| `node scripts/sync-skill.mjs` | Any of the above, or `skill/`: rebuilds the app's bundled `dsh-go-plugin` skill |
+| `node scripts/sync-skill.mjs` | Any of the above, or `skill/`: rebuilds the app's bundled `dsh-go-plugin` skill. `skill/SKILL.md` is the Chinese default and `skill/SKILL.en.md` its English variant; change both |
 | `scripts/wire-check.sh` | To validate the schemas against real bridge traffic |
 
 `npm test` (`node --test`) fails when any of these outputs is stale. Type checks need `npm install` (devDependency `typescript` only).

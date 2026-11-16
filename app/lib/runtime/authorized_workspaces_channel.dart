@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
 import 'authorized_workspaces.dart';
 
 class MethodAuthorizedWorkspaces extends AuthorizedWorkspacesClient {
@@ -36,17 +37,27 @@ class MethodAuthorizedWorkspaces extends AuthorizedWorkspacesClient {
         case 'cancel':
           return await _channel.invokeMethod<Object?>('cancel', arguments);
         default:
-          throw const AuthorizedWorkspaceFailure(
+          throw AuthorizedWorkspaceFailure(
             'unsupported_method',
-            '目录授权方法不受支持。',
+            AppLocale.isEnglish
+                ? 'The directory authorization method is not supported.'
+                : '目录授权方法不受支持。',  // l10n:keep zh half of the bilingual pair
           );
       }
     } on MissingPluginException {
-      throw const AuthorizedWorkspaceFailure('unsupported', '当前平台没有鸿蒙目录授权通道。');
+      throw AuthorizedWorkspaceFailure(
+        'unsupported',
+        AppLocale.isEnglish
+            ? 'This platform has no HarmonyOS directory authorization channel.'
+            : '当前平台没有鸿蒙目录授权通道。',  // l10n:keep zh half of the bilingual pair
+      );
     } on PlatformException catch (error) {
       throw AuthorizedWorkspaceFailure(
         error.code,
-        error.message ?? '目录授权操作未完成。',
+        error.message ??
+            (AppLocale.isEnglish
+                ? 'The directory authorization operation did not finish.'
+                : '目录授权操作未完成。'),  // l10n:keep zh half of the bilingual pair
         details: error.details,
       );
     }

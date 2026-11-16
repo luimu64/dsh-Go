@@ -33,6 +33,13 @@ const dshGoPluginConfigPath = '/dsh-go/v1/plugin-config';
 /// One entry's route: the profile id, percent-encoded as one segment.
 String dshGoPluginConfigEntryPath(String entryId) => '$dshGoPluginConfigPath/${Uri.encodeComponent(entryId)}';
 
+/// The `?locale=` of a plugin-config request: the app's language when it has
+/// one, else nothing (the Host's default, as before).
+Map<String, String>? pluginConfigLocaleQuery(String? locale) {
+  final tag = locale?.trim();
+  return tag == null || tag.isEmpty ? null : {'locale': tag};
+}
+
 /// One entry of `GET /dsh-go/v1/plugin-config`.
 ///
 /// Bridge R7 (runtime r14) also says who carries the entry and whether a
@@ -208,9 +215,15 @@ extension PluginConfigBridgeApi on DshClient {
   /// `GET /dsh-go/v1/plugin-config`. Null when the Host has no such routes
   /// (404: no bridge, or an older one) or this carrier cannot reach the
   /// bridge (the relay). Throws [DshRemoteException] `plugin-config/<code>`.
-  Future<List<PluginConfigEntrySummary>?> listPluginConfig({Duration timeout = const Duration(seconds: 10)}) async {
+  ///
+  /// [locale] travels as `?locale=`; an older Host ignores it and answers its
+  /// default language, as before.
+  Future<List<PluginConfigEntrySummary>?> listPluginConfig({
+    Duration timeout = const Duration(seconds: 10),
+    String? locale,
+  }) async {
     if (!canReachDshGo) return null;
-    final response = await _bridge.get(dshGoPluginConfigPath, timeout: timeout);
+    final response = await _bridge.get(dshGoPluginConfigPath, query: pluginConfigLocaleQuery(locale), timeout: timeout);
     if (response.statusCode == 404 && _codeOf(response) == null) return null;
     if (response.statusCode != 200) throw pluginConfigHttpError(dshGoPluginConfigPath, response);
     final json = tryDecodeJson(response.text);
@@ -219,30 +232,38 @@ extension PluginConfigBridgeApi on DshClient {
     return [for (final e in list) ?PluginConfigEntrySummary.fromJson(e)];
   }
 
-  /// `GET /dsh-go/v1/plugin-config/<entryId>`.
+  /// `GET /dsh-go/v1/plugin-config/<entryId>`; [locale] as [listPluginConfig].
   Future<PluginConfigEntryDetail> readPluginConfig(
     String entryId, {
     Duration timeout = const Duration(seconds: 10),
+    String? locale,
   }) async {
     final path = dshGoPluginConfigEntryPath(entryId);
-    final response = await _bridge.get(path, timeout: timeout);
+    final response = await _bridge.get(path, query: pluginConfigLocaleQuery(locale), timeout: timeout);
     return _detail(path, response);
   }
 
   /// `POST /dsh-go/v1/plugin-config/<entryId>` with [revision] as read.
   /// Answers once the Host has reconciled; a timeout leaves the outcome
-  /// unknown (read the entry again before writing again).
+  /// unknown (read the entry again before writing again). [locale] as
+  /// [listPluginConfig]: the answer's labels and messages are read in it.
   Future<PluginConfigEntryDetail> writePluginConfig(
     String entryId, {
     required String revision,
     required List<SettingsOp> ops,
     Duration timeout = const Duration(seconds: 60),
+    String? locale,
   }) async {
     final path = dshGoPluginConfigEntryPath(entryId);
-    final response = await _bridge.postJson(path, {
-      'revision': revision,
-      'ops': [for (final op in ops) op.toJson()],
-    }, timeout: timeout);
+    final response = await _bridge.postJson(
+      path,
+      {
+        'revision': revision,
+        'ops': [for (final op in ops) op.toJson()],
+      },
+      query: pluginConfigLocaleQuery(locale),
+      timeout: timeout,
+    );
     return _detail(path, response);
   }
 

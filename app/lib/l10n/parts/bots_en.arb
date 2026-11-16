@@ -272,6 +272,8 @@
   "botsLink": "link",
   "botsLinkOpenFailed": "Couldn’t open {host}",
   "botsYearMonth": "{month, select, 1{Jan} 2{Feb} 3{Mar} 4{Apr} 5{May} 6{Jun} 7{Jul} 8{Aug} 9{Sep} 10{Oct} 11{Nov} 12{Dec} other{{month}}} {year}",
+  "botsYearDate": "{month, select, 1{Jan} 2{Feb} 3{Mar} 4{Apr} 5{May} 6{Jun} 7{Jul} 8{Aug} 9{Sep} 10{Oct} 11{Nov} 12{Dec} other{{month}}} {day}, {year}",
+  "@botsYearDate": {"placeholders": {"month": {"type": "String"}, "day": {"type": "int"}, "year": {"type": "int"}}},
   "botsCopyGroupNumber": "Copy group number",
   "botsQrCodeLabel": "{title} QR code",
   "botsFiles": "Files",

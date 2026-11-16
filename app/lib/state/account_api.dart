@@ -230,10 +230,11 @@ class AccountQueryFailed implements Exception {
 class AccountClientMetadata {
   const AccountClientMetadata({required this.version, required this.locale, required this.timezoneOffsetSeconds});
 
-  /// The app's build (`1.0.0`), the way dsh-TUI reports its own version.
+  /// The app's build (`1.0.0`), the way dsh-TUI reports its own version, and
+  /// the language it is showing, so Platform's pages follow the app.
   factory AccountClientMetadata.current() => AccountClientMetadata(
     version: AppInfo.version.split('+').first,
-    locale: 'zh-CN',
+    locale: AppLocale.isEnglish ? 'en' : 'zh-CN',
     timezoneOffsetSeconds: DateTime.now().timeZoneOffset.inSeconds,
   );
 

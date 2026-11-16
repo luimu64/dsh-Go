@@ -192,12 +192,14 @@ $html
 
 /// An island's read-only helpers: 酒馆助手's getters and MVU's over
 /// dshStory; a write is refused, said where it can be done.
+// l10n:keep Card-script JS: its Chinese is source comments and script error
+// text, not app UI.
 const _storyJs = r'''
 (function(){
   var d=dshStory;
   function clone(v){return v===undefined?undefined:JSON.parse(JSON.stringify(v));}
   function readOnly(){
-    var e=new Error('Read only in an island: writing to the story is 整页画布\'s');
+    var e=new Error('Read only in an island: writing to the story is the full-page canvas\'s');
     e.code='unsupportedCapability';e.committed=false;return Promise.reject(e);
   }
   function floor(id){

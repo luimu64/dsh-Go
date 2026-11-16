@@ -1,20 +1,27 @@
 // SPDX-FileCopyrightText: 2026 DeepSeek
 // SPDX-License-Identifier: MIT
 // See THIRD_PARTY_NOTICES.md.
-// Chinese copy for the engine's own settings namespaces, adapted from the
-// official settings pages (`dsh-client-ui-settings-*`, `dsh-client-ui-chat`,
+// Copy for the engine's own settings namespaces, adapted from the official
+// settings pages (`dsh-client-ui-settings-*`, `dsh-client-ui-chat`,
 // `dsh-client-ui-conversation`, the experimental thinking-translation page,
 // the plugin market and the package READMEs). The curated pages and the
 // generated form read the same entries, so a field reads the same wherever
 // it shows up.
+//
+// Popular plugins' titles and enum labels are curated in both languages
+// (`plugin_namespace_copy_zh.dart`, `plugin_namespace_copy_en.dart`); the
+// table for the language the app shows is read on every call, so switching
+// the language applies without a restart and the Chinese values stay as
+// published.
 
 import '../../l10n/l10n.dart';
-import 'schema_fields.dart';
+import 'plugin_namespace_copy_en.dart';
 import 'plugin_namespace_copy_zh.dart';
+import 'schema_fields.dart';
 
 /// Page titles of namespaces (the generated form's fallback title).
 Map<String, String> get namespaceTitles => <String, String>{
-  if (!AppLocale.isEnglish) ...pluginNamespaceTitlesZh,
+  ...(AppLocale.isEnglish ? pluginNamespaceTitlesEn : pluginNamespaceTitlesZh),
   'subagent': appL10n.engineSubagentTitle,
   'subagent-model-selection-settings': appL10n.engineSubagentModelsTitle,
   'agent-loop': appL10n.engineAgentLoopTitle,
@@ -49,7 +56,7 @@ const _apiKey = FieldCopy(label: 'API Key');
 
 /// Copy by namespace, then by dotted field path.
 Map<String, Map<String, FieldCopy>> get namespaceCopy => <String, Map<String, FieldCopy>>{
-  if (!AppLocale.isEnglish) ...pluginNamespaceCopyZh,
+  ...(AppLocale.isEnglish ? pluginNamespaceCopyEn : pluginNamespaceCopyZh),
   'subagent': {
     'maxDepth': FieldCopy(
       label: appL10n.engineSubagentMaxDepth,

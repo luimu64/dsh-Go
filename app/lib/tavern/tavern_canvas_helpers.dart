@@ -17,6 +17,8 @@
 /// MVU (its scripts import MagVarUpdate, or it says so in its extensions).
 String tavernCanvasHelpersJs({required bool mvu}) => 'var mvuWanted=$mvu;$_js';
 
+// l10n:keep-begin Card-script JS: the Chinese in it is source comments for
+// whoever reads this file, and script error text, not app UI.
 const _js = r'''
   var res={},ctx=null,storedPresets={},presetsLoading=null;
   function adoptResources(r,context){
@@ -808,6 +810,7 @@ const _js = r'''
   });}
   share('replaceCharacter',watched(replaceCharacter));share('updateCharacterWith',watched(updateCharacterWith));
 ''';
+// l10n:keep-end
 
 /// The engine's MVU issues ({code, message, …}) as a notice's words, one a
 /// line, each said once: an update that did not finish as [unfinished] (its

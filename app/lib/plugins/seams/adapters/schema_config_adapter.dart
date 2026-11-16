@@ -66,10 +66,11 @@ class SchemaConfigSeat extends ConsumerWidget {
     final bundle = ref.watch(
       installedPluginsProvider.select((s) => s.value?.where((b) => b.name == occupant.package).firstOrNull),
     );
-    String rowTitle(String ns) =>
-        bundle?.rows.where((r) => r.rowId == ns).firstOrNull?.meta?.title?.resolve() ?? namespaceTitle(ns);
-    final single = namespaces.length == 1;
     final l10n = context.l10n;
+    final locale = l10n.localeName;
+    String rowTitle(String ns) =>
+        bundle?.rows.where((r) => r.rowId == ns).firstOrNull?.meta?.title?.resolve(locale) ?? namespaceTitle(ns);
+    final single = namespaces.length == 1;
 
     if (placement == SeatPlacement.row) {
       return Column(
@@ -82,7 +83,7 @@ class SchemaConfigSeat extends ConsumerWidget {
               title: single ? l10n.commonSettings : rowTitle(ns),
               chevron: true,
               onTap: () => unawaited(
-                openSettingsPage(context, ns, title: single ? (bundle?.title() ?? occupant.label) : rowTitle(ns)),
+                openSettingsPage(context, ns, title: single ? (bundle?.title(locale) ?? occupant.label) : rowTitle(ns)),
               ),
             ),
         ],

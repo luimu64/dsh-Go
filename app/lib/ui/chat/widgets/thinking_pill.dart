@@ -702,7 +702,7 @@ class _TranslatableReasoningState extends ConsumerState<_TranslatableReasoning> 
     super.didUpdateWidget(old);
     _listen(widget.holder.controller);
     if (old.text != widget.text || old.active != widget.active) {
-      widget.holder.controller?.update(widget.text, running: widget.active);
+      widget.holder.controller?.update(widget.text, running: widget.active, language: reasoningUiLanguage);
     }
   }
 
@@ -729,10 +729,11 @@ class _TranslatableReasoningState extends ConsumerState<_TranslatableReasoning> 
     final controller = holder.controller ??= ReasoningTranslation(
       maxTextChars: limits.maxTextChars,
       translate: (text) => translator(text, limits: limits, sessionId: sessionId),
+      language: reasoningUiLanguage,
     );
     _listen(controller);
     setState(() => holder.showTranslation = true);
-    controller.update(widget.text, running: widget.active);
+    controller.update(widget.text, running: widget.active, language: reasoningUiLanguage);
   }
 
   @override

@@ -423,5 +423,28 @@ void main() {
       // Strict market text keeps its keys as written; resolving still matches.
       expect(const LocalizedText({'en': 'Weather', 'zh-CN': '天气'}).resolve('zh'), '天气');
     });
+
+    test('variants resolve by script and region, then by key', () {
+      final scripts = LocalizedText.fromJson({'zh-Hant': '繁體', 'zh-Hans': '简体'})!;
+      expect(scripts.resolve('zh-TW'), '繁體', reason: 'Taiwan writes traditional');
+      expect(scripts.resolve('zh-HK'), '繁體');
+      expect(scripts.resolve('zh-CN'), '简体');
+      expect(scripts.resolve('zh-SG'), '简体');
+      // No region to go by: the same pick whatever order the keys came in.
+      expect(scripts.resolve('zh'), '简体');
+      final reversed = LocalizedText.fromJson({'zh-Hans': '简体', 'zh-Hant': '繁體'})!;
+      expect(reversed.resolve('zh'), scripts.resolve('zh'));
+      final english = LocalizedText.fromJson({'en-US': 'Color', 'en-GB': 'Colour'})!;
+      expect(english.resolve('en-US'), 'Color');
+      expect(english.resolve('en-AU'), 'Colour', reason: 'no en-AU: first key wins');
+      expect(english.resolve('fr'), 'Colour', reason: 'English fallback is deterministic');
+    });
+
+    test('whole tags and case are folded', () {
+      final text = LocalizedText.fromJson({' ZH-Hant-TW ': '繁體', 'PT_br': 'Brasil'})!;
+      expect(text.values.keys, ['zh-hant-tw', 'pt-br']);
+      expect(text.resolve('zh-Hant-TW'), '繁體');
+      expect(text.resolve('pt-BR'), 'Brasil');
+    });
   });
 }

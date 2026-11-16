@@ -170,22 +170,38 @@ class SchemaDocumentationButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final entries = cachedSchemaDocumentation(schema, AppLocale.current.toLanguageTag());
+    final entries = cachedSchemaDocumentation(schema, AppLocale.current.languageCode);
     if (entries.isEmpty) return const SizedBox.shrink();
     return IconButton(
       tooltip: schemaDocumentationLabel,
       icon: const Icon(AppIcons.info),
-      onPressed: () =>
-          unawaited(showFieldSheet<void>(context, (_) => SchemaDocumentationSheet(title: title, entries: entries))),
+      onPressed: () => unawaited(
+        showFieldSheet<void>(context, (_) => SchemaDocumentationSheet.ofSchema(title: title, schema: schema)),
+      ),
     );
   }
 }
 
 /// The page's field descriptions in full, like every field sheet: × and 完成.
+///
+/// The [entries] of a sheet that names its own avoid rebuilding; one opened
+/// from a [SchemaNode] works its entries out again on every build, so a sheet
+/// left open while the app language changes reads the new language rather
+/// than the snapshot taken when it opened.
 class SchemaDocumentationSheet extends StatelessWidget {
-  const SchemaDocumentationSheet({super.key, required this.title, required this.entries, this.launcher = _launch});
+  const SchemaDocumentationSheet({super.key, required this.title, required this.entries, this.launcher = _launch})
+    : schema = null;
+
+  const SchemaDocumentationSheet.ofSchema({
+    super.key,
+    required this.title,
+    required this.schema,
+    this.launcher = _launch,
+  }) : entries = const [];
+
   final String title;
   final List<SchemaDocumentationEntry> entries;
+  final SchemaNode? schema;
   final SchemaDocumentationLauncher launcher;
 
   Future<void> _open(BuildContext context, String text) async {
@@ -241,6 +257,16 @@ class SchemaDocumentationSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ValueListenableBuilder<Locale>(
+      valueListenable: AppLocale.changes,
+      builder: (context, locale, _) => _body(context, _entriesFor(locale)),
+    );
+  }
+
+  List<SchemaDocumentationEntry> _entriesFor(Locale locale) =>
+      schema == null ? entries : cachedSchemaDocumentation(schema!, locale.languageCode);
+
+  Widget _body(BuildContext context, List<SchemaDocumentationEntry> entries) {
     final theme = Theme.of(context);
     return FieldSheetFrame(
       title: schemaDocumentationLabel,

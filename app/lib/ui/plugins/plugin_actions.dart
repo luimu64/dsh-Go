@@ -367,7 +367,7 @@ Future<bool> removePluginBundle(BuildContext context, PluginBundle bundle, {Rout
   final host = container.read(pluginHostProvider);
   final generation = host?.client.mux.generation;
   final readyGeneration = host?.client.mux.lastReadyGenerationNumber;
-  final title = bundle.title();
+  final title = bundle.title(context.l10n.localeName);
   final colors = DshColors.of(context);
   final ok = await showAppDialog<bool>(
     context: context,

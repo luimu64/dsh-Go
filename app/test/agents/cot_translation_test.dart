@@ -55,6 +55,49 @@ void main() {
     expect(translation.text, 'ok:Alpha.\n\nok:Beta.');
   });
 
+  test('a language switch drops translations made for the old language', () async {
+    final asked = <String>[];
+    final translation = ReasoningTranslation(
+      maxTextChars: 4000,
+      translate: (text) async {
+        asked.add(text);
+        return '${asked.length}:$text';
+      },
+      language: 'zh',
+    );
+    addTearDown(translation.dispose);
+    translation.update('Alpha.', running: false, language: 'zh');
+    await pumpEventQueue();
+    expect(translation.text, '1:Alpha.');
+    // The same fragment is translated again for the new language, not reused.
+    translation.update('Alpha.', running: false, language: 'en');
+    await pumpEventQueue();
+    expect(asked, ['Alpha.', 'Alpha.']);
+    expect(translation.text, '2:Alpha.');
+    expect(translation.hasTranslation, isTrue);
+  });
+
+  test('a language switch clears a previous failure so translation can retry', () async {
+    var fail = true;
+    final translation = ReasoningTranslation(
+      maxTextChars: 4000,
+      translate: (text) async {
+        if (fail) throw StateError('offline');
+        return 'ok:$text';
+      },
+      language: 'zh',
+    );
+    addTearDown(translation.dispose);
+    translation.update('Alpha.', running: false, language: 'zh');
+    await pumpEventQueue();
+    expect(translation.failed, isTrue);
+    fail = false;
+    translation.update('Alpha.', running: false, language: 'en');
+    await pumpEventQueue();
+    expect(translation.failed, isFalse);
+    expect(translation.text, 'ok:Alpha.');
+  });
+
   test('dispose stops publishing', () async {
     final gate = Completer<String>();
     final translation = ReasoningTranslation(maxTextChars: 4000, translate: (_) => gate.future);

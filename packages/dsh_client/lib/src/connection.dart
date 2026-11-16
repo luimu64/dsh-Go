@@ -358,10 +358,10 @@ class DshConnection {
   }
 
   /// POSTs one JSON body and returns the raw response (any status).
-  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) {
+  Future<DshHttpResponse> postJson(String path, Object? body, {Map<String, String>? query, Duration? timeout}) {
     return _exchange(
       'POST',
-      resolve(path),
+      resolve(path, query),
       body: utf8.encode(jsonEncode(body)),
       contentType: 'application/json',
       timeout: timeout,

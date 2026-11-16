@@ -1,5 +1,10 @@
 // This context is mounted only by the companion-full preset.
-import { companionFullRules, renderCompanionProfile } from './full-persona.js';
+import {
+  companionFullRulesFor,
+  companionLanguageOf,
+  companionWebSurfaceFor,
+  renderCompanionProfile,
+} from './full-persona.js';
 export const name = 'dsh-go-companion-full-context';
 export const inject = ['systemPrompt'];
 
@@ -21,25 +26,27 @@ export function apply(ctx) {
   if (typeof recall?.registerContext === 'function') {
     ctx.effect(() => recall.registerContext(ctx), 'companion-recall.context');
   }
+  const profileOf = (agent) => agent && ctx.get('dshGoCompanionContext')?.profile(agent);
+  const languageOf = (agent) => companionLanguageOf(profileOf(agent));
   // The preset no longer mounts dsh-persona beside this provider: duplicate
   // named sections in the same scope are rejected by 0.2.2-rc.1.
   ctx.systemPrompt.section({
     name: 'deployment:persona-prefix',
     order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
     interpolate: false,
-    text: ({ agent } = {}) => renderCompanionProfile(agent && ctx.get('dshGoCompanionContext')?.profile(agent)),
+    text: ({ agent } = {}) => renderCompanionProfile(profileOf(agent)),
   });
   ctx.systemPrompt.section({
     name: 'deployment:persona-suffix',
     order: ctx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_SUFFIX'),
     interpolate: false,
-    text: companionFullRules,
+    text: ({ agent } = {}) => companionFullRulesFor(languageOf(agent)),
   });
   ctx.systemPrompt.section({
     name: 'app:web-surface',
     order: ctx.systemPrompt.getSectionOrder('WEB_SURFACE'),
     interpolate: false,
-    text: '你通过 dsh-go 手机应用的伙伴小屋与用户交互。用户未另指对象而说“这个应用”或“这里”时，指 dsh-go；当前主机上的文件与手机屏幕是不同的环境。界面没有隐式提供屏幕、DOM 或截图；只有本轮工具实际返回的内容才是已观察到的结果。',
+    text: ({ agent } = {}) => companionWebSurfaceFor(languageOf(agent)),
   });
   ctx.systemPrompt.context({
     name: 'app:web-surface',

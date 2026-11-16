@@ -21,6 +21,12 @@ enum AppLanguage {
       AppLanguage.values.firstWhere((l) => l.name == v, orElse: () => AppLanguage.system);
 }
 
+Locale _resolveAppLanguage(AppLanguage language) {
+  // Fixed choices also work in background services without a widget binding.
+  final fixed = language.locale;
+  return fixed ?? AppLocale.resolve(null, WidgetsBinding.instance.platformDispatcher.locales);
+}
+
 class AppLanguageController extends Notifier<AppLanguage> {
   /// SharedPreferences key. The Android side reads it too (`flutter.app_language`,
   /// AppStrings.kt), so notifications follow the app, not the system.
@@ -37,8 +43,10 @@ class AppLanguageController extends Notifier<AppLanguage> {
       final prefs = await SharedPreferences.getInstance();
       initial = AppLanguage.parse(prefs.getString(prefsKey));
     } catch (_) {
-      // Unreadable prefs: follow the system.
+      // Unreadable prefs: follow the system, not a previous load's choice.
+      initial = AppLanguage.system;
     }
+    AppLocale.use(_resolveAppLanguage(initial));
   }
 
   @override
@@ -46,6 +54,7 @@ class AppLanguageController extends Notifier<AppLanguage> {
 
   Future<void> set(AppLanguage language) async {
     if (language == state) return;
+    AppLocale.use(_resolveAppLanguage(language));
     state = language;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(prefsKey, language.name);
@@ -53,3 +62,10 @@ class AppLanguageController extends Notifier<AppLanguage> {
 }
 
 final appLanguageProvider = NotifierProvider<AppLanguageController, AppLanguage>(AppLanguageController.new);
+
+/// Reactive language for content, requests, and caches as well as widget text.
+/// DshApp invalidates this when the operating system's language list changes.
+final effectiveAppLocaleProvider = Provider<Locale>((ref) {
+  final choice = ref.watch(appLanguageProvider);
+  return _resolveAppLanguage(choice);
+});

@@ -46,7 +46,7 @@ String shortTime(DateTime? time, {DateTime? now}) {
   if (day == today) return hm;
   if (day == today.subtract(const Duration(days: 1))) return appL10n.commonYesterday;
   if (time.year == at.year) return appL10n.monthDay(time);
-  return '${time.year}/${time.month}/${time.day}';
+  return appL10n.botsYearDate(time.year, '${time.month}', time.day);
 }
 
 /// `12345` → `1.2 万`, `980` → `980`.

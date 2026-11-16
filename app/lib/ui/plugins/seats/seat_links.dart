@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../l10n/l10n.dart';
+import '../../../plugins/plugin_text.dart';
 import '../../../plugins/seams/seams.dart';
 import '../../../state/plugins_state.dart';
 import '../../common/empty_view.dart';
@@ -30,18 +31,19 @@ PluginBundle? seatBundleOf(List<PluginBundle>? bundles, String package) =>
     bundles?.where((b) => b.name == package).firstOrNull;
 
 /// What to call [o]: its registered label, else its bundle's title, else the
-/// package name.
-String seatOccupantTitle(SlotOccupant o, {PluginBundle? bundle}) {
+/// package name. Labels are resolved when the inventory is built (in the
+/// app's language); [locale] covers the bundle fallback.
+String seatOccupantTitle(SlotOccupant o, {PluginBundle? bundle, String? locale}) {
   final label = o.label?.trim();
   if (label != null && label.isNotEmpty) return label;
-  return bundle?.title() ?? o.package;
+  return bundle?.title(locale ?? pluginTextLocale) ?? o.package;
 }
 
 /// What to call [o] where the app lists it: its label, else the label of
 /// the entry that names it in DSH Web (a panel's sidebar entry, a tab's
 /// title; the `main` or tab body itself is registered without one), else
 /// its bundle's title, else the package name.
-String seatEntryTitle(SlotOccupant o, {SeatInventory? inventory, PluginBundle? bundle}) {
+String seatEntryTitle(SlotOccupant o, {SeatInventory? inventory, PluginBundle? bundle, String? locale}) {
   final label = o.label?.trim();
   if (label != null && label.isNotEmpty) return label;
   final named = switch (o.slot) {
@@ -57,15 +59,16 @@ String seatEntryTitle(SlotOccupant o, {SeatInventory? inventory, PluginBundle? b
     final entry = entries.where((e) => e.cell == o.cell).firstOrNull ?? (entries.length == 1 ? entries.single : null);
     if (entry != null) return entry.label!.trim();
   }
-  return seatOccupantTitle(o, bundle: bundle);
+  return seatOccupantTitle(o, bundle: bundle, locale: locale);
 }
 
 /// A config occupant's row title: 「设置」, or the row's own name for one of
 /// several rows (`plugins.row.config`).
-String seatConfigTitle(SlotOccupant o, {PluginBundle? bundle}) {
+String seatConfigTitle(SlotOccupant o, {PluginBundle? bundle, String? locale}) {
   if (o.slot != Slots.rowConfig) return appL10n.commonSettings;
   final row = o.cell.substring(o.cell.lastIndexOf('#') + 1);
-  return bundle?.rows.where((r) => r.rowId == row).firstOrNull?.meta?.title?.resolve() ?? appL10n.commonSettings;
+  final l = locale ?? pluginTextLocale;
+  return bundle?.rows.where((r) => r.rowId == row).firstOrNull?.meta?.title?.resolve(l) ?? appL10n.commonSettings;
 }
 
 /// Where [o] lands in DSH Web. The open bridge (`assets/web/dsh_web_open.js`)
@@ -148,14 +151,15 @@ class SeatWebLink extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
+    final locale = l10n.localeName;
     final o = item.occupant;
     final bundle = seatBundleOf(ref.watch(installedPluginsProvider.select((s) => s.value)), o.package);
     if (item.configNamespace case final ns?) {
       final title =
-          bundle?.rows.where((row) => row.rowId == ns).firstOrNull?.meta?.title?.resolve() ?? namespaceTitle(ns);
+          bundle?.rows.where((row) => row.rowId == ns).firstOrNull?.meta?.title?.resolve(locale) ?? namespaceTitle(ns);
       return SchemaUnsupportedField(title: title, ns: ns);
     }
-    final name = seatEntryTitle(o, inventory: ref.watch(seatInventoryProvider), bundle: bundle);
+    final name = seatEntryTitle(o, inventory: ref.watch(seatInventoryProvider), bundle: bundle, locale: locale);
     if (seat.placement == SeatPlacement.page || seat.placement == SeatPlacement.overlay) {
       final target = seatWebTarget(o, sessionId: seat.sessionId, bundle: bundle);
       // Like the pages' empty states: centred, a little high.
@@ -173,10 +177,10 @@ class SeatWebLink extends ConsumerWidget {
       );
     }
     final config = o.slot == Slots.bundleConfig || o.slot == Slots.rowConfig;
-    final entry = seatRowEntry(ref, seat, item, title: config ? (bundle?.title() ?? name) : name);
+    final entry = seatRowEntry(ref, seat, item, title: config ? (bundle?.title(locale) ?? name) : name);
     return ListPageRow(
       icon: config ? AppIcons.configure : AppIcons.plugin,
-      title: config ? seatConfigTitle(o, bundle: bundle) : name,
+      title: config ? seatConfigTitle(o, bundle: bundle, locale: locale) : name,
       meta: entry.web ? l10n.commonWeb : null,
       chevron: true,
       onTap: () => entry.open(context),

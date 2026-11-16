@@ -5,6 +5,8 @@ import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n.dart';
+
 enum OhosLinuxState {
   disabled,
   installing,
@@ -471,7 +473,10 @@ class OhosLinuxSnapshot {
   final String? nativeMemoryRelease;
   String? get nativeMemoryNotice => nativeMemoryRelease == null
       ? null
-      : 'Linux 原生内存仍保留在当前 App 进程；线程退役不表示内存释放，需退出整个 App 进程后由系统回收。';
+      : AppLocale.isEnglish
+      ? 'Linux native memory is still held in this app process; retiring the thread does not free it. '
+            'Quit the whole app so the system can reclaim it.'
+      : 'Linux 原生内存仍保留在当前 App 进程；线程退役不表示内存释放，需退出整个 App 进程后由系统回收。';  // l10n:keep zh half of the bilingual pair
   final OhosLinuxState state;
   final bool enabled;
   final bool admission;

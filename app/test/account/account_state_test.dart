@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:ui' show Brightness;
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/account_state.dart';
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -498,12 +499,19 @@ void main() {
       expect(loopbackCallbackOrigin(null), isNull);
     });
 
-    test('client metadata matches what the Host validates', () {
-      final m = AccountClientMetadata.current().toJson();
-      expect(m.keys, {'version', 'locale', 'timezoneOffsetSeconds'});
-      expect(m['locale'], 'zh-CN');
-      expect(m['version'], isNot(contains('+')));
-      expect(m['timezoneOffsetSeconds'], isA<int>());
+    test('client metadata matches what the Host validates, in the app language', () {
+      final restore = AppLocale.current;
+      addTearDown(() => AppLocale.use(restore));
+
+      AppLocale.use(AppLocale.zhCN);
+      final zh = AccountClientMetadata.current().toJson();
+      expect(zh.keys, {'version', 'locale', 'timezoneOffsetSeconds'});
+      expect(zh['locale'], 'zh-CN');
+      expect(zh['version'], isNot(contains('+')));
+      expect(zh['timezoneOffsetSeconds'], isA<int>());
+
+      AppLocale.use(AppLocale.en);
+      expect(AccountClientMetadata.current().toJson()['locale'], 'en');
     });
   });
 

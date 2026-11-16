@@ -40,9 +40,15 @@ void main() {
     expect(manifest['name'], guideSkillName);
     final files = (manifest['files'] as Map).cast<String, String>();
     final harmony = (manifest['harmony'] as Map).cast<String, String>();
+    Set<String> localeAssets(String key) => {
+      for (final locale in (manifest[key] as Map? ?? const {}).values)
+        for (final asset in (locale as Map).keys) asset as String,
+    };
     expect({
       ...files.keys,
       ...harmony.keys,
+      ...localeAssets('locales'),
+      ...localeAssets('harmonyLocales'),
     }, {for (final f in assets.listSync()) f.uri.pathSegments.last}..remove('manifest.json'));
 
     expect(guide.name, guideSkillName);

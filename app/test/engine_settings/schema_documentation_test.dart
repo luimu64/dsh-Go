@@ -52,6 +52,53 @@ void main() {
     expect(schemaDocumentationLabel, '字段说明');
   });
 
+  test('schema titles and descriptions read the app language at every call', () {
+    final hotkey = SchemaNode.fromJson(catalogFixture('schemastery-description')).dict['hotkey']!;
+    expect(labelFor('hotkey', hotkey, const FieldCopy()), '按住快捷键开始录音');
+    expect(hintFor(hotkey, const FieldCopy()), '松开后发送。');
+
+    AppLocale.use(AppLocale.en);
+    expect(labelFor('hotkey', hotkey, const FieldCopy()), 'Hotkey');
+    expect(hintFor(hotkey, const FieldCopy()), 'Hold the shortcut to record.');
+    expect(
+      schemaDocumentation(SchemaNode.fromJson(catalogFixture('schemastery-description')), AppLocale.current.languageCode)
+          .singleWhere((e) => e.path == r'$.hotkey')
+          .description,
+      contains('**Hold the shortcut**'),
+    );
+  });
+
+  testWidgets('an open documentation sheet follows the app language', (tester) async {
+    AppLocale.use(AppLocale.zhCN);
+    final schema = SchemaNode.fromJson(catalogFixture('schemastery-description'));
+    await tester.pumpWidget(
+      goldenApp(
+        brightness: Brightness.light,
+        home: Scaffold(body: SchemaDocumentationSheet.ofSchema(title: 'Voice', schema: schema)),
+      ),
+    );
+    await settle(tester);
+    String body() => tester.widgetList<GptMarkdown>(find.byType(GptMarkdown)).map((w) => w.data).join();
+    expect(find.text('字段说明'), findsOneWidget);
+    expect(body(), contains('**按住快捷键**'));
+
+    // The sheet was opened before the switch: it reads the new language rather
+    // than the snapshot it opened with.
+    AppLocale.use(AppLocale.en);
+    await tester.pump();
+    await settle(tester);
+    expect(find.text('Field descriptions'), findsOneWidget);
+    expect(body(), contains('**Hold the shortcut**'));
+    expect(body(), isNot(contains('按住快捷键')));
+
+    AppLocale.use(AppLocale.zhCN);
+    await tester.pump();
+    await settle(tester);
+    expect(find.text('字段说明'), findsOneWidget);
+    expect(body(), contains('**按住快捷键**'));
+    expect(tester.takeException(), isNull);
+  });
+
   test('a row reads a Markdown description as plain text; the sheet keeps the Markdown', () {
     expect(plainSchemaText('**按住快捷键**开始录音。'), '按住快捷键开始录音。');
     expect(plainSchemaText('Use `Control` or [the guide](https://example.test/keys).'), 'Use Control or the guide.');

@@ -7,5 +7,10 @@
     "example-full.json": "examples/full.json",
     "example-header.json": "examples/header.json",
     "example-quiet.json": "examples/quiet.json"
+  },
+  "locales": {
+    "en": {
+      "SKILL.en.md": "SKILL.md"
+    }
   }
 }

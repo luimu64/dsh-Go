@@ -308,6 +308,7 @@ String releaseNotesFor(ReleaseInfo release, String language) {
 
 /// `### 中文` / `### English` sections of [notes]; empty without them.
 Map<String, String> _notesSections(String notes) {
+  // l10n:keep Headings of the changelog's own bilingual sections.
   final heading = RegExp(r'^#{2,3}[ \t]*(中文|English)[ \t]*$', multiLine: true);
   final marks = heading.allMatches(notes).toList();
   if (marks.isEmpty) return const {};

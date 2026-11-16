@@ -8,6 +8,7 @@ import '../../runtime/runtime_bridge.dart';
 import '../../runtime/runtime_state.dart';
 import '../../runtime/local_footprint.dart';
 import '../../state/engine_control.dart';
+import '../../state/locale_state.dart';
 import '../../state/settings_state.dart';
 import '../common/empty_view.dart';
 import '../common/progress_halo.dart';
@@ -17,6 +18,7 @@ import '../onboarding/local_install.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import '../theme/theme.dart';
+import 'dsh_web_locale.dart';
 import 'web_target.dart';
 import 'web_view_page.dart';
 
@@ -44,10 +46,11 @@ class LocalWebScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final status = ref.watch(localRuntimeProvider.select((s) => s.status));
     final phoneLayout = ref.watch(settingsProvider.select((s) => s.webPhoneLayout));
+    final locale = ref.watch(effectiveAppLocaleProvider);
     if (status.isRunning) {
       return WebViewPage(
-        // A restart issues a new token, and the layout switch applies on
-        // load: rebuild the WebView for either.
+        // Only runtime and layout changes replace the page. Language changes
+        // update the live client without losing its composer or navigation.
         key: ValueKey((status.token, phoneLayout)),
         url: localWebUri(status.baseUrl!, status.token!),
         title: context.l10n.webTitle,
@@ -60,6 +63,7 @@ class LocalWebScreen extends ConsumerWidget {
         root: handle != null,
         link: link,
         onSession: onSession,
+        startScript: dshWebLocaleBridgeScript(locale),
       );
     }
     return _NotRunning(handle: handle);

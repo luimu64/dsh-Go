@@ -141,7 +141,8 @@ Future<DateTime?> showDaySheet(BuildContext context, {required DateTime date, re
       initial: date,
       wheel: (onChanged) => CupertinoDatePicker(
         mode: CupertinoDatePickerMode.date,
-        dateOrder: DatePickerDateOrder.ymd,
+        // Year first reads naturally in Chinese; English expects month first.
+        dateOrder: AppLocale.isEnglish ? DatePickerDateOrder.mdy : DatePickerDateOrder.ymd,
         initialDateTime: DateTime(date.year, date.month, date.day),
         minimumDate: DateTime(first.year, first.month, first.day),
         maximumDate: DateTime(first.year + 5, 12, 31),

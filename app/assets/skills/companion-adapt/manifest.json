@@ -3,5 +3,11 @@
   "files": {
     "SKILL.md": "SKILL.md",
     "contract.txt": "references/contract.txt"
+  },
+  "locales": {
+    "en": {
+      "SKILL.en.md": "SKILL.md",
+      "contract.en.txt": "references/contract.txt"
+    }
   }
 }

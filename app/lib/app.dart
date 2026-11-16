@@ -66,6 +66,8 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
+    // Resolve before starting services that construct prompts or default content.
+    AppLocale.use(ref.read(effectiveAppLocaleProvider));
     // Start loading the stored tile style now, so 全部功能 opens in it rather
     // than flashing the default first.
     ref.read(tileStyleProvider);
@@ -92,7 +94,11 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   /// 跟随系统: the system language changed while the app was open.
   @override
   void didChangeLocales(List<Locale>? locales) {
-    if (ref.read(appLanguageProvider) == AppLanguage.system) setState(() {});
+    if (ref.read(appLanguageProvider) == AppLanguage.system) {
+      AppLocale.use(AppLocale.resolve(null, locales));
+      ref.invalidate(effectiveAppLocaleProvider);
+      setState(() {});
+    }
   }
 
   /// The system's remove-animations setting changed while the app was open: page
@@ -134,10 +140,7 @@ class _DshAppState extends ConsumerState<DshApp> with WidgetsBindingObserver {
   }
 
   Locale _resolveLocale() {
-    final locale = AppLocale.resolve(
-      ref.watch(appLanguageProvider).locale,
-      WidgetsBinding.instance.platformDispatcher.locales,
-    );
+    final locale = ref.watch(effectiveAppLocaleProvider);
     if (locale != _shown) {
       final first = _shown == null;
       _shown = locale;

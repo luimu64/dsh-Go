@@ -2,8 +2,10 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/runtime/runtime_bridge.dart';
 import 'package:dsh_app/runtime/runtime_state.dart';
+import 'package:dsh_app/state/locale_state.dart';
 import 'package:dsh_app/ui_config/ui_config.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,12 +32,22 @@ class _Runtime extends LocalRuntimeController {
   void emit(RuntimePhase phase, [String token = 'run-one']) => state = _value(phase, token);
 }
 
+class _Language extends AppLanguageController {
+  @override
+  AppLanguage build() => AppLanguage.zh;
+  void choose(AppLanguage language) {
+    AppLocale.use(language.locale ?? AppLocale.zhCN);
+    state = language;
+  }
+}
+
 class _Harness {
-  _Harness(this.loader) {
+  _Harness(this.loader, {this.language}) {
     root = tempRootfs();
     currentRoot = root;
     c = ProviderContainer(
       overrides: [
+        if (language != null) appLanguageProvider.overrideWith(() => language!),
         localRuntimeProvider.overrideWith(() => runtime),
         uiRootfsResolverProvider.overrideWithValue(() async => currentRoot),
         uiSkillBundleLoaderProvider.overrideWithValue(() async {
@@ -71,6 +83,7 @@ class _Harness {
     );
   }
   final Future<UiSkillBundle> Function(int call) loader;
+  final _Language? language;
   final runtime = _Runtime();
   late final Directory root;
   late Directory currentRoot;
@@ -180,6 +193,26 @@ void main() {
       await h.running;
       expect(h.skill(h.root).readAsStringSync(), contains('normal'));
       expect(h.loads, 1);
+    } finally {
+      await h.close();
+    }
+  });
+
+  test('changing the app language installs that language for a running engine', () async {
+    final language = _Language();
+    final h = _Harness((_) async => _bundle(language.state.name), language: language);
+    try {
+      await h.begin();
+      await h.running;
+      expect(h.skill(h.root).readAsStringSync(), contains('zh'));
+      expect(h.loads, 1);
+
+      language.choose(AppLanguage.en);
+      await h.c.pump();
+      await until(() => h.loads == 2);
+      await h.running;
+      expect(h.skill(h.root).readAsStringSync(), contains('en'));
+      expect(h.loads, 2);
     } finally {
       await h.close();
     }

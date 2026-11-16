@@ -132,7 +132,7 @@ class _TavernImportReportPageState extends ConsumerState<TavernImportReportPage>
               margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
               children: [
                 for (final MapEntry(:key, :value) in counts)
-                  SettingsTile(tinted: false, title: _countName(context, key), value: Text('$value'), chevron: false),
+                  SettingsTile(tinted: false, title: _countName(l10n, key), value: Text('$value'), chevron: false),
               ],
             ),
           SheetGroup(
@@ -169,24 +169,20 @@ class _TavernImportReportPageState extends ConsumerState<TavernImportReportPage>
 }
 
 /// A count's name: the engine's key, in words where it is a common one.
-String _countName(BuildContext context, String key) {
-  final zh = Localizations.localeOf(context).languageCode == 'zh';
-  const names = {
-    'worldInfoBooks': ('世界书', 'Lorebooks'),
-    'entriesStored': ('世界书条目', 'Lorebook entries'),
-    'entriesEnabled': ('启用的条目', 'Entries on'),
-    'entriesDisabled': ('关闭的条目', 'Entries off'),
-    'regexScripts': ('正则脚本', 'Regex scripts'),
-    'regexIncompatible': ('不兼容的正则', 'Regex that will not run'),
-    'scripts': ('脚本', 'Scripts'),
-    'helperScripts': ('酒馆助手脚本', 'Helper scripts'),
-    'htmlFragments': ('HTML 片段', 'HTML fragments'),
-    'assets': ('资源', 'Assets'),
-    'embeddedFiles': ('内嵌文件', 'Embedded files'),
-    'prompts': ('提示词', 'Prompts'),
-    'macroOccurrences': ('宏', 'Macros'),
-    'decoratorLines': ('装饰器', 'Decorators'),
-  };
-  final name = names[key];
-  return name == null ? key : (zh ? name.$1 : name.$2);
-}
+String _countName(L10n l10n, String key) => switch (key) {
+  'worldInfoBooks' => l10n.tavernReportWorldInfoBooks,
+  'entriesStored' => l10n.tavernReportEntriesStored,
+  'entriesEnabled' => l10n.tavernReportEntriesEnabled,
+  'entriesDisabled' => l10n.tavernReportEntriesDisabled,
+  'regexScripts' => l10n.tavernReportRegexScripts,
+  'regexIncompatible' => l10n.tavernReportRegexIncompatible,
+  'scripts' => l10n.tavernReportScripts,
+  'helperScripts' => l10n.tavernReportHelperScripts,
+  'htmlFragments' => l10n.tavernReportHtmlFragments,
+  'assets' => l10n.tavernReportAssets,
+  'embeddedFiles' => l10n.tavernReportEmbeddedFiles,
+  'prompts' => l10n.tavernReportPrompts,
+  'macroOccurrences' => l10n.tavernReportMacros,
+  'decoratorLines' => l10n.tavernReportDecoratorLines,
+  _ => key,
+};

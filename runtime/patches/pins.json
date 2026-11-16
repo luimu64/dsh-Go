@@ -387,7 +387,7 @@
     "ohos-virtual-process.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
-          "after": "1774c13dca648dbffc7449f226de9a2f11a696eae3dbc18aaf729d996438d74d",
+          "after": "122212bb27eb6b99f6b3b9cb5017a04b6e2173628f0f9a749531c8a598c5aca5",
           "before": "7f5a2c438a9b32eb5c7beac97a6e589e1908b3df79b18abebb22ea192300cad1"
         },
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
@@ -1689,8 +1689,8 @@
     "zzzzzzzzzz-ohos-shell-limit-description.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-bash/lib/index.js": {
-          "after": "165a6be735c9268d1918a7345f975e2b47c90f452457388dbeef48dceff9c8a7",
-          "before": "1774c13dca648dbffc7449f226de9a2f11a696eae3dbc18aaf729d996438d74d"
+          "after": "7e76d67948e03ff0d3f0a53f19c35953203eca6d7ad6ed1b3ab89a12480cf4c7",
+          "before": "122212bb27eb6b99f6b3b9cb5017a04b6e2173628f0f9a749531c8a598c5aca5"
         }
       }
     },
@@ -1741,7 +1741,7 @@
     "zzzzzzzzzzz-ohos-search-ignore-description.diff": {
       "0.2.2-rc.1": {
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee",
+          "after": "4b705e5abd02b3d1cf31ab04e9258dea89850fe92041fd731f9bfb1c9a1d32b2",
           "before": "d73a434a74ee2a74aa2f0662350cd95c8211bf852ea17a24bc378a0bf871746e"
         }
       }
@@ -1773,11 +1773,11 @@
           "before": "286792bd82085586fbb0869aa32b3e3733425b4059a517465abed97dd710a15a"
         },
         "node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js": {
-          "after": "3cc19074929316c8d511ab757fbfd76eb6019de7e13de8dea0999b371c593f0e",
+          "after": "7491062247d30fc68062648f86b276b8c843a1c27e78f2a3ebd077c148833d06",
           "before": "74cf9df9ab605a7675797ee1304d7af7059e97e90c3728ce4e40fbd2333fd7b8"
         },
         "node_modules/@deepseek-ai/dsh-skill-office/lib/index.js": {
-          "after": "906e88075e67bdda47d9d5e13686d44dc3a1d332eef2c3df4af1d1be5f15df42",
+          "after": "f9d8097bcd18a792980e8d6d060f3d32104a5e8bc46b959343085fc90c4dceb2",
           "before": "3fb0b9f3151fc6da8f10d9d2f89b6496234ad302346bc5d28c5feefea572bb14"
         }
       }
@@ -1825,8 +1825,8 @@
           "before": "f9a79fd5194bb4d6321e6d2d5b5eb72f99c683452e1defbb75fad52f76aed667"
         },
         "node_modules/@deepseek-ai/dsh-tool-fs-search/lib/index.js": {
-          "after": "ffdac06d530134e35a4ea2182f09ace344fcf48e2fa0e312419f69e3e73db255",
-          "before": "42ab78974030a7287b73d02700a914225fb3cfad0fc7dc8d62b35d66864ea3ee"
+          "after": "fd2b0304d3c238578fdef68b2a547c46a8d3c5a8b56917d1c18705a75d9b34c7",
+          "before": "4b705e5abd02b3d1cf31ab04e9258dea89850fe92041fd731f9bfb1c9a1d32b2"
         },
         "node_modules/@deepseek-ai/dsh-tools/lib/pipeline.js": {
           "after": "541f5c565369f4a7cf9e6df8bfc380341e0727e4dde8ddf5333d6caf2719d830",
@@ -1899,6 +1899,14 @@
         "node_modules/@deepseek-ai/dsh-plugin-manager/lib/index.js": {
           "after": "b3aae8aed987887d9c43c1f9c0ddd0c70e69d084fc35780589dd2d59fdfafe76",
           "before": "d793a2eee744a2f0e183d2193933bad38425787854a0eaf67a40406ad42ad59a"
+        }
+      }
+    },
+    "zzzzzzzzzzzzzzz-native-app-locale-override.diff": {
+      "0.2.2-rc.1": {
+        "node_modules/@deepseek-ai/dsh-client-locale/lib/client.js": {
+          "after": "81fada202b78e7c5daa31d56f2683e3f24e197c3cba83bc0688e6d0889eccd0e",
+          "before": "769747aa79323075eba9545ff9982770c0163e0bba3cabcc49ff56581c0f3613"
         }
       }
     },
@@ -2479,7 +2487,8 @@
       "fork-default-effort.diff",
       "config-editor-lock-order.diff",
       "piai-overflow-output-limit.diff",
-      "schedule-authorization-availability.diff"
+      "schedule-authorization-availability.diff",
+      "zzzzzzzzzzzzzzz-native-app-locale-override.diff"
     ],
     "ohos": [
       "cordis-effect-dispose-completion.diff",
@@ -2632,6 +2641,7 @@
       "config-editor-lock-order.diff",
       "piai-overflow-output-limit.diff",
       "schedule-authorization-availability.diff",
+      "zzzzzzzzzzzzzzz-native-app-locale-override.diff",
       "ohos-attachment-publication.diff",
       "ohos-attachment-diagnostic.diff",
       "ohos-hap-native-libraries.diff",

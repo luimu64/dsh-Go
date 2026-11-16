@@ -1720,6 +1720,20 @@
       }
     }
   },
+  "botsYearDate": "{year}/{month}/{day}",
+  "@botsYearDate": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      },
+      "month": {
+        "type": "String"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
   "botsCopyGroupNumber": "复制群号",
   "botsQrCodeLabel": "{title}二维码",
   "@botsQrCodeLabel": {
@@ -12392,6 +12406,20 @@
   "tavernReportCounts": "里面有",
   "tavernReportFindings": "没执行或要留意的",
   "tavernReportNoFindings": "没有要留意的",
+  "tavernReportWorldInfoBooks": "世界书",
+  "tavernReportEntriesStored": "世界书条目",
+  "tavernReportEntriesEnabled": "启用的条目",
+  "tavernReportEntriesDisabled": "关闭的条目",
+  "tavernReportRegexScripts": "正则脚本",
+  "tavernReportRegexIncompatible": "不兼容的正则",
+  "tavernReportScripts": "脚本",
+  "tavernReportHelperScripts": "酒馆助手脚本",
+  "tavernReportHtmlFragments": "HTML 片段",
+  "tavernReportAssets": "资源",
+  "tavernReportEmbeddedFiles": "内嵌文件",
+  "tavernReportPrompts": "提示词",
+  "tavernReportMacros": "宏",
+  "tavernReportDecoratorLines": "装饰器",
   "tavernPresetForChat": "这段对话用的预设",
   "tavernPresetFollow": "跟随默认",
   "tavernPresetFollowDefault": "跟随默认（{name}）",

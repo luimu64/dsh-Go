@@ -5060,6 +5060,12 @@ abstract class L10n {
   /// **'{year}年{month}月'**
   String botsYearMonth(int year, String month);
 
+  /// No description provided for @botsYearDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'{year}/{month}/{day}'**
+  String botsYearDate(int year, String month, int day);
+
   /// No description provided for @botsCopyGroupNumber.
   ///
   /// In zh, this message translates to:
@@ -38209,6 +38215,90 @@ abstract class L10n {
   /// In zh, this message translates to:
   /// **'没有要留意的'**
   String get tavernReportNoFindings;
+
+  /// No description provided for @tavernReportWorldInfoBooks.
+  ///
+  /// In zh, this message translates to:
+  /// **'世界书'**
+  String get tavernReportWorldInfoBooks;
+
+  /// No description provided for @tavernReportEntriesStored.
+  ///
+  /// In zh, this message translates to:
+  /// **'世界书条目'**
+  String get tavernReportEntriesStored;
+
+  /// No description provided for @tavernReportEntriesEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用的条目'**
+  String get tavernReportEntriesEnabled;
+
+  /// No description provided for @tavernReportEntriesDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭的条目'**
+  String get tavernReportEntriesDisabled;
+
+  /// No description provided for @tavernReportRegexScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'正则脚本'**
+  String get tavernReportRegexScripts;
+
+  /// No description provided for @tavernReportRegexIncompatible.
+  ///
+  /// In zh, this message translates to:
+  /// **'不兼容的正则'**
+  String get tavernReportRegexIncompatible;
+
+  /// No description provided for @tavernReportScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本'**
+  String get tavernReportScripts;
+
+  /// No description provided for @tavernReportHelperScripts.
+  ///
+  /// In zh, this message translates to:
+  /// **'酒馆助手脚本'**
+  String get tavernReportHelperScripts;
+
+  /// No description provided for @tavernReportHtmlFragments.
+  ///
+  /// In zh, this message translates to:
+  /// **'HTML 片段'**
+  String get tavernReportHtmlFragments;
+
+  /// No description provided for @tavernReportAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'资源'**
+  String get tavernReportAssets;
+
+  /// No description provided for @tavernReportEmbeddedFiles.
+  ///
+  /// In zh, this message translates to:
+  /// **'内嵌文件'**
+  String get tavernReportEmbeddedFiles;
+
+  /// No description provided for @tavernReportPrompts.
+  ///
+  /// In zh, this message translates to:
+  /// **'提示词'**
+  String get tavernReportPrompts;
+
+  /// No description provided for @tavernReportMacros.
+  ///
+  /// In zh, this message translates to:
+  /// **'宏'**
+  String get tavernReportMacros;
+
+  /// No description provided for @tavernReportDecoratorLines.
+  ///
+  /// In zh, this message translates to:
+  /// **'装饰器'**
+  String get tavernReportDecoratorLines;
 
   /// No description provided for @tavernPresetForChat.
   ///

@@ -331,4 +331,17 @@ void main() {
       expect(topic.question, endsWith('?'));
     }
   });
+
+  test('the hidden entry prompts follow the selected language', () {
+    addTearDown(() => AppLocale.use(AppLocale.zhCN));
+    final cjk = RegExp(r'[\u3400-\u9fff]');
+    AppLocale.use(AppLocale.zhCN);
+    final zh = {for (final topic in AskAiTopic.values) topic: topic.question};
+    expect(zh.values, everyElement(matches(cjk)));
+    AppLocale.use(AppLocale.en);
+    for (final topic in AskAiTopic.values) {
+      expect(cjk.hasMatch(topic.question), isFalse, reason: '$topic');
+      expect(topic.question, isNot(zh[topic]), reason: '$topic');
+    }
+  });
 }

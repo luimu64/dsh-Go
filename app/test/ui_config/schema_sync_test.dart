@@ -108,7 +108,12 @@ void main() {
     final manifest = jsonDecode(File('${dir.path}/manifest.json').readAsStringSync()) as Map;
     final files = (manifest['files'] as Map).cast<String, String>();
     final onDisk = {for (final f in dir.listSync()) f.uri.pathSegments.last}..remove('manifest.json');
-    expect(files.keys.toSet(), onDisk);
+    final localized = {
+      for (final locale in (manifest['locales'] as Map? ?? const {}).values)
+        for (final asset in (locale as Map).keys) asset as String,
+    };
+    expect({...files.keys, ...localized}, onDisk);
+    expect((manifest['locales'] as Map)['en'], {'SKILL.en.md': 'SKILL.md'});
     expect(files.values, containsAll(['SKILL.md', 'schema.json', 'scripts/check.mjs']));
 
     final bundle = await loadUiSkillBundle(readAssetFromDisk);

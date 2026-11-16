@@ -174,8 +174,8 @@ Future<ProfileExportSource> loadProfileExport(
         shared = SharedPlugin(
           name: bundle.name,
           source: PluginSourceKind.official,
-          title: bundle.title(),
-          summary: bundle.summary(),
+          title: bundle.title(AppLocale.current.languageCode),
+          summary: bundle.summary(AppLocale.current.languageCode),
         );
       } else if (bundle.installed) {
         shared = sharedPluginFromBundle(bundle);
@@ -205,7 +205,7 @@ Future<ProfileExportSource> loadProfileExport(
         ExportItem(
           id: 'plugin:${bundle.name}',
           section: ExportSection.plugins,
-          title: bundle.title(),
+          title: bundle.title(AppLocale.current.languageCode),
           subtitle: unavailable ?? (subtitle.isEmpty ? null : subtitle),
           bytes: shared == null
               ? 0

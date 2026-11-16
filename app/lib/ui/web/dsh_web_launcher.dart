@@ -8,6 +8,7 @@ import '../../state/hosts_state.dart';
 import '../../state/plugins_state.dart' show installedPluginsProvider;
 import '../../state/settings_state.dart';
 import '../../state/ui_mode_state.dart';
+import 'dsh_web_locale.dart';
 import 'local_web_screen.dart';
 import 'web_target.dart';
 import 'web_view_page.dart';
@@ -95,16 +96,23 @@ void openDshWeb(BuildContext context, WidgetRef ref, {DshWebTarget target = cons
     case LocalDshWeb():
       page = LocalWebScreen(target: target);
     case SshDshWeb(:final url, :final hostName):
-      page = WebViewPage(
-        url: url,
-        title: context.l10n.webTitle,
-        subtitle: hostName,
-        externalDisabledReason: context.l10n.webSshAppOnly,
-        // Android suspends the page in the background and its socket drops.
-        reloadAfterBackground: const Duration(seconds: 60),
-        dshWeb: true,
-        phoneLayout: ref.read(settingsProvider).webPhoneLayout,
-        openTarget: target,
+      // Update only the page's language, retaining navigation and drafts.
+      page = ValueListenableBuilder<Locale>(
+        valueListenable: AppLocale.changes,
+        builder: (context, locale, _) {
+          return WebViewPage(
+            url: url,
+            title: context.l10n.webTitle,
+            subtitle: hostName,
+            externalDisabledReason: context.l10n.webSshAppOnly,
+            // Android suspends the page in the background and its socket drops.
+            reloadAfterBackground: const Duration(seconds: 60),
+            dshWeb: true,
+            phoneLayout: ref.read(settingsProvider).webPhoneLayout,
+            openTarget: target,
+            startScript: dshWebLocaleBridgeScript(locale),
+          );
+        },
       );
     case NoDshWeb(:final reason):
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(content: Text(reason)));

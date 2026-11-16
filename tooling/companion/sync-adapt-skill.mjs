@@ -1,19 +1,40 @@
-// The Dart constant is the authoring source; keep the host's instructions exact.
+// The Dart constants are the authoring source; keep the host's instructions exact.
+// The Chinese constant ships as contract.txt and the English one as
+// contract.en.txt; app/assets/skills/companion-adapt/manifest.json maps the
+// English file over references/contract.txt when the app is in English.
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const source = await readFile(path.join(root, 'app/lib/companion/companion_adapt_contract.dart'), 'utf8');
-const match = source.match(/const companionAdaptSystem = '''\r?\n([\s\S]*?)''';/);
-if (!match || match[1].includes('$') || match[1].includes('\\')) {
-  throw new Error('Expected one literal companionAdaptSystem; update the extractor if the Dart syntax changes');
+
+function literal(name) {
+  const marker = `const ${name} = '''\n`;
+  const start = source.indexOf(marker);
+  const end = start < 0 ? -1 : source.indexOf("''';", start + marker.length);
+  if (start < 0 || end < 0) {
+    throw new Error(`Expected one literal ${name}; update the extractor if the Dart syntax changes`);
+  }
+  const text = source.slice(start + marker.length, end);
+  if (text.includes('$') || text.includes('\\')) {
+    throw new Error(`Unexpected interpolation or escape in ${name}`);
+  }
+  return text;
 }
-const target = path.join(root, 'app/assets/skills/companion-adapt/contract.txt');
+
+const files = [
+  ['contract.txt', literal('companionAdaptSystem')],
+  ['contract.en.txt', literal('companionAdaptSystemEn')],
+];
+const directory = path.join(root, 'app/assets/skills/companion-adapt');
+
 if (process.argv.includes('--check')) {
-  if (await readFile(target, 'utf8') !== match[1]) throw new Error('companion-adapt prompt is stale');
-  console.log('companion-adapt prompt matches the Dart constant');
+  for (const [name, text] of files) {
+    if (await readFile(path.join(directory, name), 'utf8') !== text) throw new Error(`companion-adapt ${name} is stale`);
+  }
+  console.log('companion-adapt prompts match the Dart constants');
 } else {
-  await writeFile(target, match[1], 'utf8');
-  console.log('Updated companion-adapt/contract.txt');
+  for (const [name, text] of files) await writeFile(path.join(directory, name), text, 'utf8');
+  console.log(`Updated ${files.map(([name]) => `companion-adapt/${name}`).join(' and ')}`);
 }

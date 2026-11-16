@@ -30,8 +30,45 @@ void main() {
       expect(AppLocale.resolve(null, const [Locale('ja'), Locale('zh')]), AppLocale.zhCN);
       expect(AppLocale.resolve(null, const [Locale('fr'), Locale('en')]), AppLocale.en);
       expect(AppLocale.resolve(null, const [Locale('ja')]), AppLocale.en);
-      expect(AppLocale.resolve(null, const []), AppLocale.zhCN);
+      expect(AppLocale.resolve(null, const []), AppLocale.en);
+      expect(AppLocale.resolve(null, null), AppLocale.en);
+      expect(AppLocale.resolve(const Locale('fi'), const [Locale('zh')]), AppLocale.en);
     });
+  });
+
+  test('content listeners follow normalized locale changes exactly once', () {
+    final seen = <Locale>[];
+    void changed() => seen.add(AppLocale.changes.value);
+    AppLocale.changes.addListener(changed);
+    addTearDown(() => AppLocale.changes.removeListener(changed));
+    AppLocale.use(const Locale('en', 'GB'));
+    AppLocale.use(const Locale('en', 'US'));
+    AppLocale.use(const Locale('zh', 'TW'));
+    expect(seen, [AppLocale.en, AppLocale.zhCN]);
+  });
+
+  testWidgets('stored language is effective before services start', (tester) async {
+    SharedPreferences.setMockInitialValues({AppLanguageController.prefsKey: 'en'});
+    await AppLanguageController.load();
+    addTearDown(() => AppLanguageController.initial = AppLanguage.system);
+    expect(AppLanguageController.initial, AppLanguage.en);
+    expect(AppLocale.current, AppLocale.en);
+    expect(appL10n.commonCancel, 'Cancel');
+  });
+
+  test('content providers react to selection without a widget rebuild', () async {
+    SharedPreferences.setMockInitialValues({});
+    AppLanguageController.initial = AppLanguage.zh;
+    addTearDown(() => AppLanguageController.initial = AppLanguage.system);
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final subscription = container.listen(effectiveAppLocaleProvider, (_, _) {});
+    addTearDown(subscription.close);
+    expect(container.read(effectiveAppLocaleProvider), AppLocale.zhCN);
+    await container.read(appLanguageProvider.notifier).set(AppLanguage.en);
+    expect(container.read(effectiveAppLocaleProvider), AppLocale.en);
+    expect(AppLocale.current, AppLocale.en);
+    expect(appL10n.commonCancel, 'Cancel');
   });
 
   test('appL10n follows AppLocale.use', () {

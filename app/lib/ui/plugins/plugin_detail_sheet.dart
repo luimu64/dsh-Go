@@ -397,12 +397,13 @@ class BundleSheet extends ConsumerWidget {
     final l10n = context.l10n;
     final theme = Theme.of(context);
     final colors = DshColors.of(context);
+    final locale = l10n.localeName;
     final host = ref.watch(pluginHostProvider);
     final bundles = ref.watch(installedPluginsProvider).value;
     final bundle = bundles?.where((b) => b.name == name).firstOrNull ?? initial;
     final gone = bundles != null && !bundles.any((b) => b.name == name && bundleGroup(b) != BundleGroup.hidden);
     final job = ref.watch(pluginInstallsProvider.select((jobs) => jobs[name]));
-    final summary = bundle.summary();
+    final summary = bundle.summary(locale);
     final error = bundleErrorText(bundle);
     final canSwitch = bundle.readOnlyReason == null && (bundle.installed || bundle.optional) && !gone;
     final configSource = ref.watch(pluginConfigProvider);
@@ -512,7 +513,7 @@ class BundleSheet extends ConsumerWidget {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: Text(
-                    [for (final row in bundle.rows) row.meta?.title?.resolve() ?? row.moduleName]
+                    [for (final row in bundle.rows) row.meta?.title?.resolve(locale) ?? row.moduleName]
                         .join(l10n.hubPluginComponentSeparator),
                     style: theme.textTheme.bodySmall?.copyWith(color: colors.textTertiary, height: 1.6),
                   ),
@@ -564,13 +565,13 @@ class BundleSheet extends ConsumerWidget {
                           icon: AppIcons.configure,
                           title: configurable.length == 1
                               ? l10n.commonSettings
-                              : row.meta?.title?.resolve() ?? row.rowId,
+                              : row.meta?.title?.resolve(locale) ?? row.rowId,
                           chevron: true,
                           onTap: () => unawaited(
                             openSettingsPage(
                               context,
                               row.rowId,
-                              title: configurable.length == 1 ? bundle.title() : row.meta?.title?.resolve(),
+                              title: configurable.length == 1 ? bundle.title(locale) : row.meta?.title?.resolve(locale),
                             ),
                           ),
                         ),
@@ -610,6 +611,7 @@ class BundleSheet extends ConsumerWidget {
 
   Widget _action(BuildContext context, PluginHost? host, PluginBundle bundle, PluginInstallJob? job, bool gone) {
     final l10n = context.l10n;
+    final locale = l10n.localeName;
     final colors = DshColors.of(context);
     const size = Size.fromHeight(48);
     if (host == null || gone) return const SizedBox.shrink();
@@ -649,7 +651,10 @@ class BundleSheet extends ConsumerWidget {
         onPressed: job?.isActive ?? false
             ? null
             : () => unawaited(
-                runPluginInstall(context, PluginInstallRequest(name: bundle.name, spec: spec, title: bundle.title())),
+                runPluginInstall(
+                  context,
+                  PluginInstallRequest(name: bundle.name, spec: spec, title: bundle.title(locale)),
+                ),
               ),
         child: Text(job?.isActive ?? false ? l10n.hubPluginInstalling : l10n.commonInstall),
       );

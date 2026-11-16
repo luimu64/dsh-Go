@@ -131,7 +131,11 @@ export function createRecallCoordinator({ store, adapter, markers = createRecall
   }
   async function readStore(binding) {
     let context;
-    try { context = await store.getRecallContext(); }
+    try {
+      const language = binding?.agent && typeof promptContext?.language === 'function'
+        ? promptContext.language(binding.agent) : 'zh';
+      context = await store.getRecallContext({ language });
+    }
     catch {
       retireNow(binding, 'store-unavailable');
       throw recallError(503, 'store-unavailable', 'Companion recall store is unavailable');

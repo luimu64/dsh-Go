@@ -51,14 +51,15 @@ class PluginSettingsTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
+    final locale = l10n.localeName;
     final o = item.occupant;
     final bundle = seatBundleOf(ref.watch(installedPluginsProvider.select((s) => s.value)), o.package);
     if (item.configNamespace case final ns?) {
       final title =
-          bundle?.rows.where((row) => row.rowId == ns).firstOrNull?.meta?.title?.resolve() ?? namespaceTitle(ns);
+          bundle?.rows.where((row) => row.rowId == ns).firstOrNull?.meta?.title?.resolve(locale) ?? namespaceTitle(ns);
       return SchemaUnsupportedField(title: title, ns: ns);
     }
-    final title = seatEntryTitle(o, inventory: ref.watch(seatInventoryProvider), bundle: bundle);
+    final title = seatEntryTitle(o, inventory: ref.watch(seatInventoryProvider), bundle: bundle, locale: locale);
     final bool web;
     final void Function(BuildContext context) open;
     if (item.mode == SeatMode.native) {

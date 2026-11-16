@@ -4,6 +4,7 @@
 
 import 'dart:convert';
 
+import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/state/bots_state.dart';
 import 'package:dsh_app/state/connection_state.dart';
 import 'package:dsh_app/state/hosts_state.dart';
@@ -32,6 +33,23 @@ void main() {
     await settle(12);
     return container;
   }
+
+  group('language', () {
+    test('the state read asks for the language the app is showing', () async {
+      final restore = AppLocale.current;
+      addTearDown(() => AppLocale.use(restore));
+
+      AppLocale.use(AppLocale.zhCN);
+      final zh = FakeDsBotTransport();
+      await start(zh);
+      expect(zh.calls.where((c) => c.$1 == 'state').first.$2['locale'], 'zh-CN');
+
+      AppLocale.use(AppLocale.en);
+      final en = FakeDsBotTransport();
+      await start(en);
+      expect(en.calls.where((c) => c.$1 == 'state').first.$2['locale'], 'en');
+    });
+  });
 
   group('availability', () {
     test('a host without the plugin (404) asks to install it', () async {

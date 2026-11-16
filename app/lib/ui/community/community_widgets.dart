@@ -93,8 +93,8 @@ class CommunityPluginRow extends ConsumerWidget {
     final plugin = entry?.plugin;
     final bundles = ref.watch(installedPluginsProvider.select((s) => s.value));
     final job = plugin == null ? null : ref.watch(pluginInstallsProvider.select((jobs) => jobs[plugin.name]));
-    final title = plugin?.displayTitle() ?? pick.name;
-    final subtitle = pick.note ?? plugin?.displayDescription() ?? plugin?.author;
+    final title = plugin?.displayTitle(context.l10n.localeName) ?? pick.name;
+    final subtitle = pick.note ?? plugin?.displayDescription(context.l10n.localeName) ?? plugin?.author;
     void open() => unawaited(showMarketPluginSheet(context, entry!));
     return ListPageRow(
       leading: PluginAvatar(name: pick.name, title: title, icon: plugin?.icon),

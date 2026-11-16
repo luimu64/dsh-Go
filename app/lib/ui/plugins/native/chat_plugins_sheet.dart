@@ -266,9 +266,10 @@ class _WebPluginsState extends ConsumerState<_WebPlugins> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final theme = Theme.of(context);
+    final locale = l10n.localeName;
     final web = widget.web;
     final bundles = ref.watch(installedPluginsProvider.select((s) => s.value));
-    final names = [for (final package in web.packages) seatBundleOf(bundles, package)?.title() ?? package];
+    final names = [for (final package in web.packages) seatBundleOf(bundles, package)?.title(locale) ?? package];
     final spec = web.island;
     final island = ref.watch(seatRenderersProvider).island;
     final pages = [
@@ -362,7 +363,7 @@ class _WebPluginsState extends ConsumerState<_WebPlugins> {
                   key: ValueKey('chat-plugins-settings|$package'),
                   icon: AppIcons.settings,
                   title: l10n.commonSettings,
-                  meta: web.packages.length > 1 ? bundle.title() : null,
+                  meta: web.packages.length > 1 ? bundle.title(locale) : null,
                   chevron: true,
                   onTap: () => unawaited(showBundleSheet(context, bundle)),
                 ),

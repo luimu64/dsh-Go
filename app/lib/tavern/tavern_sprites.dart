@@ -65,6 +65,7 @@ String? tavernSpriteFor(Map<String, String> sprites, String text, {String? marke
 
 /// What cards name the pictures for each feeling the words can show: ST's
 /// expression labels first, then plain English and Chinese.
+// l10n:keep-begin Names to match against, in both languages: not shown.
 const _names = {
   'happy': ['joy', 'amusement', 'excitement', 'happy', 'smile', 'laugh', '开心', '高兴', '微笑', '笑'],
   'shy': ['embarrassment', 'shy', 'blush', '害羞', '脸红'],
@@ -76,3 +77,4 @@ const _names = {
 };
 
 const _neutral = ['neutral', 'default', 'idle', 'normal', 'calm', '平静', '默认', '正常'];
+// l10n:keep-end

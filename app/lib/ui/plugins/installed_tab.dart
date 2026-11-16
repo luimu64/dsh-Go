@@ -189,7 +189,7 @@ class BundleTile extends ConsumerWidget {
         !readOnly &&
         !ref.read(pluginListViewProvider).readOnly &&
         (ref.read(installedPluginsProvider).value?.any((b) => identical(b, bundle)) ?? false);
-    final summary = bundle.summary();
+    final summary = bundle.summary(l10n.localeName);
     final switchable = bundle.readOnlyReason == null && (bundle.installed || bundle.optional);
     final running = job?.isActive ?? false;
     // The official market's entry: a newer pinned version, or this one withdrawn.
@@ -236,9 +236,7 @@ class BundleTile extends ConsumerWidget {
     }
 
     // The plugin's own name for people (its native title), else the bundle's.
-    final title = displaySnapshot
-        ? bundle.title(Localizations.localeOf(context).languageCode)
-        : ref.watch(nativePluginTitleProvider(bundle.name));
+    final title = displaySnapshot ? bundle.title(l10n.localeName) : ref.watch(nativePluginTitleProvider(bundle.name));
     return Semantics(
       button: !readOnly,
       child: ListPageRow(

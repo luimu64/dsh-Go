@@ -94,7 +94,9 @@ class MarketEntry {
   /// [categoryTitle] remains the fallback for callers with only a plain label.
   final MarketDeclaration? category;
 
-  String? categoryTitleIn(String locale) => category?.title.resolve(locale) ?? categoryTitle;
+  /// The category's title in [locale] (the app's language without one).
+  /// [categoryTitle] remains the fallback for callers with only a plain label.
+  String? categoryTitleIn([String? locale]) => category?.title.resolve(locale ?? pluginTextLocale) ?? categoryTitle;
 
   /// The official sidecar's word on the pinned version; null outside the
   /// official index (dshfind) or when the sidecar doesn't list it.
@@ -112,11 +114,18 @@ class MarketEntry {
     _ => null,
   };
 
-  /// The sidecar's title in [locale], else the index's.
-  String title([String locale = 'zh']) => listing?.title?.resolve(locale) ?? plugin.displayTitle(locale);
+  /// The sidecar's title in [locale], else the index's. Without one, the
+  /// app's UI language: a cached entry follows 设置 → 语言.
+  String title([String? locale]) {
+    final l = locale ?? pluginTextLocale;
+    return listing?.title?.resolve(l) ?? plugin.displayTitle(l);
+  }
 
   /// The sidecar's summary in [locale], else the index's description.
-  String? summary([String locale = 'zh']) => listing?.summary?.resolve(locale) ?? plugin.displayDescription(locale);
+  String? summary([String? locale]) {
+    final l = locale ?? pluginTextLocale;
+    return listing?.summary?.resolve(l) ?? plugin.displayDescription(l);
+  }
 
   static String _haystack(MarketPlugin p, DshGoListing? listing) => [
     p.name,
@@ -146,7 +155,7 @@ class MarketCatalog {
           MarketEntry(
             plugin,
             webOnly: isWebOnlyPlugin(plugin, index),
-            categoryTitle: index.categories[plugin.category]?.title.resolve('zh'),
+            categoryTitle: index.categories[plugin.category]?.title.resolve(pluginTextLocale),
             category: index.categories[plugin.category],
             listing: listings[plugin.name]?.version == plugin.latest.version ? listings[plugin.name] : null,
           ),
@@ -389,7 +398,7 @@ PluginInstallRequest marketInstallRequest(MarketEntry entry, {bool replace = fal
     name: plugin.name,
     spec: target.spec,
     registry: target.registry,
-    title: entry.title(AppLocale.current.languageCode),
+    title: entry.title(pluginTextLocale),
     published: latest.published,
     replaceInstalled: replace,
     integrity: integrity == null ? null : (version: latest.version, integrity: integrity),

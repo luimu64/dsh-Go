@@ -231,11 +231,16 @@ class CompanionPromptCapability {
     this.profileAccepted,
     this.memoryMode = 'query',
     this.memoryEpoch,
+    this.languages = const ['zh'],
   });
   final String instanceId;
   final String sessionId;
   final int profileRevision;
   final bool? profileAccepted;
+
+  /// App-owned prompt languages this host accepts in a profile. A host that
+  /// predates `languages` only accepts the established Chinese profile shape.
+  final List<String> languages;
 
   /// Older prompt-context hosts omit this field and use query sidecars.
   /// `automatic` means C902 is the sole memory provider for this target;
@@ -253,6 +258,7 @@ class CompanionPromptCapability {
     final revision = asInt(map['profileRevision']);
     final memoryMode = map.containsKey('memoryMode') ? asString(map['memoryMode']) : 'query';
     final memoryEpoch = asInt(map['memoryEpoch']);
+    final languages = map.containsKey('languages') ? asStringList(map['languages']) : const ['zh'];
     if (map['v'] != 1 ||
         map['supported'] != true ||
         instance == null ||
@@ -263,6 +269,8 @@ class CompanionPromptCapability {
         revision < 0 ||
         revision > 9007199254740991 ||
         (memoryMode != 'query' && memoryMode != 'automatic') ||
+        languages.isEmpty ||
+        languages.any((language) => language != 'zh' && language != 'en') ||
         (map.containsKey('memoryEpoch') &&
             (memoryEpoch == null || memoryEpoch < 0 || memoryEpoch > 9007199254740991)) ||
         (map.containsKey('profileAccepted') && map['profileAccepted'] is! bool)) {
@@ -275,6 +283,7 @@ class CompanionPromptCapability {
       profileAccepted: map['profileAccepted'] as bool?,
       memoryMode: memoryMode!,
       memoryEpoch: memoryEpoch,
+      languages: List.unmodifiable(languages),
     );
   }
 }

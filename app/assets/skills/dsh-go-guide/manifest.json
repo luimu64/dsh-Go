@@ -40,6 +40,11 @@
     "en-17-workspaces.md": "en/17-workspaces.md",
     "en-18-schedules.md": "en/18-schedules.md"
   },
+  "locales": {
+    "en": {
+      "en-SKILL.md": "SKILL.md"
+    }
+  },
   "harmony": {
     "harmony-SKILL.md": "SKILL.md",
     "harmony-README.md": "README.md",
@@ -65,5 +70,10 @@
     "harmony-en-11-faq.md": "en/11-faq.md",
     "harmony-en-16-terminal.md": "en/16-terminal.md",
     "harmony-en-18-schedules.md": "en/18-schedules.md"
+  },
+  "harmonyLocales": {
+    "en": {
+      "harmony-en-SKILL.md": "SKILL.md"
+    }
   }
 }
