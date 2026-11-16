@@ -215,14 +215,21 @@ jobs:
             --dart-define=DSH_UPDATE_FEED=
       - name: Signing check
         run: |
-          apk=$(ls app/build/app/outputs/flutter-apk/app-arm64-release.apk)
-          apksigner verify --min-sdk-version 21 --print-certs "$apk" | sed -n '1,12p'
-          if apksigner verify --min-sdk-version 21 --print-certs "$apk" | grep -q 'CN=Android Debug'; then
-            echo "::warning::The APK is debug-signed (no ANDROID_KEYSTORE_* secrets). Installable, but users cannot update across signing keys."
+          apk=app/build/app/outputs/flutter-apk/app-arm64-release.apk
+          apksigner verify "$apk"
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            # Release key: v1 must be there too (legacy installers and scanners),
+            # and the certificate must not be the debug one.
+            apksigner verify --min-sdk-version 21 --print-certs "$apk" | sed -n '1,12p'
+            if apksigner verify --min-sdk-version 21 --print-certs "$apk" | grep -q 'CN=Android Debug'; then
+              echo "::error::The release keystore produced a debug certificate."
+              exit 1
+            fi
+          else
+            echo "::warning::No ANDROID_KEYSTORE_* secrets: the APK is debug-signed. It installs, but users cannot update across a different signing key."
+            apksigner verify --print-certs "$apk" | sed -n '1,4p'
           fi
       - name: Release assets
-        env:
-          REQUESTED_TAG: ${{ needs.prepare.outputs.tag }}
         run: |
           gh release view "$TAG" -R "$UPSTREAM_REPO" --json body --jq .body > "$RUNNER_TEMP/notes.md"
           printf '\n\n---\n\nEnglish fork build of upstream `%s`, by [ccch1mneyyy](https://github.com/ccch1mneyyy/dsh-Go), published here as [%s](https://github.com/%s). `update.json` and `SHA256SUMS` are for the in-app updater; the APK is the only file to install.\n' "$TAG" "$TITLE" "$GITHUB_REPOSITORY" >> "$RUNNER_TEMP/notes.md"
