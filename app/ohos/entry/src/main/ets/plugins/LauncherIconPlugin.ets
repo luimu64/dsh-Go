@@ -2,6 +2,7 @@
 // 声明，mist 是应用自己的图标，所以它等于没有备用图标。未在真机核实。
 import bundleManager from '@ohos.bundle.bundleManager';
 import { BusinessError } from '@ohos.base';
+import { AppLanguage } from '../i18n/AppLanguage';
 import {
   Any, FlutterPlugin, FlutterPluginBinding, MethodCall, MethodCallHandler, MethodChannel, MethodResult
 } from '@ohos/flutter_ohos';
@@ -52,13 +53,13 @@ export default class LauncherIconPlugin implements FlutterPlugin, MethodCallHand
     switch (call.method) {
       case 'state':
         this.current().then((current: string) => result.success(iconReply(current)))
-          .catch(() => result.error('failed', '无法读取当前的桌面图标。', null));
+          .catch(() => result.error('failed', AppLanguage.pick('无法读取当前的桌面图标。', 'Could not read the current home screen icon.'), null));
         return;
       case 'set': {
         const id: Any = call.argument('id');
-        if (id !== DEFAULT_ICON && !ALTERNATE_ICONS.includes(id as string)) { result.error('unknown', '没有这个桌面图标。', null); return; }
+        if (id !== DEFAULT_ICON && !ALTERNATE_ICONS.includes(id as string)) { result.error('unknown', AppLanguage.pick('没有这个桌面图标。', 'There is no such home screen icon.'), null); return; }
         this.set(id as string).then(() => result.success(iconReply(id as string)))
-          .catch(() => result.error('failed', '系统没有更换桌面图标。', null));
+          .catch(() => result.error('failed', AppLanguage.pick('系统没有更换桌面图标。', 'The system did not change the home screen icon.'), null));
         return;
       }
       default: result.notImplemented();

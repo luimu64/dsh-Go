@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
+
 /**
  * The screen an action hands back: what the previous one already showed is not repeated.
  *
@@ -10,15 +12,17 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
  * are not worth letting the model act on ids it has to guess.
  */
 internal object ScreenDigest {
-    // l10n:keep agent screen format
-    private const val NOTE = "提示："
-    // l10n:keep agent screen format
-    private val ZONES = setOf("顶部", "中部", "底部")
-    // l10n:keep agent screen format matcher
-    private val ELEMENT_LINE = Regex("""^\s*(?:列表\s+|[+⚠]*)\[(\d+)\]""")
+    // l10n:keep agent screen format matcher: the note prefix of either app language
+    private val NOTES = listOf("提示：", "Note: ")
+    // l10n:keep agent screen format matcher: the zone heading of either app language
+    private val ZONES = setOf("顶部", "中部", "底部", "Top", "Middle", "Bottom")
+    // l10n:keep agent screen format matcher: the list prefix of either app language
+    private val ELEMENT_LINE = Regex("""^\s*(?:列表\s+|list\s+|[+⚠]*)\[(\d+)\]""")
     private val ELEMENT_ID = Regex("""(?:^|\s)[+⚠]*\[(\d+)\]""")
 
-    fun text(previousId: String?, previous: FormattedScreen?, currentId: String, current: FormattedScreen, canReuse: Boolean = true, observationChanged: Boolean = false): String {
+    fun text(previousId: String?, previous: FormattedScreen?, currentId: String, current: FormattedScreen,
+             canReuse: Boolean = true, observationChanged: Boolean = false,
+             ui: PhoneUiText = PhoneUiText.DEFAULT): String {
         val full = current.text
         if (previous == null || previousId == null || !canReuse || previous.elements.isEmpty() || current.elements.isEmpty()) return full
         if (previous.elements.map { it.packageName to it.windowId } != current.elements.map { it.packageName to it.windowId }) return full
@@ -28,26 +32,28 @@ internal object ScreenDigest {
         val changed = now.indices.filter { before[it] != now[it] }
         // The text budget may have hidden the only changed element.
         if (changed.isEmpty() && observationChanged) return full
-        // l10n:keep agent screen format
-        if (changed.isEmpty()) return "${headAndNotes(current)}\n（与 $previousId 相同，编号不变）"
+        if (changed.isEmpty()) return headAndNotes(current) + "\n" +
+            ui.get("phone_digest_same", "（与 %1\$s 相同，编号不变）", previousId)
         if (changed.size * 3 > now.size) return full
         val keep = changed.map { it + 1 }.toSet()
         val out = StringBuilder()
         for ((index, line) in current.text.split('\n').withIndex()) {
             val id = ELEMENT_LINE.find(line)?.groupValues?.get(1)?.toIntOrNull()
             when {
-                index == 0 || line.startsWith(NOTE) -> out.append(line).append('\n')
+                index == 0 || isNote(line) -> out.append(line).append('\n')
                 id != null -> if (ELEMENT_ID.findAll(line).any { it.groupValues[1].toIntOrNull() in keep }) out.append(line).append('\n')
                 // l10n:keep agent screen format
                 line.trim() in ZONES -> out.append(line).append('\n')
             }
         }
-        // l10n:keep agent screen format
-        out.append("（只列变化：其余 ${now.size - changed.size} 项与 $previousId 相同，编号不变）")
+        out.append(ui.get("phone_digest_changes", "（只列变化：其余 %1\$s 项与 %2\$s 相同，编号不变）",
+            now.size - changed.size, previousId))
         return out.toString()
     }
 
     /** Header line(s) and notes only: no element lines, no zone headings. */
     private fun headAndNotes(screen: FormattedScreen): String =
-        screen.text.split('\n').filterIndexed { index, line -> index == 0 || line.startsWith(NOTE) }.joinToString("\n")
+        screen.text.split('\n').filterIndexed { index, line -> index == 0 || isNote(line) }.joinToString("\n")
+
+    private fun isNote(line: String): Boolean = NOTES.any { line.startsWith(it) }
 }

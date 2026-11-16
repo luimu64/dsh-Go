@@ -85,6 +85,28 @@ void main() {
     expect(AppLocale.current, AppLocale.zhCN);
   });
 
+  testWidgets('system changes update UI and content but never override a fixed choice', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    AppLanguageController.initial = AppLanguage.system;
+    tester.binding.platformDispatcher.localesTestValue = const [Locale('fi'), Locale('en')];
+    addTearDown(tester.binding.platformDispatcher.clearLocalesTestValue);
+    final container = await pump(tester);
+    expect(find.text('ctx Cancel'), findsOneWidget);
+    expect(container.read(effectiveAppLocaleProvider), AppLocale.en);
+
+    tester.binding.platformDispatcher.localesTestValue = const [Locale('ja'), Locale('zh', 'TW')];
+    await tester.pumpAndSettle();
+    expect(find.text('plain 取消'), findsOneWidget);
+    expect(container.read(effectiveAppLocaleProvider), AppLocale.zhCN);
+
+    await container.read(appLanguageProvider.notifier).set(AppLanguage.en);
+    await tester.pumpAndSettle();
+    tester.binding.platformDispatcher.localesTestValue = const [Locale('zh')];
+    await tester.pumpAndSettle();
+    expect(find.text('plain Cancel'), findsOneWidget);
+    expect(container.read(effectiveAppLocaleProvider), AppLocale.en);
+  });
+
   testWidgets('a stored choice is there from the first frame', (tester) async {
     SharedPreferences.setMockInitialValues({AppLanguageController.prefsKey: 'en'});
     await AppLanguageController.load();

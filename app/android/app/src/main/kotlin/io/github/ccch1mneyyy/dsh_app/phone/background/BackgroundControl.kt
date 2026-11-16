@@ -726,6 +726,7 @@ class BackgroundControl private constructor(context: Context) {
                         localOcr = ocr,
                         localOcrAllowed = { target -> localOcrAllowed(target) },
                         onResourceReady = { publishPreviewTarget(record, it) },
+                        ui = io.github.ccch1mneyyy.dsh_app.phone.PhoneStrings.of(app),
                     )
                 } ?: return null
                 record

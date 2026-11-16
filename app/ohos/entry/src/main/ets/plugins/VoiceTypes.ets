@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // dsh/voice 使用已有 Dart / Android 的错误数字，不把 HMS 错误号冒充 Android ERROR_*。
 export class VoiceFailure extends Error {
   code: string;
@@ -21,5 +22,5 @@ export interface VoiceResource {
 }
 
 export function retiredVoice(): VoiceFailure {
-  return new VoiceFailure('cancelled', '语音会话已取消。', 5);
+  return new VoiceFailure('cancelled', AppLanguage.pick('语音会话已取消。', 'The voice session was cancelled.'), 5);
 }

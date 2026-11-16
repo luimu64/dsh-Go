@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // One physical microphone across ordinary dictation and native plugin activity.
 // A failed SDK release retains the token. Business owners remain in each plugin.
 import { VoiceFailure } from './VoiceTypes';
@@ -18,13 +19,13 @@ export class VoiceMicLease {
 
   static assertDictationAvailable(): void {
     if (VoiceMicLease.taking || VoiceMicLease.held?.role === 'dictation') {
-      throw new VoiceFailure('busy', '上一语音会话尚未释放麦克风。', 8);
+      throw new VoiceFailure('busy', AppLanguage.pick('上一语音会话尚未释放麦克风。', 'The previous voice session has not released the microphone yet.'), 8);
     }
   }
 
   static async dictation(token: VoiceMicToken): Promise<void> {
     if (VoiceMicLease.taking || VoiceMicLease.held?.role === 'dictation') {
-      throw new VoiceFailure('busy', '上一语音会话尚未释放麦克风。', 8);
+      throw new VoiceFailure('busy', AppLanguage.pick('上一语音会话尚未释放麦克风。', 'The previous voice session has not released the microphone yet.'), 8);
     }
     VoiceMicLease.taking = true;
     try {
@@ -32,7 +33,7 @@ export class VoiceMicLease {
       if (previous) await previous.close();
       // A close Promise alone must not free a physical reservation. Only the
       // resource's actual onReleased callback can clear the old identity.
-      if (VoiceMicLease.held) throw new VoiceFailure('busy', '上一语音会话尚未释放麦克风。', 8);
+      if (VoiceMicLease.held) throw new VoiceFailure('busy', AppLanguage.pick('上一语音会话尚未释放麦克风。', 'The previous voice session has not released the microphone yet.'), 8);
       VoiceMicLease.held = token;
     } finally { VoiceMicLease.taking = false; }
   }

@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // PCM activity only: no recording file, transcript or upload. SDK readData may
 // reuse its buffer; compute a bounded frame statistic before returning.
 import audio from '@ohos.multimedia.audio';
@@ -67,13 +68,13 @@ export class OhosSpeechActivity {
   setPlaying(value: boolean): void { this.gate.setPlaying(value); }
   start(): Promise<void> { if (!this.opening) this.opening = this.open(); return this.opening; }
   private check(): void {
-    if (this.stopped || !this.current()) throw new NativeMediaError('stale-owner', '语音活动检测已退役。');
+    if (this.stopped || !this.current()) throw new NativeMediaError('stale-owner', AppLanguage.pick('语音活动检测已退役。', 'Voice activity detection has been retired.'));
   }
   private format(capturer: audio.AudioCapturer): void {
     const value = capturer.getStreamInfoSync();
     if (value.samplingRate !== audio.AudioSamplingRate.SAMPLE_RATE_16000 || value.channels !== audio.AudioChannel.CHANNEL_1 ||
       value.sampleFormat !== audio.AudioSampleFormat.SAMPLE_FORMAT_S16LE || value.encodingType !== audio.AudioEncodingType.ENCODING_TYPE_RAW) {
-      throw new NativeMediaError('capture', '设备未提供16kHz单声道PCM16。');
+      throw new NativeMediaError('capture', AppLanguage.pick('设备未提供16kHz单声道PCM16。', 'The device did not provide 16 kHz mono PCM16.'));
     }
   }
   private async open(): Promise<void> {
@@ -84,12 +85,12 @@ export class OhosSpeechActivity {
       capturerInfo: { source: audio.SourceType.SOURCE_TYPE_VOICE_COMMUNICATION, capturerFlags: 0 }
     };
     const capturer = await audio.createAudioCapturer(options);
-    if (!capturer) throw new NativeMediaError('capture', '无法创建语音活动采集。');
+    if (!capturer) throw new NativeMediaError('capture', AppLanguage.pick('无法创建语音活动采集。', 'Could not create voice activity capture.'));
     this.capturer = capturer; this.check(); this.format(capturer);
     capturer.on('readData', this.read); this.subscribed = true;
     capturer.on('audioInterrupt', this.interrupt);
     this.started = true; await capturer.start(); this.check(); this.format(capturer);
-    if (this.interrupted) throw new NativeMediaError('capture', '语音采集已被中断。');
+    if (this.interrupted) throw new NativeMediaError('capture', AppLanguage.pick('语音采集已被中断。', 'Voice capture was interrupted.'));
   }
   private receive(buffer: ArrayBuffer): void {
     if (this.stopped || this.interrupted || !this.current()) return;

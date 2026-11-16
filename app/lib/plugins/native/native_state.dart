@@ -30,6 +30,7 @@ import '../../state/locale_state.dart';
 import '../../state/plugins_state.dart';
 import '../../ui_config/ui_config_ignores.dart' show uiHostKey;
 import '../../ui/chat/dsh_ui/dsh_ui_model.dart' show dshUiPluginComponents;
+import '../plugin_text.dart';
 import 'native_model.dart';
 import 'native_platform.dart';
 
@@ -220,7 +221,7 @@ final nativePluginTitleProvider = Provider.family<String, String>((ref, package)
   final bundle = ref.watch(
     installedPluginsProvider.select((s) => s.value?.where((b) => b.name == package).firstOrNull),
   );
-  return bundle?.title() ?? package;
+  return bundle?.title(ref.watch(pluginTextLocaleProvider)) ?? package;
 });
 
 // ── Stream ───────────────────────────────────────────────────────────────────

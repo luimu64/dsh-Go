@@ -54,7 +54,9 @@ final class IOSPhoneTaskConsent {
   /// confirmation snapshots it before awaiting UI; a later invocation cannot
   /// donate its cleanup hook to an older answer. This never revokes a grant.
   var onClipboardRefusal: (() -> Void)?
-  private(set) var targetWaitFailureMessage = "等待目标界面超时，没有派发动作。"
+  private(set) var targetWaitFailureMessage = AppLanguage.words(
+    "Timed out waiting for the target screen; no action was sent.",
+    "等待目标界面超时，没有派发动作。")
 
   init(actions: IOSPhoneActions, now: @escaping () -> TimeInterval? = IOSPhoneContinuousTime.now,
        isForeground: (() -> Bool)? = nil) {
@@ -121,9 +123,13 @@ final class IOSPhoneTaskConsent {
     // Only the first grant requires our UI. Reusing an owned task must not
     // wait for this app and pull the person out of the target again.
     guard live(), await waitForForeground(request, current: live), live() else { return false }
-    let granted = await actions.confirm(request, title: "允许 AI 操控这台手机？",
-      detail: "授权本次对话接下来最多 30 分钟的手机操控任务。AI 可读取屏幕、打开应用、点击、滚动和输入普通文字；本任务内不再逐次弹窗，也不需要反复返回 DSH Go。\n\n密码、验证码和支付步骤仍交给你处理。关闭连接、暂停或结束任务会撤销授权；切到其他 App 后由系统持续任务接续，系统仍可能中断后台工作。\n\n首次动作：\n" + detail,
-      allow: "允许 30 分钟", deny: "拒绝", preview: preview)
+    let granted = await actions.confirm(
+      request, title: AppLanguage.words("Allow the AI to control this phone?", "允许 AI 操控这台手机？"),
+      detail: AppLanguage.words(
+        "Authorizes a phone control task for this conversation for up to 30 minutes. The AI can read the screen, open apps, tap, scroll, and type ordinary text; during this task it will not ask again for each step or repeatedly send you back to DSH Go.\n\nPasswords, verification codes, and payment steps are still left to you. Turning the connection off, pausing, or ending the task revokes the authorization; after you switch to another app the system continues the task, and the system may still interrupt background work.\n\nFirst action:\n",
+        "授权本次对话接下来最多 30 分钟的手机操控任务。AI 可读取屏幕、打开应用、点击、滚动和输入普通文字；本任务内不再逐次弹窗，也不需要反复返回 DSH Go。\n\n密码、验证码和支付步骤仍交给你处理。关闭连接、暂停或结束任务会撤销授权；切到其他 App 后由系统持续任务接续，系统仍可能中断后台工作。\n\n首次动作：\n")
+        + detail,
+      allow: AppLanguage.words("Allow for 30 minutes", "允许 30 分钟"), deny: AppLanguage.words("Decline", "拒绝"), preview: preview)
     guard granted, live(), foreground, let now = self.now(), now.isFinite, now >= 0,
       (now + 30 * 60).isFinite, now + 30 * 60 > now else { return false }
     grantOwner = owner; grantedAt = now; grantedUntil = now + 30 * 60; lastGrantSample = now
@@ -149,12 +155,17 @@ final class IOSPhoneTaskConsent {
     var admitted = false
     defer { if !admitted { refused?() } }
     guard await waitForForeground(request, current: live,
-      notificationBody: "已检查本次输入目标的键盘线索。请回到 DSH Go 确认临时剪贴板；尚未修改剪贴板或输入文字。"),
+      notificationBody: AppLanguage.words(
+        "The keyboard cues of this input target have been checked. Return to DSH Go to confirm the temporary clipboard; the clipboard and input text have not been changed yet.",
+        "已检查本次输入目标的键盘线索。请回到 DSH Go 确认临时剪贴板；尚未修改剪贴板或输入文字。")),
       live(), foreground else { return false }
     let windowSeconds = Int(IOSPhoneClipboard.pasteLifetime)
-    let allowed = await actions.confirm(request, title: "准备本次非 ASCII 粘贴？",
-      detail: "刚才已复核目标画面并检查键盘和敏感输入线索；这些线索不是输入焦点或安全性的证明。\n\n现在会在前台保存原剪贴板，并临时写入本次已批准的全文。原内容只保存在本 App 内存，不发送给模型。\n\n允许后请在 \(windowSeconds) 秒内自行切回刚才的输入界面，期间不要复制其他内容。DSH Go 会再次核对画面；后台无法回读剪贴板，不能保证发现其他 App 的并发复制。\n\n粘贴后只返回固定状态，不回传新的读屏文字或图片，也不会自动派发回车／发送按键；请你核对目标应用的实际结果。\n\n粘贴后请回到 DSH Go 核对并恢复原剪贴板；App 终止会丢失保存的原内容。取消不会撤回已派发的焦点点击。",
-      allow: "准备剪贴板", deny: "取消输入")
+    let allowed = await actions.confirm(
+      request, title: AppLanguage.words("Prepare this non-ASCII paste?", "准备本次非 ASCII 粘贴？"),
+      detail: AppLanguage.words(
+        "The target screen was just re-checked and the keyboard and sensitive-input cues were inspected; those cues do not prove input focus or safety.\n\nThe original clipboard will now be saved in the foreground and this approved full text will be written temporarily. The original content is kept only in this app's memory and is not sent to the model.\n\nAfter allowing, switch back to the input screen yourself within \(windowSeconds) seconds, and do not copy anything else meanwhile. DSH Go checks the screen again; the clipboard cannot be read back in the background, so a concurrent copy by another app cannot be guaranteed to be noticed.\n\nAfter pasting it returns a fixed status only, does not return new screen-read text or images, and does not automatically send return/send keys; check the actual result in the target app.\n\nAfter pasting, return to DSH Go to check and restore the original clipboard; terminating the app loses the saved original content. Cancelling does not undo a focus tap that was already sent.",
+        "刚才已复核目标画面并检查键盘和敏感输入线索；这些线索不是输入焦点或安全性的证明。\n\n现在会在前台保存原剪贴板，并临时写入本次已批准的全文。原内容只保存在本 App 内存，不发送给模型。\n\n允许后请在 \(windowSeconds) 秒内自行切回刚才的输入界面，期间不要复制其他内容。DSH Go 会再次核对画面；后台无法回读剪贴板，不能保证发现其他 App 的并发复制。\n\n粘贴后只返回固定状态，不回传新的读屏文字或图片，也不会自动派发回车／发送按键；请你核对目标应用的实际结果。\n\n粘贴后请回到 DSH Go 核对并恢复原剪贴板；App 终止会丢失保存的原内容。取消不会撤回已派发的焦点点击。"),
+      allow: AppLanguage.words("Prepare the clipboard", "准备剪贴板"), deny: AppLanguage.words("Cancel input", "取消输入"))
     admitted = allowed && live() && foreground
     return admitted
   }
@@ -163,7 +174,9 @@ final class IOSPhoneTaskConsent {
   /// A protected-data lock or retired task stops admission immediately.
   func waitForTarget(_ request: IOSPhoneRequest, current: () -> Bool) async -> Bool {
     let operation = generation
-    targetWaitFailureMessage = "等待目标界面超时，没有派发动作。"
+    targetWaitFailureMessage = AppLanguage.words(
+      "Timed out waiting for the target screen; no action was sent.",
+      "等待目标界面超时，没有派发动作。")
     guard var wait = IOSPhoneTargetWait(start: now(),
       requestRemaining: request.expiresAt / 1000 - Date().timeIntervalSince1970) else { return false }
     #if DSH_PHONE_SELF_RUNNER_DIAGNOSTICS
@@ -182,9 +195,21 @@ final class IOSPhoneTaskConsent {
         protectedDataAvailable: unlocked, eligible: eligible)
       switch decision {
       case .refused:
-        if !unlocked { targetWaitFailureMessage = "手机已锁定，没有派发动作；请解锁后重新发起。" }
-        else if !eligible { targetWaitFailureMessage = "本次请求已取消、过期或暂停，没有派发动作；这不表示增强开关关闭。" }
-        else if !background { targetWaitFailureMessage = "DSH Go 仍在前台，未取得目标画面，没有派发动作。" }
+        if !unlocked {
+          targetWaitFailureMessage = AppLanguage.words(
+            "The phone is locked; no action was sent. Unlock it and start again.",
+            "手机已锁定，没有派发动作；请解锁后重新发起。")
+        }
+        else if !eligible {
+          targetWaitFailureMessage = AppLanguage.words(
+            "This request was cancelled, expired, or paused; no action was sent. This does not mean the enhancement switch is off.",
+            "本次请求已取消、过期或暂停，没有派发动作；这不表示增强开关关闭。")
+        }
+        else if !background {
+          targetWaitFailureMessage = AppLanguage.words(
+            "DSH Go is still in the foreground, so the target screen was not obtained; no action was sent.",
+            "DSH Go 仍在前台，未取得目标画面，没有派发动作。")
+        }
         #if DSH_PHONE_SELF_RUNNER_DIAGNOSTICS
         IOSPhoneSelfRunner.diagnostic("target wait refused bg=\(background) eligible=\(eligible)")
         #endif
@@ -204,13 +229,15 @@ final class IOSPhoneTaskConsent {
   }
 
   private func waitForForeground(_ request: IOSPhoneRequest, current: () -> Bool,
-                                notificationBody: String = "请回到 DSH Go 授权本次手机操控任务。点这条通知只打开 App，不会批准或执行。") async -> Bool {
+                                notificationBody: String = AppLanguage.words(
+                                  "Return to DSH Go to authorize this phone control task. Tapping this notification only opens the app; it does not approve or execute anything.",
+                                  "请回到 DSH Go 授权本次手机操控任务。点这条通知只打开 App，不会批准或执行。")) async -> Bool {
     if foreground { return current() }
     let center = UNUserNotificationCenter.current()
     let settings = await center.notificationSettings()
     if current(), [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) {
       let content = UNMutableNotificationContent()
-      content.title = "手机操控等待你确认"
+      content.title = AppLanguage.words("Phone control is waiting for you", "手机操控等待你确认")
       content.body = notificationBody
       // No action/category identifiers and no tool arguments or clipboard data.
       try? await center.add(UNNotificationRequest(identifier: request.id, content: content, trigger: nil))

@@ -7,6 +7,11 @@ library;
 
 import 'dart:convert';
 
+import '../l10n/l10n.dart';
+
+/// The app's colon: 「名：值」 in Chinese, "name: value" in English.
+String get _colon => AppLocale.isEnglish ? ': ' : '：';
+
 /// The ways the panel knows to draw a field.
 enum TavernStateShow { bar, number, tags, inventory, list, line }
 
@@ -89,7 +94,7 @@ String tavernStateLine(Object? value) => switch (value) {
 /// 「name：value」.
 List<String> tavernStateEntries(Object? value) => switch (value) {
   final List<Object?> list => [for (final item in list) _entry(item)],
-  final Map<String, Object?> map => [for (final MapEntry(:key, :value) in map.entries) '$key：${_entry(value)}'],
+  final Map<String, Object?> map => [for (final MapEntry(:key, :value) in map.entries) '$key$_colon${_entry(value)}'],
   _ => const [],
 };
 
@@ -108,14 +113,16 @@ List<TavernStateGood> tavernStateGoods(Object? value) => switch (value) {
         final num count => (name: key, count: count),
         final Map<String, Object?> about => (name: key, count: _count(about)),
         null || true => (name: key, count: null),
-        _ => (name: '$key：${tavernStateText(item)}', count: null),
+        _ => (name: '$key$_colon${tavernStateText(item)}', count: null),
       },
   ],
   _ => const [],
 };
 
+// l10n:keep-begin Keys a card may use, in both languages: matched, not shown.
 const _names = ['name', 'item', 'title', 'label', '名称', '名字', '物品'];
 const _counts = ['count', 'qty', 'quantity', 'amount', 'num', '数量'];
+// l10n:keep-end
 
 TavernStateGood _good(Object? item) {
   if (item is! Map<String, Object?>) return (name: tavernStateText(item), count: null);

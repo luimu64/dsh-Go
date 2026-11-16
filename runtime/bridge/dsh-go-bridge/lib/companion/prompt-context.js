@@ -18,12 +18,15 @@ export const contextJson = v => JSON.stringify(v).replaceAll('<', '\\u003c').rep
 
 function profileOf(value) {
   const limits = { persona: 4000, name: 24, callMe: 40, moves: 1024 };
-  if (!fields(value, Object.keys(limits))) throw invalid();
+  if (!fields(value, Object.keys(limits), ['language'])) throw invalid();
+  if (value.language !== undefined && value.language !== 'zh' && value.language !== 'en') throw invalid();
   const result = {};
   for (const [key, limit] of Object.entries(limits)) {
     if (!text(value[key], limit) || (['name', 'callMe'].includes(key) && /[\r\n\t]/.test(value[key]))) throw invalid();
     result[key] = value[key].trim();
   }
+  // Older phones send no language: keep the established Chinese prompt.
+  if (value.language !== undefined) result.language = value.language;
   return Object.freeze(result);
 }
 
@@ -132,7 +135,7 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   }
   const describe = value => ({ v: 1, supported: true, instanceId, sessionId: value.agent.id,
     profileRevision: value.revision, persistence: 'connection', requestBinding: 'rpcId',
-    maxEvents: 8, maxPersonaCodePoints: 4000,
+    maxEvents: 8, maxPersonaCodePoints: 4000, languages: ['zh', 'en'],
     memoryMode: value.memoryDisabled ? 'automatic' : 'query', memoryEpoch: value.memoryEpoch });
   function capture(agent) {
     const value = open(agent);
@@ -143,6 +146,9 @@ export function createCompanionPromptContext({ now = Date.now, instanceId = rand
   return {
     info(agent) { at(); return describe(open(agent)); },
     profile(agent) { return lookup(agent)?.profile; },
+    // The app-owned prompt language for recall's section intro. A profile
+    // that predates the language field stays Chinese.
+    language(agent) { return lookup(agent)?.profile?.language === 'en' ? 'en' : 'zh'; },
     captureMemory: capture,
     // Called synchronously inside recall's serial bind, before publishing a
     // marker/ready. Even a later failed bind cannot restore an old query result.

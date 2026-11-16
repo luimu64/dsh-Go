@@ -21,7 +21,9 @@ import { RuntimeLifecycle, HostLifecycleAck } from './RuntimeLifecycle';
 import { OhosLifecycleTransport } from './OhosLifecycleTransport';
 import { LinuxControl, LinuxRunRequest } from './LinuxControl';
 import type { LinuxProxyConfiguration } from './LinuxControl';
+import { AppLanguageControl } from './AppLanguageControl';
 import { agentReminderAccess, backgroundComputePermission } from './BackgroundCompute';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 type RuntimeSink = (event: Map<string, Object | null>) => void;
 const LIFECYCLE_NOTICE = '前后台状态尚未同步，本机任务可能仍在暂停或运行；正在重试。';
@@ -97,6 +99,11 @@ export class RuntimeController {
   private requestedStop: boolean = false;
   private stopping: Promise<void> | null = null;
   private linux: LinuxControl = new LinuxControl();
+  private appLanguageControl: AppLanguageControl = new AppLanguageControl();
+  /** The engine's model-facing text language; only wording changes live. */
+  private desiredAppLanguage: string = AppLanguage.wire();
+  private pushedAppLanguage: string | null = null;
+  private localeAttemptAt: number = 0;
   private timer: number | null = null;
   private qualificationTimer: number | null = null;
   private pollIntervalMs: number = 100;
@@ -466,6 +473,33 @@ export class RuntimeController {
     }, interval);
   }
 
+  /**
+   * Settings → Language asked the running engine to change model-facing text.
+   * The Node process, its jobs and every tool registration stay in place; only
+   * wording is rewritten. A stopped engine needs nothing because the next start
+   * reads the same preference.
+   */
+  async setAppLanguage(language: string): Promise<void> {
+    this.desiredAppLanguage = language.toLowerCase().startsWith('en') ? 'en' : 'zh';
+    this.pushedAppLanguage = null;
+    this.localeAttemptAt = 0;
+    await this.pushAppLanguage();
+  }
+
+  private async pushAppLanguage(): Promise<void> {
+    const state = nativeHostState();
+    if (state.phase !== 'running' || this.requestedStop || state.baseUrl === null || state.token === null) return;
+    if (this.pushedAppLanguage === this.desiredAppLanguage) return;
+    const now: number = Date.now();
+    if (now - this.localeAttemptAt < 10000) return;
+    this.localeAttemptAt = now;
+    const language: string = this.desiredAppLanguage;
+    if (await this.appLanguageControl.send(state.baseUrl, state.token, language) &&
+        this.desiredAppLanguage === language) {
+      this.pushedAppLanguage = language;
+    }
+  }
+
   collect(): void {
     if (this.idleDiagnosticsEnabled && this.idleDiagnosticsWindow !== null) this.idleDiagnosticsWindow.collectCalls++;
     const state = nativeHostState();
@@ -473,6 +507,11 @@ export class RuntimeController {
     const finished = (state.phase === 'exited' || state.phase === 'error') && this.lastNative?.phase !== state.phase;
     this.lifecycle.runtime(state.phase === 'running' && !this.requestedStop ? state.baseUrl : null,
       state.phase === 'running' && !this.requestedStop ? state.token : null);
+    if (state.phase === 'running' && !this.requestedStop) {
+      this.pushAppLanguage().catch((): void => {
+        // A missing route on an older engine is retried at the bounded interval above.
+      });
+    }
     if (finished) {
       this.retireOwner();
       const attempt = this.attempt;
@@ -623,6 +662,12 @@ export class RuntimeController {
   async start(env: Map<string, Object> | null, phoneStorage: boolean, mode: string | null, visualReplies: boolean): Promise<void> {
     validateStartOptions(phoneStorage, mode);
     const environment = validateEnvironment(env);
+    // Phone tool descriptions are model-facing and follow the app language.
+    // This seed is used for the first start; a later Settings change is pushed
+    // into the running engine instead of reopening the app.
+    environment['DSH_APP_LANGUAGE'] = AppLanguage.isEnglish() ? 'en' : 'zh-CN';
+    this.desiredAppLanguage = AppLanguage.wire();
+    this.pushedAppLanguage = this.desiredAppLanguage;
     const native = nativeHostState();
     if (this.pending === 'start') return;
     if (this.pending !== null) throw new RuntimeChannelError('start_busy', '运行时正在安装。');
@@ -851,18 +896,34 @@ export class RuntimeController {
     const path = home + '/AGENTS.md';
     const marker = '<!-- dsh-app:managed';
     if (await this.storage.exists(path) && !(await this.storage.readText(path)).startsWith(marker)) return;
-    let text = `${marker} — 删除这一行后，DSH App 不再覆盖本文件 -->\n# 运行环境（DSH 鸿蒙版）\n\n` +
-      `- 你运行在鸿蒙 App 的进程内 Node 中，默认工作区是 \`${workspace}\`。\n` +
-      `- 要交给用户的文件放在 \`${this.paths.outputs}\`；App 的产出列表只显示这个目录中的文件。\n` +
-      '- bash、rg 和 git 等能力以引擎当前能力清单为准；没有 Android 的 Ubuntu、PRoot、apt 或 /sdcard 挂载。\n' +
-      '- bash 里的 gh、python3、python、pip、pip3 交给 App 内 Linux 环境运行，看得到当前工作区；其他 Linux 程序用 `linux <命令>`。需要用户先在 设置 · 能力 · Linux 环境 打开；这些命令结束后一次性返回输出，同一时间只运行一个。\n' +
-      '- 对不支持的命令说明限制，可请用户交给已连接的电脑执行；不能声称命令已经成功。\n' +
-      '- 手机文件通过 App 的系统选择器导入或导出；不能遍历其他应用的数据。\n' +
-      '- App 使用 Flutter 原生界面；不要把修改 Harness 网页当作修改 App 界面。\n';
-    if (visual) text += '\n## 可视化回复（dsh-ui）\n\n' +
-      '- 适合图表或卡片的真实数据可用 dsh-ui 围栏代码块，内容为单个 JSON 对象；普通对话用文字即可。\n' +
-      '- 已支持的 type 包括 text、metric、chart、compare、steps、callout、options、confirm、stack、row；不知道字段时先查随包 dsh-go-ui 技能，不猜参数。\n' +
-      '- 不在卡片收集密码、密钥或验证码；options/confirm 放在回复末尾，等待用户反馈后再继续。\n';
+    let text: string;
+    if (AppLanguage.isEnglish()) {
+      text = `${marker} — after this line is deleted, the DSH App no longer overwrites this file -->\n# Runtime environment (DSH HarmonyOS edition)\n\n` +
+        `- You run in Node inside the HarmonyOS app process; the default workspace is \`${workspace}\`.\n` +
+        `- Files for the user go in \`${this.paths.outputs}\`; the App's output list only shows files in that directory.\n` +
+        '- Treat the engine capability list as the source of truth for bash, rg, git and similar tools; there is no Android Ubuntu, PRoot, apt or /sdcard mount.\n' +
+        '- gh, python3, python, pip and pip3 in bash run in the App Linux environment and see the current workspace; run other Linux programs with `linux <command>`. The user must first enable Settings · Capabilities · Linux environment. These commands return their output once when finished, and only one runs at a time.\n' +
+        '- Explain the limit for unsupported commands and offer to hand them to a connected computer; never claim a command succeeded.\n' +
+        '- Import and export phone files through the App system picker; do not traverse other apps data.\n' +
+        '- The App uses a native Flutter interface; do not treat changes to the Harness web page as changes to the App interface.\n';
+      if (visual) text += '\n## Visual replies (dsh-ui)\n\n' +
+        '- Real data that suits a chart or card can use a dsh-ui fenced block containing one JSON object; ordinary conversation can stay text.\n' +
+        '- Supported types include text, metric, chart, compare, steps, callout, options, confirm, stack and row; check the bundled dsh-go-ui skill when unsure of a field instead of guessing.\n' +
+        '- Do not collect passwords, keys or verification codes in cards; put options/confirm at the end of the reply and wait for the user before continuing.\n';
+    } else {
+      text = `${marker} — 删除这一行后，DSH App 不再覆盖本文件 -->\n# 运行环境（DSH 鸿蒙版）\n\n` +
+        `- 你运行在鸿蒙 App 的进程内 Node 中，默认工作区是 \`${workspace}\`。\n` +
+        `- 要交给用户的文件放在 \`${this.paths.outputs}\`；App 的产出列表只显示这个目录中的文件。\n` +
+        '- bash、rg 和 git 等能力以引擎当前能力清单为准；没有 Android 的 Ubuntu、PRoot、apt 或 /sdcard 挂载。\n' +
+        '- bash 里的 gh、python3、python、pip、pip3 交给 App 内 Linux 环境运行，看得到当前工作区；其他 Linux 程序用 `linux <命令>`。需要用户先在 设置 · 能力 · Linux 环境 打开；这些命令结束后一次性返回输出，同一时间只运行一个。\n' +
+        '- 对不支持的命令说明限制，可请用户交给已连接的电脑执行；不能声称命令已经成功。\n' +
+        '- 手机文件通过 App 的系统选择器导入或导出；不能遍历其他应用的数据。\n' +
+        '- App 使用 Flutter 原生界面；不要把修改 Harness 网页当作修改 App 界面。\n';
+      if (visual) text += '\n## 可视化回复（dsh-ui）\n\n' +
+        '- 适合图表或卡片的真实数据可用 dsh-ui 围栏代码块，内容为单个 JSON 对象；普通对话用文字即可。\n' +
+        '- 已支持的 type 包括 text、metric、chart、compare、steps、callout、options、confirm、stack、row；不知道字段时先查随包 dsh-go-ui 技能，不猜参数。\n' +
+        '- 不在卡片收集密码、密钥或验证码；options/confirm 放在回复末尾，等待用户反馈后再继续。\n';
+    }
     await this.storage.writeTextAtomic(path, text);
   }
 }

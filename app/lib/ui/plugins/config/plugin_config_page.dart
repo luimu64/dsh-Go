@@ -218,7 +218,7 @@ class _PluginConfigPageState extends ConsumerState<PluginConfigPage> {
     if (widget.title case final title?) return title;
     // A bridge R7 Host: the name it is listed by (plugin_config_entries.dart).
     if (pluginConfigNamedByBundle(state, ns)) return pluginConfigTitle(ns, bundles, state: state, l10n: context.l10n);
-    final locale = AppLocale.current.languageCode;
+    final locale = context.l10n.localeName;
     if (pluginConfigBundleOf(bundles, ns) case final bundle?) {
       final row = bundle.rows.firstWhere((r) => r.rowId == ns);
       return row.meta?.title?.resolve(locale) ?? bundle.title(locale);

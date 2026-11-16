@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleSta
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../l10n/l10n.dart';
+import '../plugins/plugin_text.dart';
 import '../runtime/runtime_state.dart';
 import '../share_code/share_net.dart';
 import '../update/version.dart';

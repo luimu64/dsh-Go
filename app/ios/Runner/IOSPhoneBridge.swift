@@ -138,7 +138,7 @@ final class IOSPhoneBridge: NSObject, URLSessionTaskDelegate {
       active = nil
       Task { [weak self] in
         guard let self, self.runId == request.runId else { return }
-        _ = try? await self.post("result", ["id": request.id, "text": "用户停止了手机操控。不要重试。", "isError": true])
+        _ = try? await self.post("result", ["id": request.id, "text": AppLanguage.words("The user stopped phone control. Do not retry.", "用户停止了手机操控。不要重试。"), "isError": true])
       }
     }
     runner.retire()
@@ -150,7 +150,7 @@ final class IOSPhoneBridge: NSObject, URLSessionTaskDelegate {
       Task { [weak self] in
         guard let self, self.runId == request.runId else { return }
         _ = try? await self.post("result", ["id": request.id,
-          "text": "用户已暂停手机操控；已经派发的动作结果可能尚未确认，请核对屏幕，不要自动重试。", "isError": true])
+          "text": AppLanguage.words("The user paused phone control; results of actions already sent may not be confirmed yet. Check the screen and do not retry automatically.", "用户已暂停手机操控；已经派发的动作结果可能尚未确认，请核对屏幕，不要自动重试。"), "isError": true])
       }
     }
     runner.finish()
@@ -239,7 +239,9 @@ final class IOSPhoneBridge: NSObject, URLSessionTaskDelegate {
         if kind.hasPrefix("browser-") || kind.hasPrefix("runner-") {
           if kind.hasPrefix("runner-"), !IOSPhoneControl.shared.enabled || IOSPhoneControl.shared.isPaused {
             _ = try? await self.post("result", ["id": request.id,
-              "text": IOSPhoneControl.shared.isPaused ? "手机操控已暂停；请回到 App，由用户确认继续。" : "手机操控已关闭，请在 DSH Go 设置中开启。", "isError": true])
+              "text": IOSPhoneControl.shared.isPaused
+                ? AppLanguage.words("Phone control is paused; go back to the app so the user can continue.", "手机操控已暂停；请回到 App，由用户确认继续。")
+                : AppLanguage.words("Phone control is off; turn it on in DSH Go settings.", "手机操控已关闭，请在 DSH Go 设置中开启。"), "isError": true])
             self.active = nil; self.operation = nil
             return
           }
@@ -265,7 +267,7 @@ final class IOSPhoneBridge: NSObject, URLSessionTaskDelegate {
             let begun = (try? await self.post("begin", ["id": request.id]))?.0 == 200
             guard begun, current() else {
               if self.current(request) {
-                _ = try? await self.post("result", ["id": request.id, "text": "这个工具调用已经结束，没有执行。", "isError": true])
+                _ = try? await self.post("result", ["id": request.id, "text": AppLanguage.words("This tool call has already ended; nothing was executed.", "这个工具调用已经结束，没有执行。"), "isError": true])
                 guard self.active?.id == request.id else { return }
                 self.active = nil; self.operation = nil
               }
@@ -323,10 +325,10 @@ final class IOSPhoneControl: NSObject, FlutterStreamHandler {
     case awaitingConfirmation, connecting, executing, reviewResult
     var line: String {
       switch self {
-      case .awaitingConfirmation: return "等待本次确认"
-      case .connecting: return "正在准备连接"
-      case .executing: return "正在处理本次调用"
-      case .reviewResult: return "请核对手机结果"
+      case .awaitingConfirmation: return AppLanguage.words("Waiting for confirmation", "等待本次确认")
+      case .connecting: return AppLanguage.words("Preparing the connection", "正在准备连接")
+      case .executing: return AppLanguage.words("Handling this call", "正在处理本次调用")
+      case .reviewResult: return AppLanguage.words("Check the phone result", "请核对手机结果")
       }
     }
   }
@@ -351,14 +353,14 @@ final class IOSPhoneControl: NSObject, FlutterStreamHandler {
   func pausePhoneTask(id: Int) {
     guard id == taskID, active, !paused else { return }
     paused = true; requestID = nil
-    IOSPetOverlay.shared.updatePhoneTask(id: id, line: "已暂停，回 App 继续")
+    IOSPetOverlay.shared.updatePhoneTask(id: id, line: AppLanguage.words("Paused. Return to the app to continue.", "已暂停，回 App 继续"))
     bridge?.pausePhoneTask(); emit()
   }
   func resumePhoneTask(id: Int) {
     guard id == taskID, active, paused, UIApplication.shared.applicationState == .active,
       UIApplication.shared.isProtectedDataAvailable else { return }
     paused = false
-    IOSPetOverlay.shared.updatePhoneTask(id: id, line: "等待下一次确认")
+    IOSPetOverlay.shared.updatePhoneTask(id: id, line: AppLanguage.words("Waiting for the next confirmation", "等待下一次确认"))
     emit()
   }
   func stopPhoneTaskConfirmed(id: Int) { if id == taskID, active { stop() } }

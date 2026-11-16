@@ -26,14 +26,14 @@ struct RuntimeManifest: Codable {
 
   func validated() throws -> RuntimeManifest {
     guard schema == 1, !runtimeVersion.isEmpty, nodeVersion == "24.22.1", !files.isEmpty else {
-      throw EngineFailure("ios_manifest_invalid", "运行时清单的版本或文件列表无效。")
+      throw EngineFailure("ios_manifest_invalid", AppLanguage.words("The runtime manifest's version or file list is invalid.", "运行时清单的版本或文件列表无效。"))
     }
     var paths = Set<String>()
     for file in files {
       guard RuntimeManifest.safePath(file.path), file.size >= 0, RuntimeManifest.isSha256(file.sha256),
         paths.insert(file.path).inserted
       else {
-        throw EngineFailure("ios_manifest_invalid", "运行时清单含无效路径、原生文件或校验字段。")
+        throw EngineFailure("ios_manifest_invalid", AppLanguage.words("The runtime manifest contains an invalid path, native file, or checksum field.", "运行时清单含无效路径、原生文件或校验字段。"))
       }
     }
     for path in paths {
@@ -41,12 +41,12 @@ struct RuntimeManifest: Codable {
       while let slash = parent.lastIndex(of: "/") {
         parent = parent[..<slash]
         if paths.contains(String(parent)) {
-          throw EngineFailure("ios_manifest_invalid", "运行时清单的文件与目录路径冲突。")
+          throw EngineFailure("ios_manifest_invalid", AppLanguage.words("The runtime manifest's file and directory paths conflict.", "运行时清单的文件与目录路径冲突。"))
         }
       }
     }
     for entry in RuntimeManifest.entries where !paths.contains(entry) {
-      throw EngineFailure("ios_manifest_invalid", "运行时缺少固定启动入口。")
+      throw EngineFailure("ios_manifest_invalid", AppLanguage.words("The runtime is missing its fixed launch entry.", "运行时缺少固定启动入口。"))
     }
     return self
   }
@@ -100,10 +100,10 @@ final class RuntimeArchive {
       // Mapped: the pages are file-backed, so a 50 MB archive doesn't count against the app.
       bytes = try Data(contentsOf: url, options: .alwaysMapped)
     } catch {
-      throw EngineFailure("ios_payload_missing", "App 里没有运行时载荷。")
+      throw EngineFailure("ios_payload_missing", AppLanguage.words("There is no runtime payload in the app.", "App 里没有运行时载荷。"))
     }
     self.bytes = bytes
-    let invalid = EngineFailure("ios_archive_invalid", "随包运行时归档的格式、索引或清单不一致。")
+    let invalid = EngineFailure("ios_archive_invalid", AppLanguage.words("The bundled runtime archive's format, index, or manifest is inconsistent.", "随包运行时归档的格式、索引或清单不一致。"))
     func u16(_ at: Int) -> Int { Int(bytes[at]) | Int(bytes[at + 1]) << 8 }
     func u32(_ at: Int) -> Int { u16(at) | u16(at + 2) << 16 }
     guard bytes.count >= 22, bytes.count <= 0x7fff_ffff else { throw invalid }
@@ -182,7 +182,7 @@ final class RuntimeArchive {
   /// checks size and that no native code gets into writable data.
   func extract(_ file: RuntimeFile, to target: URL) throws {
     guard let entry = entries["files/" + file.path], entry.size == file.size else {
-      throw EngineFailure("ios_archive_invalid", "随包运行时归档缺少清单中的文件。")
+      throw EngineFailure("ios_archive_invalid", AppLanguage.words("The bundled runtime archive is missing a file listed in the manifest.", "随包运行时归档缺少清单中的文件。"))
     }
     FileManager.default.createFile(atPath: target.path, contents: nil)
     let output = try FileHandle(forWritingTo: target)
@@ -193,14 +193,14 @@ final class RuntimeArchive {
     let stream = UnsafeMutablePointer<compression_stream>.allocate(capacity: 1)
     defer { stream.deallocate() }
     guard compression_stream_init(stream, COMPRESSION_STREAM_DECODE, COMPRESSION_ZLIB) == COMPRESSION_STATUS_OK else {
-      throw EngineFailure("ios_archive_inflate", "运行时解压初始化失败。")
+      throw EngineFailure("ios_archive_inflate", AppLanguage.words("Runtime extraction could not be initialized.", "运行时解压初始化失败。"))
     }
     defer { compression_stream_destroy(stream) }
     var produced = 0
     var checkedMagic = false
     try bytes.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> Void in
       guard let base = raw.bindMemory(to: UInt8.self).baseAddress else {
-        throw EngineFailure("ios_archive_inflate", "运行时压缩流未正常结束。")
+        throw EngineFailure("ios_archive_inflate", AppLanguage.words("The runtime compression stream did not end normally.", "运行时压缩流未正常结束。"))
       }
       stream.pointee.src_ptr = UnsafePointer(base + entry.dataOffset)
       stream.pointee.src_size = entry.packedSize
@@ -209,29 +209,29 @@ final class RuntimeArchive {
         stream.pointee.dst_size = chunk
         let status = compression_stream_process(stream, Int32(COMPRESSION_STREAM_FINALIZE.rawValue))
         guard status == COMPRESSION_STATUS_OK || status == COMPRESSION_STATUS_END else {
-          throw EngineFailure("ios_archive_inflate", "运行时压缩流未正常结束。")
+          throw EngineFailure("ios_archive_inflate", AppLanguage.words("The runtime compression stream did not end normally.", "运行时压缩流未正常结束。"))
         }
         let count = chunk - stream.pointee.dst_size
         produced += count
         guard produced <= entry.size else {
-          throw EngineFailure("ios_size_mismatch", "运行时解压长度超过清单。")
+          throw EngineFailure("ios_size_mismatch", AppLanguage.words("The extracted runtime length exceeds the manifest.", "运行时解压长度超过清单。"))
         }
         if !checkedMagic, count >= 4 {
           checkedMagic = true
           let magic = UInt32(buffer[0]) | UInt32(buffer[1]) << 8 | UInt32(buffer[2]) << 16 | UInt32(buffer[3]) << 24
           if [0x464c_457f, 0xfeed_facf, 0xcefa_edfe, 0xcffa_edfe, 0xbeba_feca].contains(magic) {
-            throw EngineFailure("ios_native_payload", "原生代码必须随 App 签名交付，不能落到可写目录。")
+            throw EngineFailure("ios_native_payload", AppLanguage.words("Native code must ship signed with the app and cannot land in a writable directory.", "原生代码必须随 App 签名交付，不能落到可写目录。"))
           }
         }
         if count > 0 { try output.write(contentsOf: Data(bytesNoCopy: buffer, count: count, deallocator: .none)) }
         if status == COMPRESSION_STATUS_END { break }
         guard count > 0 || stream.pointee.src_size > 0 else {
-          throw EngineFailure("ios_archive_inflate", "运行时压缩流未正常结束。")
+          throw EngineFailure("ios_archive_inflate", AppLanguage.words("The runtime compression stream did not end normally.", "运行时压缩流未正常结束。"))
         }
       } while true
     }
     guard produced == entry.size, stream.pointee.src_size == 0 else {
-      throw EngineFailure("ios_checksum_failed", "运行时归档成员的长度校验失败。")
+      throw EngineFailure("ios_checksum_failed", AppLanguage.words("A runtime archive member failed its length check.", "运行时归档成员的长度校验失败。"))
     }
   }
 }
@@ -283,7 +283,7 @@ final class RuntimeInstaller {
       guard journal.schema == 1, journal.ownedPaths.allSatisfy(RuntimeManifest.safePath),
         journal.stagingHashes.allSatisfy(RuntimeManifest.isSha256)
       else {
-        throw EngineFailure("ios_install_journal_invalid", "安装归属记录损坏，未按猜测的路径删除文件。")
+        throw EngineFailure("ios_install_journal_invalid", AppLanguage.words("The install ownership record is damaged; no files were deleted by guessing paths.", "安装归属记录损坏，未按猜测的路径删除文件。"))
       }
       owned.formUnion(journal.ownedPaths)
       staged.formUnion(journal.stagingHashes)
@@ -322,10 +322,10 @@ final class RuntimeInstaller {
       try files.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
       try archive.extract(file, to: temporary)
       guard matches(temporary, file) else {
-        throw EngineFailure("ios_checksum_failed", "随包运行时文件校验失败，安装未提交。")
+        throw EngineFailure("ios_checksum_failed", AppLanguage.words("A bundled runtime file failed its checksum; the install was not committed.", "随包运行时文件校验失败，安装未提交。"))
       }
       guard rename(temporary.path, target.path) == 0 else {
-        throw EngineFailure("ios_install_io", "运行时文件写入失败，请确认手机还有空间。")
+        throw EngineFailure("ios_install_io", AppLanguage.words("Writing a runtime file failed; check that the phone has free space.", "运行时文件写入失败，请确认手机还有空间。"))
       }
       done += file.size
       progress("extract", done, total)

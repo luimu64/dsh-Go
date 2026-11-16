@@ -46,3 +46,19 @@ test('native locale: aliases follow the existing last normalized key rule', () =
   assert.equal(resolveText(parsed, 'zh-Hant-TW'), 'last');
   assert.deepEqual(source, { 'zh-Hant-TW': 'first', zh_Hant_TW: 'last' });
 });
+
+test('native locale: variants are picked by script and region, then by key', () => {
+  const scripts = { 'zh-Hant': '繁體', 'zh-Hans': '简体' };
+  assert.equal(resolveText(scripts, 'zh-TW'), '繁體');
+  assert.equal(resolveText(scripts, 'zh-HK'), '繁體');
+  assert.equal(resolveText(scripts, 'zh-CN'), '简体');
+  assert.equal(resolveText(scripts, 'zh-SG'), '简体');
+  assert.equal(resolveText(scripts, 'zh'), '简体');
+  const reversed = { 'zh-Hans': '简体', 'zh-Hant': '繁體' };
+  assert.equal(resolveText(reversed, 'zh'), resolveText(scripts, 'zh'), 'key order does not change the pick');
+  const english = { 'en-US': 'Color', 'en-GB': 'Colour' };
+  assert.equal(resolveText(english, 'en-US'), 'Color');
+  assert.equal(resolveText(english, 'en-AU'), 'Colour');
+  assert.equal(resolveText(english, 'fr'), 'Colour', 'the English fallback is deterministic');
+  assert.equal(resolveText({ pt_br: 'Brasil' }, 'pt-BR'), 'Brasil');
+});

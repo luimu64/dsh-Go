@@ -2895,6 +2895,26 @@ class L10nEn extends L10n {
   }
 
   @override
+  String botsYearDate(int year, String month, int day) {
+    String _temp0 = intl.Intl.selectLogic(month, {
+      '1': 'Jan',
+      '2': 'Feb',
+      '3': 'Mar',
+      '4': 'Apr',
+      '5': 'May',
+      '6': 'Jun',
+      '7': 'Jul',
+      '8': 'Aug',
+      '9': 'Sep',
+      '10': 'Oct',
+      '11': 'Nov',
+      '12': 'Dec',
+      'other': '$month',
+    });
+    return '$_temp0 $day, $year';
+  }
+
+  @override
   String get botsCopyGroupNumber => 'Copy group number';
 
   @override
@@ -21928,6 +21948,48 @@ class L10nEn extends L10n {
   String get tavernReportNoFindings => 'Nothing to look at';
 
   @override
+  String get tavernReportWorldInfoBooks => 'Lorebooks';
+
+  @override
+  String get tavernReportEntriesStored => 'Lorebook entries';
+
+  @override
+  String get tavernReportEntriesEnabled => 'Entries on';
+
+  @override
+  String get tavernReportEntriesDisabled => 'Entries off';
+
+  @override
+  String get tavernReportRegexScripts => 'Regex scripts';
+
+  @override
+  String get tavernReportRegexIncompatible => 'Regex that will not run';
+
+  @override
+  String get tavernReportScripts => 'Scripts';
+
+  @override
+  String get tavernReportHelperScripts => 'Helper scripts';
+
+  @override
+  String get tavernReportHtmlFragments => 'HTML fragments';
+
+  @override
+  String get tavernReportAssets => 'Assets';
+
+  @override
+  String get tavernReportEmbeddedFiles => 'Embedded files';
+
+  @override
+  String get tavernReportPrompts => 'Prompts';
+
+  @override
+  String get tavernReportMacros => 'Macros';
+
+  @override
+  String get tavernReportDecoratorLines => 'Decorators';
+
+  @override
   String get tavernPresetForChat => 'This chat\'s preset';
 
   @override
@@ -23357,10 +23419,10 @@ class L10nEn extends L10n {
   String get tavernCharacterNoDefinition => 'This card has no definition or notes.';
 
   @override
-  String get tavernNovelIndent => 'Indent paragraphs in 小说';
+  String get tavernNovelIndent => 'Indent the first line of each paragraph in novels';
 
   @override
-  String get tavernNovelIndentSubtitle => 'Each paragraph opens two characters in, as in a book';
+  String get tavernNovelIndentSubtitle => 'Each paragraph starts two characters in, as in a book';
 
   @override
   String get tavernShelfSelect => 'Select';
@@ -23805,7 +23867,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernStThemeNote =>
-      'With 「ST」 as the colours, quotes and *actions* take its colours; one too faint to read here is adjusted until it reads.';
+      'With “ST” as the colour theme, quoted speech and *actions* take its colours; a colour too faint to read here is adjusted until it is legible.';
 
   @override
   String get tavernStThemeImport => 'Import an ST theme';
@@ -23819,7 +23881,7 @@ class L10nEn extends L10n {
 
   @override
   String get tavernStThemeCssSubtitle =>
-      'With 「ST」 as the colours, it goes into the whole-story canvas and overrides the default look, as in ST. Turn it off if the page comes apart; the colours stay.';
+      'With “ST” as the colour theme, it goes into the whole-story canvas and overrides the default look, as it does in ST. Turn it off if the page breaks; the colours stay.';
 
   @override
   String get tavernStThemeRemove => 'Remove';

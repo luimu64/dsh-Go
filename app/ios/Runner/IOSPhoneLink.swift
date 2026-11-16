@@ -95,11 +95,29 @@ final class IOSPhoneLink: NSObject, FlutterStreamHandler, @preconcurrency UIDocu
           return ["ok": false, "code": "ERR_PHONE_CLIPBOARD_STALE"]
         }
         let prompt: String
-        if discard { prompt = "丢弃本 App 内存中保存的旧剪贴板副本，之后无法恢复它。现在的剪贴板保持原样。" }
-        else if overwrite { prompt = "请先核对目标应用已完成或取消粘贴。这会用保存的旧内容覆盖现在的剪贴板，即使剪贴板已被其他操作更改。恢复内容仅此设备可用。" }
-        else { prompt = "请先核对目标应用已完成或取消粘贴。只在剪贴板仍属于上次临时输入时恢复原内容；发现后续复制会停止恢复。恢复内容仅此设备可用。" }
-        let selected = await self.ask(title: discard ? "丢弃保存的剪贴板？" : "恢复原剪贴板？",
-          message: prompt, choices: [("confirm", discard ? "丢弃旧副本" : "已核对，恢复"), ("cancel", "取消")])
+        if discard {
+          prompt = AppLanguage.words(
+            "Discard the old clipboard copy saved in this app's memory; it cannot be restored afterwards. The current clipboard stays as it is.",
+            "丢弃本 App 内存中保存的旧剪贴板副本，之后无法恢复它。现在的剪贴板保持原样。")
+        } else if overwrite {
+          prompt = AppLanguage.words(
+            "First confirm the target app has finished or cancelled the paste. This overwrites the current clipboard with the saved old content even if the clipboard has been changed by something else. The restored content is only usable on this device.",
+            "请先核对目标应用已完成或取消粘贴。这会用保存的旧内容覆盖现在的剪贴板，即使剪贴板已被其他操作更改。恢复内容仅此设备可用。")
+        } else {
+          prompt = AppLanguage.words(
+            "First confirm the target app has finished or cancelled the paste. Restore the original content only while the clipboard still belongs to the last temporary input; if later copying is found, restoring stops. The restored content is only usable on this device.",
+            "请先核对目标应用已完成或取消粘贴。只在剪贴板仍属于上次临时输入时恢复原内容；发现后续复制会停止恢复。恢复内容仅此设备可用。")
+        }
+        let selected = await self.ask(
+          title: discard
+            ? AppLanguage.words("Discard the saved clipboard?", "丢弃保存的剪贴板？")
+            : AppLanguage.words("Restore the original clipboard?", "恢复原剪贴板？"),
+          message: prompt, choices: [
+            ("confirm", discard
+              ? AppLanguage.words("Discard the old copy", "丢弃旧副本")
+              : AppLanguage.words("Checked; restore", "已核对，恢复")),
+            ("cancel", AppLanguage.words("Cancel", "取消")),
+          ])
         guard selected == "confirm", self.current(id), self.foreground,
           IOSPhoneClipboard.shared.restorationID == saved else { return self.answer(false, code: "ERR_PHONE_CANCELLED") }
         do {
@@ -130,9 +148,12 @@ final class IOSPhoneLink: NSObject, FlutterStreamHandler, @preconcurrency UIDocu
       }
       begin(reply) { [weak self] id in
         guard let self else { return ["ok": false, "code": "ERR_PHONE_CANCELLED"] }
-        let allowed = await self.ask(title: "启用这台手机的开发者连接？",
-          message: "配对凭据可以连接本机开发者服务，用于读屏、触摸和输入。每个手机任务首次需要批准，授权最多 30 分钟；可随时暂停、关闭连接或清除凭据。",
-          choices: [("enable", "启用"), ("cancel", "取消")])
+        let allowed = await self.ask(
+          title: AppLanguage.words("Enable the developer connection for this phone?", "启用这台手机的开发者连接？"),
+          message: AppLanguage.words(
+            "A pairing credential can connect to the on-device developer service for screen reading, touch, and typing. Each phone task needs approval the first time, for at most 30 minutes; you can pause, turn the connection off, or clear the credential at any time.",
+            "配对凭据可以连接本机开发者服务，用于读屏、触摸和输入。每个手机任务首次需要批准，授权最多 30 分钟；可随时暂停、关闭连接或清除凭据。"),
+          choices: [("enable", AppLanguage.words("Enable", "启用")), ("cancel", AppLanguage.words("Cancel", "取消"))])
         guard allowed == "enable", self.current(id), self.foreground else { return self.answer(false, code: "ERR_PHONE_CANCELLED") }
         guard self.pairing.hasRecord, !self.legacyPresent else { return self.answer(false, code: "ERR_PHONE_PAIRING_REQUIRED") }
         self.invalidate(); self.defaults.set(true, forKey: "dsh.ios.phone.link.enabled")
@@ -146,9 +167,12 @@ final class IOSPhoneLink: NSObject, FlutterStreamHandler, @preconcurrency UIDocu
       }
       begin(reply) { [weak self] id in
         guard let self else { return ["ok": false, "code": "ERR_PHONE_CANCELLED"] }
-        let allowed = await self.ask(title: "启用 XCTest 增强？",
-          message: "需要另外安装并签名 PhoneRunner。它能提供元素树；部分应用可能要求重新登录或拒绝使用。默认仍是 CoreDevice，可在应用规则中选择。",
-          choices: [("enable", "启用增强"), ("cancel", "取消")])
+        let allowed = await self.ask(
+          title: AppLanguage.words("Enable the XCTest enhancement?", "启用 XCTest 增强？"),
+          message: AppLanguage.words(
+            "PhoneRunner has to be installed and signed separately. It provides an element tree; some apps may require signing in again or refuse to work. CoreDevice stays the default; you can choose per app in the app rules.",
+            "需要另外安装并签名 PhoneRunner。它能提供元素树；部分应用可能要求重新登录或拒绝使用。默认仍是 CoreDevice，可在应用规则中选择。"),
+          choices: [("enable", AppLanguage.words("Enable enhancement", "启用增强")), ("cancel", AppLanguage.words("Cancel", "取消"))])
         guard allowed == "enable", self.current(id), self.foreground else { return self.answer(false, code: "ERR_PHONE_CANCELLED") }
         self.invalidate(); self.defaults.set(true, forKey: "dsh.ios.phone.xctest.enabled")
         return self.answer(true)
@@ -167,9 +191,19 @@ final class IOSPhoneLink: NSObject, FlutterStreamHandler, @preconcurrency UIDocu
       let migrate = call.method == "migrateLegacyPairing"
       begin(reply) { [weak self] id in
         guard let self else { return ["ok": false, "code": "ERR_PHONE_CANCELLED"] }
-        let selected = await self.ask(title: "怎样保存配对凭据？",
-          message: "记住：保存在本机钥匙串，不同步、不备份，需设置设备解锁密码；移除密码会使记录失效。仅本次：只放内存，退出 App 后清除。" + (migrate ? "迁移成功后会删除 App 文稿中的旧配对文件。" : "原始导入文件仍由你自行保管。"),
-          choices: [("device", "记住在这台手机上（推荐）"), ("session", "只用这一次"), ("cancel", "取消")])
+        let selected = await self.ask(
+          title: AppLanguage.words("How should the pairing credential be saved?", "怎样保存配对凭据？"),
+          message: AppLanguage.words(
+            "Remember: saved in this device's keychain, not synced or backed up, and requires a device unlock passcode; removing the passcode invalidates the record. This time only: kept in memory only and cleared when the app exits.",
+            "记住：保存在本机钥匙串，不同步、不备份，需设置设备解锁密码；移除密码会使记录失效。仅本次：只放内存，退出 App 后清除。")
+            + (migrate
+              ? AppLanguage.words(" After a successful migration the old pairing file in the app's documents is deleted.", "迁移成功后会删除 App 文稿中的旧配对文件。")
+              : AppLanguage.words(" The original imported file remains yours to keep.", "原始导入文件仍由你自行保管。")),
+          choices: [
+            ("device", AppLanguage.words("Remember on this phone (recommended)", "记住在这台手机上（推荐）")),
+            ("session", AppLanguage.words("This time only", "只用这一次")),
+            ("cancel", AppLanguage.words("Cancel", "取消")),
+          ])
         guard let selected, let storage = IOSPhonePairingStore.Storage(rawValue: selected), self.current(id), self.foreground else {
           return self.answer(false, code: "ERR_PHONE_CANCELLED")
         }
@@ -192,9 +226,12 @@ final class IOSPhoneLink: NSObject, FlutterStreamHandler, @preconcurrency UIDocu
         guard self.enabled, self.pairing.hasRecord, !self.legacyPresent else { return self.answer(false, code: "ERR_PHONE_LINK_DISABLED") }
         guard !IOSPhoneControl.shared.hasActivePhoneTask else { return self.answer(false, code: "ERR_PHONE_BUSY") }
         if mount {
-          let allowed = await self.ask(title: "准备本机开发者镜像？",
-            message: "需要时会下载约 17 MB 的固定校验镜像，并向 Apple 请求本机个性化，再挂载到这台手机。镜像来自 DeveloperDiskImage 镜像仓库；不会卸载或替换其他正在使用的镜像。",
-            choices: [("mount", "下载并挂载"), ("cancel", "取消")])
+          let allowed = await self.ask(
+            title: AppLanguage.words("Prepare the on-device developer image?", "准备本机开发者镜像？"),
+            message: AppLanguage.words(
+              "When needed, a fixed-checksum image of about 17 MB is downloaded and Apple is asked to personalize it for this device, then it is mounted on this phone. The image comes from the DeveloperDiskImage image repository; other images in use are not unmounted or replaced.",
+              "需要时会下载约 17 MB 的固定校验镜像，并向 Apple 请求本机个性化，再挂载到这台手机。镜像来自 DeveloperDiskImage 镜像仓库；不会卸载或替换其他正在使用的镜像。"),
+            choices: [("mount", AppLanguage.words("Download and mount", "下载并挂载")), ("cancel", AppLanguage.words("Cancel", "取消"))])
           guard allowed == "mount", self.current(id), self.foreground else { return self.answer(false, code: "ERR_PHONE_CANCELLED") }
         }
         let live = { [weak self] in self?.current(id) == true && self?.enabled == true }

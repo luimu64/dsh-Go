@@ -34,6 +34,7 @@ import '../../pets/pet_overlay_bridge.dart';
 import '../../state/android_features.dart';
 import '../../state/compose_inbox.dart';
 import '../../state/hosts_state.dart';
+import '../../state/locale_state.dart';
 import '../../state/sessions_state.dart';
 import '../../state/settings_state.dart';
 import '../../state/ui_mode_state.dart';
@@ -45,6 +46,7 @@ import '../pets/pet_settings_page.dart';
 import '../shell/page_frame.dart';
 import '../theme/app_icons.dart';
 import 'dsh_web_launcher.dart';
+import 'dsh_web_locale.dart';
 import 'local_web_screen.dart';
 import 'web_handle.dart';
 import 'web_target.dart';
@@ -154,10 +156,11 @@ class _WebHomeState extends ConsumerState<WebHome> {
   Widget build(BuildContext context) {
     final access = ref.watch(dshWebAccessProvider);
     final phoneLayout = ref.watch(settingsProvider.select((s) => s.webPhoneLayout));
+    final locale = ref.watch(effectiveAppLocaleProvider);
     final Widget page = switch (access) {
       LocalDshWeb() => LocalWebScreen(handle: _handle, link: _link, onSession: _onSession),
       SshDshWeb(:final url, :final hostName) => WebViewPage(
-        // A new forward (reconnect) or layout switch: a new page.
+        // Keep the live page through language changes, including its draft.
         key: ValueKey((url, phoneLayout)),
         url: url,
         title: context.l10n.webTitle,
@@ -171,6 +174,7 @@ class _WebHomeState extends ConsumerState<WebHome> {
         root: true,
         link: _link,
         onSession: _onSession,
+        startScript: dshWebLocaleBridgeScript(locale),
       ),
       NoDshWeb(:final reason) => _NoWeb(reason: reason, handle: _handle),
     };

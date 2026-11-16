@@ -44,8 +44,31 @@ test('the existing full context still mounts without an available recall service
   assert.deepEqual(sections.map(section => section.name), [
     'deployment:persona-prefix', 'deployment:persona-suffix', 'app:web-surface',
   ]);
-  assert(sections[0].text().includes('鲸鱼女孩'));
-  assert(sections[1].text.includes('应用固定规则'));
+  const textOf = (section) => typeof section.text === 'function' ? section.text() : section.text;
+  assert(textOf(sections[0]).includes('鲸鱼女孩'));
+  assert(textOf(sections[1]).includes('应用固定规则'));
   assert.equal(contexts.length, 1);
   assert.equal(contexts[0].name, 'app:web-surface');
+});
+
+test('an English profile makes every app-owned section English', () => {
+  const sections = [];
+  const profile = { persona: '', name: '', callMe: '', moves: '', language: 'en' };
+  applyFullContext({
+    get: (name) => name === 'dshGoCompanionContext' ? { profile: () => profile } : undefined,
+    systemPrompt: {
+      section: (value) => sections.push(value), context: () => {},
+      getSectionOrder: () => 100, getContextOrder: () => 100,
+    },
+  });
+  const agent = {};
+  const persona = sections[0].text({ agent });
+  const rules = sections[1].text({ agent });
+  const surface = sections[2].text({ agent });
+  assert(persona.startsWith('You are Whale Girl'));
+  assert(!persona.includes('鲸鱼娘'));
+  assert(rules.includes('fixed rules'));
+  assert(rules.includes('[emotion:happy]'));
+  assert(surface.includes('companion room in the dsh-go phone app'));
+  assert(!surface.includes('伙伴小屋'));
 });

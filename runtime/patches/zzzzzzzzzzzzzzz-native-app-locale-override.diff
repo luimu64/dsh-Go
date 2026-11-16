@@ -1,0 +1,76 @@
+--- a/node_modules/@deepseek-ai/dsh-client-locale/lib/client.js
++++ b/node_modules/@deepseek-ai/dsh-client-locale/lib/client.js
+@@ -1441,6 +1441,17 @@
+ 		function localeKey(value) {
+ 			return value.toLowerCase();
+ 		}
++		/**
++		* Read the native app language override. Ordinary desktop and browser
++		* clients carry no global and keep the upstream resolution order.
++		* @param value - language advertised by the native shell.
++		* @returns the supported locale id, or undefined without an override.
++		*/
++		function nativeLocaleId(value) {
++			if (typeof value !== "string" || value.length === 0) return void 0;
++			const key = localeKey(value);
++			return key.startsWith("en") ? "en" : key.startsWith("zh") ? "zh" : void 0;
++		}
+ 		/** Validate and detach a language-pack contribution from its mutable input. */
+ 		function normalizeLanguage(input) {
+ 			if (!LOCALE_ID_PATTERN.test(input.id)) throw new Error(`locale id "${input.id}" is not a BCP 47-style tag`);
+@@ -1486,6 +1497,8 @@
+ 			provisional;
+ 			/** Last explicit selection, including one awaiting an external registration. */
+ 			preference;
++			/** Native app language override, which wins over the Host selection. */
++			nativeLocale;
+ 			/**
+ 			* @param ctx - owning context (change events are emitted on it; the scope
+ 			* listener is released through ctx.effect on dispose).
+@@ -1497,6 +1510,7 @@
+ 				this.bootstrap = bootstrap;
+ 				this.ctx = ctx;
+ 				this.host = host;
++				this.nativeLocale = nativeLocaleId(globalThis.__DSH_APP_LOCALE__);
+ 				for (const locale of BUILT_IN_LOCALES) this.catalog.set(localeKey(locale.id), locale);
+ 				const locales = this.localeList();
+ 				this.provisional = resolveInitialLocale(locales, bootstrap?.languages);
+@@ -1619,6 +1633,18 @@
+ 				if (this.snapshot.active === target) return;
+ 				this.publish(target, true);
+ 			}
++			/**
++			* Apply the app's language without touching the Host preference, so a
++			* desktop or remote client sharing the settings document keeps its own.
++			* @param value - language advertised by the native shell.
++			*/
++			setNativeLocale(value) {
++				const next = nativeLocaleId(value);
++				if (next === void 0 || next === this.nativeLocale) return;
++				this.nativeLocale = next;
++				const target = this.resolveActive();
++				if (this.snapshot.active !== target) this.publish(target, true);
++			}
+ 			/** Recompute browser fallback and publish the current catalog. */
+ 			publishCatalog() {
+ 				this.fallbackChains.clear();
+@@ -1629,6 +1655,7 @@
+ 			}
+ 			/** Resolve an explicit preference only while its definition is available. */
+ 			resolveActive() {
++				if (this.nativeLocale !== void 0) return this.catalog.get(localeKey(this.nativeLocale))?.id ?? this.provisional;
+ 				if (this.preference === void 0) return this.provisional;
+ 				return this.catalog.get(localeKey(this.preference))?.id ?? this.provisional;
+ 			}
+@@ -1803,6 +1830,11 @@
+ 				bootstrap = parseLocaleBootstrap(value);
+ 			}
+ 			const locale = new LocaleRuntime(ctx, ctx.configForms.get(LOCALE_SETTINGS_NAMESPACE), bootstrap);
++			if (typeof window !== "undefined") ctx.effect(() => {
++				const adoptNativeLocale = (event) => locale.setNativeLocale(event.detail);
++				window.addEventListener("dsh-go:locale", adoptNativeLocale);
++				return () => window.removeEventListener("dsh-go:locale", adoptNativeLocale);
++			}, "locale: native app override");
+ 			for (const [id, label] of [
+ 				["ja", "日本語"],
+ 				["es", "Español"],

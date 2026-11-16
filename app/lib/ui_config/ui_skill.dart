@@ -26,6 +26,7 @@ import '../runtime/runtime_bridge.dart';
 import '../runtime/runtime_state.dart';
 import '../state/android_features.dart' show operatingSystemProvider;
 import '../state/hosts_state.dart';
+import '../state/locale_state.dart' show appLanguageProvider;
 import 'ui_config_state.dart';
 
 const uiSkillName = 'dsh-go-ui';
@@ -85,20 +86,59 @@ class UiSkillBundle {
 
 typedef UiAssetReader = Future<String> Function(String key);
 
+/// The app language a bundled skill is provisioned in: `en` or `zh`.
+///
+/// Follows [AppLocale] itself, so a language switch in Settings notifies this
+/// provider before the new choice rebuilds the tree; [appLanguageProvider] is
+/// watched as well so the rebuild is ordered after the choice is stored. A
+/// running engine gets the new variant without a restart.
+final uiSkillLanguageProvider = Provider<String>((ref) {
+  ref.watch(appLanguageProvider);
+  void changed() => ref.invalidateSelf();
+  AppLocale.changes.addListener(changed);
+  ref.onDispose(() => AppLocale.changes.removeListener(changed));
+  return AppLocale.isEnglish ? 'en' : 'zh';
+});
+
+/// The `en` file map of a manifest overlay key (`locales`, `harmonyLocales`).
+Map? _englishFiles(Map manifest, String key) {
+  final group = manifest[key];
+  if (group is! Map) return null;
+  final files = group['en'];
+  return files is Map ? files : null;
+}
+
 /// Reads a bundled skill (manifest first): [uiSkillName] unless [name] says
-/// otherwise.
-Future<UiSkillBundle> loadUiSkillBundle([UiAssetReader? read, String name = uiSkillName, String? os]) async {
+/// otherwise. [language] picks the manifest's `locales` variant (English
+/// today); the Chinese files ship either way and are used when no variant
+/// exists.
+Future<UiSkillBundle> loadUiSkillBundle([
+  UiAssetReader? read,
+  String name = uiSkillName,
+  String? os,
+  String? language,
+]) async {
   final reader = read ?? rootBundle.loadString;
   final assetDir = 'assets/skills/$name/';
   final manifest = jsonDecode(await reader('${assetDir}manifest.json'));
-  final files = (manifest as Map)['files'] as Map;
+  final root = manifest as Map;
+  final files = root['files'] as Map;
   // What HarmonyOS says differently takes the same path, so nothing of Android's
   // is left behind when it installs over an earlier copy.
-  final harmony = os == 'ohos' ? manifest['harmony'] as Map? : null;
+  final harmony = os == 'ohos' ? root['harmony'] as Map? : null;
+  final locale = language == 'en' ? _englishFiles(root, 'locales') : null;
+  // HarmonyOS's own English file wins over the shared English overlay.
+  final harmonyLocale = os == 'ohos' && language == 'en'
+      ? _englishFiles(root, 'harmonyLocales')
+      : null;
   final assets = {
     for (final MapEntry(key: asset, value: target) in files.entries) '$target': '$asset',
     if (harmony != null)
       for (final MapEntry(key: asset, value: target) in harmony.entries) '$target': '$asset',
+    if (locale != null)
+      for (final MapEntry(key: asset, value: target) in locale.entries) '$target': '$asset',
+    if (harmonyLocale != null)
+      for (final MapEntry(key: asset, value: target) in harmonyLocale.entries) '$target': '$asset',
   };
   return UiSkillBundle({
     for (final MapEntry(key: target, value: asset) in assets.entries) target: await reader('$assetDir$asset'),
@@ -169,17 +209,21 @@ Future<UiSkillInstallResult> installUiSkill(Directory rootfs, UiSkillBundle bund
 
 typedef UiSkillBundleLoader = Future<UiSkillBundle> Function();
 
-final uiSkillBundleLoaderProvider = Provider<UiSkillBundleLoader>((ref) => loadUiSkillBundle);
+final uiSkillBundleLoaderProvider = Provider<UiSkillBundleLoader>((ref) {
+  final language = ref.watch(uiSkillLanguageProvider);
+  return () => loadUiSkillBundle(null, uiSkillName, null, language);
+});
 
 /// The other skills installed next to [uiSkillName] on each engine start.
 final extraSkillLoadersProvider = Provider<List<UiSkillBundleLoader>>((ref) {
   final os = ref.watch(operatingSystemProvider);
+  final language = ref.watch(uiSkillLanguageProvider);
   return [
-    () => loadUiSkillBundle(null, pluginSkillName),
-    () => loadUiSkillBundle(null, guideSkillName, os),
-    () => loadUiSkillBundle(null, supportSkillName),
-    () => loadUiSkillBundle(null, companionAdaptSkillName),
-    () => loadUiSkillBundle(null, petThemeSkillName),
+    () => loadUiSkillBundle(null, pluginSkillName, null, language),
+    () => loadUiSkillBundle(null, guideSkillName, os, language),
+    () => loadUiSkillBundle(null, supportSkillName, null, language),
+    () => loadUiSkillBundle(null, companionAdaptSkillName, null, language),
+    () => loadUiSkillBundle(null, petThemeSkillName, null, language),
   ];
 });
 
@@ -194,6 +238,9 @@ class UiSkillAutoInstaller extends Notifier<UiSkillInstallResult?> {
   @override
   UiSkillInstallResult? build() {
     final r = ref;
+    // Changing the language rebuilds this notifier, which retires the old
+    // drain and installs the newly selected variant for a running engine.
+    r.watch(uiSkillLanguageProvider);
     late final _UiSkillDrain drain;
     drain = _UiSkillDrain(
       r,

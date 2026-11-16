@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // 公开 OH AudioCapturer；格式/权限/麦克风行为仍须实际设备验证。
 import audio from '@ohos.multimedia.audio';
 import { VoiceFailure, VoiceNotice, VoiceResource, retiredVoice } from './VoiceTypes';
@@ -56,7 +57,7 @@ export class OhosVoiceRecorder implements VoiceResource {
       actual.channels !== audio.AudioChannel.CHANNEL_1 ||
       actual.sampleFormat !== audio.AudioSampleFormat.SAMPLE_FORMAT_S16LE ||
       actual.encodingType !== audio.AudioEncodingType.ENCODING_TYPE_RAW) {
-      throw new VoiceFailure('audio', '此设备没有提供 16 kHz 单声道 PCM16 录音。', 100);
+      throw new VoiceFailure('audio', AppLanguage.pick('此设备没有提供 16 kHz 单声道 PCM16 录音。', 'This device does not provide 16 kHz mono PCM16 recording.'), 100);
     }
   }
 
@@ -69,7 +70,7 @@ export class OhosVoiceRecorder implements VoiceResource {
       capturerInfo: { source: audio.SourceType.SOURCE_TYPE_VOICE_MESSAGE, capturerFlags: 0 }
     };
     const created = await audio.createAudioCapturer(options);
-    if (!created) throw new VoiceFailure('audio', '无法创建录音流。', 100);
+    if (!created) throw new VoiceFailure('audio', AppLanguage.pick('无法创建录音流。', 'Could not create the recording stream.'), 100);
     this.capturer = created; this.ensureCurrent(); this.checkFormat(created);
     created.on('readData', this.read); this.subscribed = true;
     created.on('audioInterrupt', this.interrupt); this.interruptSubscribed = true;
@@ -79,7 +80,7 @@ export class OhosVoiceRecorder implements VoiceResource {
     // That is a normal stop request, not a discarded session.
     if (this.discarded || !this.current()) throw retiredVoice();
     this.checkFormat(created);
-    if (this.fault) throw new VoiceFailure('audio', '录音流已被中断。', 100);
+    if (this.fault) throw new VoiceFailure('audio', AppLanguage.pick('录音流已被中断。', 'The recording stream was interrupted.'), 100);
     this.ready = true;
     if (this.pcm.length > 0) this.deferUpdates();
   }
@@ -147,7 +148,7 @@ export class OhosVoiceRecorder implements VoiceResource {
       }
       // A failed release keeps the global microphone lease. A later cancel may retry.
       try { await capturer.release(); }
-      catch (_) { this.fault = true; throw new VoiceFailure('audio', '录音流尚未释放，请重试取消或重新打开应用。', 100); }
+      catch (_) { this.fault = true; throw new VoiceFailure('audio', AppLanguage.pick('录音流尚未释放，请重试取消或重新打开应用。', 'The recording stream has not been released; cancel again or reopen the app.'), 100); }
     }
     this.capturer = undefined; this.released = true; this.onReleased();
   }
@@ -155,7 +156,7 @@ export class OhosVoiceRecorder implements VoiceResource {
   async finish(): Promise<Uint8Array | null> {
     await this.close();
     if (this.discarded) return null;
-    if (this.fault) { this.pcm.discard(); throw new VoiceFailure('audio', '录音中断或发生丢帧，请重试。', 100); }
+    if (this.fault) { this.pcm.discard(); throw new VoiceFailure('audio', AppLanguage.pick('录音中断或发生丢帧，请重试。', 'Recording was interrupted or frames were dropped. Try again.'), 100); }
     const wav = this.pcm.wav(); this.pcm.discard(); return wav;
   }
 

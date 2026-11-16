@@ -194,6 +194,9 @@ class SafetyGate(
     private val ownPackage: String = SafetyRules.OWN_PACKAGE,
     private val uiText: PhoneUiText = PhoneUiText.DEFAULT,
 ) {
+    /** This app's own UI in the app language; [OWN_APP] stays the Chinese default. */
+    private val ownUi: String get() = uiText.get("phone_safety_own_ui", OWN_APP)
+
     sealed interface Verdict {
         object Allow : Verdict
         class Refuse(val message: String, val rule: String) : Verdict
@@ -216,7 +219,7 @@ class SafetyGate(
     }
 
     // l10n:keep agent safety result
-    fun labelOf(pkg: String?, appLabel: String?) = appLabel ?: pkg ?: "当前应用"
+    fun labelOf(pkg: String?, appLabel: String?) = appLabel ?: pkg ?: uiText.get("phone_current_app", "当前应用")
 
     /** Reads (screen, collect, the screen attached to results): own app and deny list refuse. */
     fun checkRead(pkg: String?, appLabel: String?): Verdict.Refuse? = checkRead(policies(), pkg, appLabel)
@@ -226,17 +229,17 @@ class SafetyGate(
         packages.firstNotNullOfOrNull { checkRead(p, it, null) }
 
     private fun checkRead(p: PhonePolicies, pkg: String?, appLabel: String?): Verdict.Refuse? {
-        if (pkg == ownPackage && !p.unlocks.ownApp) return Verdict.Refuse(OWN_APP, "own-app")
-        if (pkg != null && pkg in p.denyPackages) return Verdict.Refuse(denied(labelOf(pkg, appLabel)), "deny-list")
+        if (pkg == ownPackage && !p.unlocks.ownApp) return Verdict.Refuse(ownUi, "own-app")
+        if (pkg != null && pkg in p.denyPackages) return Verdict.Refuse(denied(labelOf(pkg, appLabel), uiText), "deny-list")
         return null
     }
 
     /** Opening an app (main or background screen). */
     fun checkOpen(pkg: String, appLabel: String?): Verdict.Refuse? {
         val p = policies()
-        // l10n:keep agent safety result
-        if (pkg == ownPackage && !p.unlocks.ownApp) return Verdict.Refuse("DSH 自己不需要用 open 打开。", "own-app")
-        if (pkg in p.denyPackages) return Verdict.Refuse(denied(labelOf(pkg, appLabel)), "deny-list")
+        if (pkg == ownPackage && !p.unlocks.ownApp)
+            return Verdict.Refuse(uiText.get("phone_safety_own_app", "DSH 自己不需要用 open 打开。"), "own-app")
+        if (pkg in p.denyPackages) return Verdict.Refuse(denied(labelOf(pkg, appLabel), uiText), "deny-list")
         return null
     }
 
@@ -260,17 +263,17 @@ class SafetyGate(
         if (kind == WriteKind.KEY) return Verdict.Allow // back / home / recents / shade: always a way out
         val p = policies()
         val lifted = p.unlocks
-        if (pkg == ownPackage && !lifted.ownApp) return Verdict.Refuse(OWN_APP, "own-app")
-        if (pkg != null && pkg in p.denyPackages) return Verdict.Refuse(denied(app), "deny-list")
+        if (pkg == ownPackage && !lifted.ownApp) return Verdict.Refuse(ownUi, "own-app")
+        if (pkg != null && pkg in p.denyPackages) return Verdict.Refuse(denied(app, uiText), "deny-list")
         if (kind == WriteKind.SCROLL) return Verdict.Allow
         if (SafetyRules.isSystemPackage(pkg) && !lifted.systemPages) {
-            // l10n:keep agent safety result
-            return Verdict.Refuse("系统设置 / 权限 / 安装页（「$app」）只看不动。请 handoff 让用户自己完成。", "system-page")
+            return Verdict.Refuse(uiText.get("phone_safety_system_page",
+                "系统设置 / 权限 / 安装页（「%1\$s」）只看不动。请 handoff 让用户自己完成。", app), "system-page")
         }
         val secret = SafetyRules.isSecretTarget(target)
         if (secret && !lifted.secretFields) {
-            // l10n:keep agent safety result
-            return Verdict.Refuse("密码 / 验证码 / 支付框不代填也不代点。请 handoff 让用户输入。", "secret-field")
+            return Verdict.Refuse(uiText.get("phone_safety_secret",
+                "密码 / 验证码 / 支付框不代填也不代点。请 handoff 让用户输入。"), "secret-field")
         }
         // Everything above is a hard rule (or one the person lifted); everything below only asks.
         val eligibleVisual = kind == WriteKind.TAP_XY && coordinate != null && eligibleCoordinate(coordinate, visual, p)
@@ -362,16 +365,18 @@ class SafetyGate(
     }
 
     private fun ask(v: Verdict.Confirm, scope: SerialWorker.Scope, admittedOwner: PhoneTasks.Owner?): Result {
-        val g = gate() ?: return Result.No(PhoneTasks.NO_CONFIRM_MESSAGE + "。", "refused:no-gate")
+        val g = gate() ?: return Result.No(PhoneTasks.noConfirmMessage(uiText) + PhoneTasks.sentenceEnd(uiText), "refused:no-gate")
         val owner = admittedOwner ?: tasks.activeOwner() ?: return stopped()
         val decision = scope.userWait { g.confirm(v.request.copy(owner = owner)) }
         // A real tap is not authority over a task that replaced the one being asked about.
         if (!tasks.isCurrent(owner)) return stopped()
         if (v.onlyOnce && decision != Decision.ALLOW_ONCE && decision != Decision.DENY &&
             decision != Decision.STOP && decision != Decision.UNAVAILABLE)
-            return Result.No("确认返回了本请求不提供的权限，未继续操作；不要自动重试。", "denied") // l10n:keep
+            return Result.No(uiText.get("phone_safety_denied_permission",
+                "确认返回了本请求不提供的权限，未继续操作；不要自动重试。"), "denied")
         if (v.request.visualScope != null && decision == Decision.ALLOW_APP_FOR_TASK)
-            return Result.No("确认返回了本请求不提供的权限，未继续操作；不要自动重试。", "denied") // l10n:keep
+            return Result.No(uiText.get("phone_safety_denied_permission",
+                "确认返回了本请求不提供的权限，未继续操作；不要自动重试。"), "denied")
         return when (decision) {
             Decision.ALLOW_VISUAL_FOR_TASK -> {
                 val visual = v.request.visualScope
@@ -386,16 +391,16 @@ class SafetyGate(
                 if (tasks.confirmIfCurrent(owner, pkg = approved, waiveTask = waive, grant = v.grant))
                     Result.Go("confirmed-app") else stopped()
             }
-            Decision.DENY -> Result.No(PhoneTasks.CANCELLED_MESSAGE + "。", "denied")
+            Decision.DENY -> Result.No(PhoneTasks.cancelledMessage(uiText) + PhoneTasks.sentenceEnd(uiText), "denied")
             Decision.STOP -> {
                 tasks.stopIfCurrent(owner, "用户在确认时选择了停止")
-                Result.No(PhoneTasks.STOPPED_MESSAGE + "。", "stopped")
+                Result.No(PhoneTasks.stoppedMessage(uiText) + PhoneTasks.sentenceEnd(uiText), "stopped")
             }
-            Decision.UNAVAILABLE -> Result.No(PhoneTasks.NO_CONFIRM_MESSAGE + "。", "refused:no-gate")
+            Decision.UNAVAILABLE -> Result.No(PhoneTasks.noConfirmMessage(uiText) + PhoneTasks.sentenceEnd(uiText), "refused:no-gate")
         }
     }
 
-    private fun stopped() = Result.No(PhoneTasks.STOPPED_MESSAGE + "。", "stopped")
+    private fun stopped() = Result.No(PhoneTasks.stoppedMessage(uiText) + PhoneTasks.sentenceEnd(uiText), "stopped")
 
     /**
      * The screen the model gets back: replaced by a one-line refusal for DSH itself, deny-listed
@@ -407,23 +412,21 @@ class SafetyGate(
     internal fun filterScreen(s: ScreenSnapshot, p: PhonePolicies): ScreenSnapshot {
         val sourceRefusal = s.readPackages.firstNotNullOfOrNull { checkRead(p, it, null) }
         val refusal = when {
-            s.packageName == ownPackage && !p.unlocks.ownApp -> OWN_APP
-            s.packageName != null && s.packageName in p.denyPackages -> denied(labelOf(s.packageName, s.appLabel))
+            s.packageName == ownPackage && !p.unlocks.ownApp -> ownUi
+            s.packageName != null && s.packageName in p.denyPackages -> denied(labelOf(s.packageName, s.appLabel), uiText)
             sourceRefusal != null -> sourceRefusal.message
-            // l10n:keep agent safety result
-            s.secure -> "安全窗口（禁止截屏 / 读取）。要操作请 handoff。"
+            s.secure -> uiText.get("phone_safety_secure_window", "安全窗口（禁止截屏 / 读取）。要操作请 handoff。")
             s.image != null && s.imageReadPackages.any { checkRead(p, it, null) != null } ->
-                // l10n:keep agent safety result
-                return s.copy(text = s.text + "\n提示：截图范围包含当前不允许读取的应用，这次没有附截图。", image = null, imageMime = null)
-            // l10n:keep agent safety result
+                return s.copy(text = s.text + uiText.get("phone_safety_no_screenshot_app",
+                    "\n提示：截图范围包含当前不允许读取的应用，这次没有附截图。"), image = null, imageMime = null)
             s.image != null && ("«银行卡" in s.text || "«身份证" in s.text) ->
-                // l10n:keep agent safety result
-                return s.copy(text = s.text + "\n提示：本屏有银行卡号或身份证号，这次没有附截图。", image = null, imageMime = null)
+                return s.copy(text = s.text + uiText.get("phone_safety_no_screenshot_card",
+                    "\n提示：本屏有银行卡号或身份证号，这次没有附截图。"), image = null, imageMime = null)
             else -> return s
         }
         val app = s.appLabel?.let { " · $it" } ?: ""
-        // l10n:keep agent safety result
-        return s.copy(text = "屏幕 ${s.id}$app\n$refusal", image = null, imageMime = null, focus = null)
+        return s.copy(text = uiText.get("phone_safety_screen_refused", "屏幕 %1\$s%2\$s\n%3\$s", s.id, app, refusal),
+            image = null, imageMime = null, focus = null)
     }
 
     private fun describe(kind: WriteKind, t: TargetInfo?, app: String, typed: String?, submit: Boolean, point: Pair<Int, Int>?, coordinate: PhoneAction.TapXY?): String {
@@ -443,10 +446,8 @@ class SafetyGate(
     }
 
     companion object {
-        // l10n:keep agent safety result
         const val OWN_APP = "这是 DSH 自己的界面，不读取也不操作。"
-        fun denied(app: String) =
-            // l10n:keep agent safety result
-            "「$app」默认不碰（银行、券商、支付类）。要用就 handoff 给用户，或让用户在 设置 → 手机操控 → 应用名单 里解除。"
+        fun denied(app: String, ui: PhoneUiText = PhoneUiText.DEFAULT) = ui.get("phone_safety_denied_app",
+            "「%1\$s」默认不碰（银行、券商、支付类）。要用就 handoff 给用户，或让用户在 设置 → 手机操控 → 应用名单 里解除。", app)
     }
 }

@@ -57,7 +57,15 @@ void main() {
     expect(value.profileRevision, 3);
     expect(value.memoryMode, 'query');
     expect(value.memoryEpoch, isNull);
+    expect(value.languages, ['zh'], reason: 'an older host accepts only the established profile shape');
     expect(requests, ['GET']);
+  });
+  test('a host that advertises English accepts it in the profile', () async {
+    handler = (req) => reply(req, 200, {...capability(), 'languages': ['zh', 'en']});
+    final value = (await client.companionPromptCapability(session))!;
+    expect(value.languages, ['zh', 'en']);
+    expect(CompanionPromptCapability.fromJson({...capability(), 'languages': ['fr']}), isNull);
+    expect(CompanionPromptCapability.fromJson({...capability(), 'languages': []}), isNull);
   });
   test('memory authority capability is advisory, typed and backwards compatible', () async {
     handler = (req) => reply(req, 200, {...capability(), 'memoryMode': 'automatic', 'memoryEpoch': 7});

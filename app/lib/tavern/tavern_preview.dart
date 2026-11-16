@@ -10,6 +10,8 @@ import 'dart:typed_data';
 
 import 'package:dsh_tavern/dsh_tavern.dart';
 
+import '../l10n/l10n.dart';
+
 /// Marks the stand-in, so the screens can say replies are samples.
 abstract interface class TavernPreview {}
 
@@ -990,14 +992,14 @@ class PreviewTavern implements Tavern, TavernPreview {
   Stream<TavernEvent> continueReply(String chatId, String nodeId) {
     final chat = _chats[chatId]!;
     final node = chat.nodes[nodeId]!;
-    return _stream(chat, node, '\n\n她停顿了一下，又接着说：「还有一件事……我晚点再告诉你。」', started: false);
+    return _stream(chat, node, _continueText, started: false);
   }
 
   @override
   Stream<TavernEvent> impersonate(String chatId) async* {
-    yield const TavernTextDelta('', '我推开门，四下看了看。');
+    yield TavernTextDelta('', _impersonateText);
     yield TavernTurnDone(
-      TavernMessage(nodeId: '', role: TavernRole.user, speaker: 'You', text: '我推开门，四下看了看。', at: _clock()),
+      TavernMessage(nodeId: '', role: TavernRole.user, speaker: 'You', text: _impersonateText, at: _clock()),
     );
   }
 
@@ -2049,17 +2051,43 @@ class _Chat {
 
 Iterable<String> _pieces(String text) => RegExp(r'.{1,3}', dotAll: true).allMatches(text).map((m) => m[0]!);
 
-const _sampleReasoning = '她在等一个答案，但不想说得太多。先回应眼前的问题，再留一点悬念。';
+/// The stand-in's own words, in the app language: they are what the screens
+/// show when no engine answers, so a Chinese app keeps Chinese samples and an
+/// English one English.
+String get _sampleReasoning => AppLocale.isEnglish
+    ? 'She is waiting for an answer but does not want to say too much. Answer what is in front of '
+          'her first, then leave a little suspense.'
+    : '她在等一个答案，但不想说得太多。先回应眼前的问题，再留一点悬念。'; // l10n:keep
+
+String get _continueText => AppLocale.isEnglish
+    ? '\n\nShe pauses, then goes on: "There is one more thing... I will tell you later."'
+    : '\n\n她停顿了一下，又接着说：「还有一件事……我晚点再告诉你。」'; // l10n:keep
+
+String get _impersonateText =>
+    AppLocale.isEnglish ? 'I push the door open and look around.' : '我推开门，四下看了看。'; // l10n:keep
 
 String _cannedFor(String text) => text.contains('?') || text.contains('？') ? _canned[1] : _canned[0];
 
-const _canned = [
+List<String> get _canned => AppLocale.isEnglish ? _cannedEn : _cannedZh;
+
+// l10n:keep-begin The Chinese samples; _cannedEn is their English pair.
+const _cannedZh = [
   '*她把手里的杯子放下，抬眼看你。*\n\n「你来得正好。外面的雨一直没停，镇上的人都躲在屋里。」\n\n她往壁炉那边挪了挪，给你让出一个位置。「坐吧，我去给你倒点热的。」',
   '「这个问题啊……」她想了想，手指在桌面上轻轻敲着。\n\n「我只能告诉你我知道的那部分。剩下的，你得自己去地下室看看。」',
   '*门外传来一阵脚步声，又很快远去。*\n\n她没有回头，只是低声说：「别出声，等他们走远。」',
 ];
+// l10n:keep-end
 
-const _samples = [
+const _cannedEn = [
+  '*She sets the cup in her hand down and looks up at you.*\n\n"You came at the right time. The rain outside has not stopped, and everyone in town is hiding indoors."\n\nShe shifts toward the fireplace and makes room for you. "Sit. I will pour you something hot."',
+  '"That question..." She thinks it over, her fingers tapping lightly on the table.\n\n"I can only tell you the part I know. The rest you will have to look into in the cellar yourself."',
+  '*Footsteps pass outside the door and quickly fade.*\n\nShe does not turn around, only says quietly: "Not a word. Wait until they are gone."',
+];
+
+List<_Card> get _samples => AppLocale.isEnglish ? _samplesEn : _samplesZh;
+
+// l10n:keep-begin The Chinese sample cards; _samplesEn is their English pair.
+const _samplesZh = [
   _Card(
     id: 'sample-innkeeper',
     name: '林晚',
@@ -2102,6 +2130,52 @@ const _samples = [
     greetings: ['「舰桥欢迎你，舰长。航线已经算好，还有三十七个小时抵达。要听个笑话打发时间吗？」'],
   ),
 ];
+// l10n:keep-end
+
+const _samplesEn = [
+  _Card(
+    id: 'sample-innkeeper',
+    name: 'Mira',
+    creator: 'DSH Go',
+    tags: ['Sample', 'Mystery'],
+    description: 'The innkeeper of a small-town inn on a rainy night; she knows a great deal and tells only half of it.',
+    creatorNotes: 'A sample card, for previewing the tavern screens.',
+    book: {
+      'name': 'Rain Town',
+      'entries': [
+        {
+          'keys': ['Cellar', 'Wine cellar'],
+          'comment': 'The cellar',
+          'content': 'The inn cellar is a wine cellar in name only; only Mira has the key.',
+          'insertion_order': 100,
+          'enabled': true,
+          'constant': false,
+        },
+        {
+          'keys': ['Rain'],
+          'comment': 'Days of rain',
+          'content': 'It has rained for three days and the bridge has washed out.',
+          'insertion_order': 90,
+          'enabled': true,
+          'constant': true,
+        },
+      ],
+    },
+    greetings: [
+      '*The inn door is pushed open by the wind, carrying in a gust of cold rain. The woman behind the counter looks up.*\n\n"You are still travelling this late? Come in, the stove is still warm."',
+      '*You wake in a bed on the second floor of the inn. It is still raining outside.*\n\n"So you are finally awake." The woman at the door holds a bowl of soup. "You collapsed at the door last night and gave me a fright."',
+    ],
+  ),
+  _Card(
+    id: 'sample-navigator',
+    name: 'Star Chart',
+    creator: 'DSH Go',
+    tags: ['Sample', 'Science fiction'],
+    description: 'The navigation AI of a long-haul starship; it speaks briefly and now and then tells a bad joke.',
+    greetings: ['"Welcome to the bridge, Captain. The course is plotted; thirty-seven hours to arrival. Would you like a joke to pass the time?"'],
+  ),
+];
+
 
 /// The preview's [Tavern.scripts]: it simulates none of the bridge, and says
 /// so (simulated, no methods, no scopes); every call is refused as such,

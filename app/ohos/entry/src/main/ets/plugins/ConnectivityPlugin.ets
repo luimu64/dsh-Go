@@ -2,6 +2,7 @@
 import connection from '@ohos.net.connection';
 import hilog from '@ohos.hilog';
 import { BusinessError } from '@ohos.base';
+import { AppLanguage } from '../i18n/AppLanguage';
 import {
   Any, EventChannel, EventSink, FlutterPlugin, FlutterPluginBinding,
   MethodCall, MethodCallHandler, MethodChannel, MethodResult, StreamHandler
@@ -38,7 +39,7 @@ export default class ConnectivityPlugin implements FlutterPlugin, MethodCallHand
   onMethodCall(call: MethodCall, result: MethodResult): void {
     if (call.method !== 'check') { result.notImplemented(); return; }
     this.read().then((states: string[]) => result.success(states)).catch((_error: BusinessError) => {
-      result.error('ohos_network_query', '无法查询系统网络状态，请重试。', null);
+      result.error('ohos_network_query', AppLanguage.pick('无法查询系统网络状态，请重试。', 'Could not query the system network state. Try again.'), null);
     });
   }
 
@@ -58,7 +59,7 @@ export default class ConnectivityPlugin implements FlutterPlugin, MethodCallHand
         if (error) {
           if (this.observer === observer) {
             this.observer = undefined;
-            events.error('ohos_network_watch', '无法订阅系统网络变化，请重试。', null);
+            events.error('ohos_network_watch', AppLanguage.pick('无法订阅系统网络变化，请重试。', 'Could not subscribe to system network changes. Try again.'), null);
           }
           return;
         }
@@ -71,7 +72,7 @@ export default class ConnectivityPlugin implements FlutterPlugin, MethodCallHand
       });
     } catch (_error) {
       this.observer = undefined;
-      events.error('ohos_network_watch', '无法订阅系统网络变化，请重试。', null);
+      events.error('ohos_network_watch', AppLanguage.pick('无法订阅系统网络变化，请重试。', 'Could not subscribe to system network changes. Try again.'), null);
     }
   }
 
@@ -105,7 +106,7 @@ export default class ConnectivityPlugin implements FlutterPlugin, MethodCallHand
       if (key !== this.last) { this.last = key; this.sink.success(states); }
     } catch (_error) {
       if (generation === this.generation && query === this.query) {
-        this.sink?.error('ohos_network_query', '无法查询系统网络状态，请重试。', null);
+        this.sink?.error('ohos_network_query', AppLanguage.pick('无法查询系统网络状态，请重试。', 'Could not query the system network state. Try again.'), null);
       }
     }
   }

@@ -619,7 +619,7 @@ final class IOSPetOverlay: NSObject {
   }
 
   private func words(_ english: String, _ chinese: String) -> String {
-    Locale.preferredLanguages.first?.hasPrefix("zh") == true ? chinese : english
+    AppLanguage.words(english, chinese)
   }
   private func badArguments(_ result: FlutterResult) {
     result(FlutterError(code: "overlay_arguments", message: "Invalid pet overlay arguments", details: nil))

@@ -4,10 +4,13 @@
     python3 app/tool/guide_sync.py           # check, then write app/assets/skills/dsh-go-guide/
     python3 app/tool/guide_sync.py --check   # check only, write nothing; exit 1 on any problem
 
-The guide lives in docs/guide/ (SKILL.md, README.md, zh/*.md, en/*.md) and ships
-as the dsh-go-guide skill: the app installs it into the on-device engine
-(lib/ui_config/ui_skill.dart), flat in app/assets/skills/dsh-go-guide/ with
-manifest.json mapping each file back to its place. Rules for the pages:
+The guide lives in docs/guide/ (SKILL.md, SKILL.en.md, README.md, zh/*.md,
+en/*.md) and ships as the dsh-go-guide skill: the app installs it into the
+on-device engine (lib/ui_config/ui_skill.dart), flat in
+app/assets/skills/dsh-go-guide/ with manifest.json mapping each file back to
+its place. SKILL.en.md is the skill's own instructions in English and ships as
+the `en` locale variant of SKILL.md; the Chinese SKILL.md remains the default.
+Rules for the pages:
 
 - zh/ and en/ hold the same pages. README.md says `> dsh-go <version>`, the
   version name in app/pubspec.yaml (without `+N`).
@@ -39,6 +42,7 @@ from pathlib import Path
 SKILL = 'dsh-go-guide'
 LOCALES = ('zh', 'en')
 HARMONY = 'harmony'
+SKILL_EN = 'SKILL.en.md'
 NAV = re.compile(r'^<!-- nav: ([A-Za-z][A-Za-z0-9_]*(?:,[A-Za-z][A-Za-z0-9_]*)*) -->$')
 SPAN = re.compile(r'`([^`\n]+)`')
 BOLD = re.compile(r'\*\*([^*\n]+)\*\*')
@@ -204,9 +208,26 @@ def harmony_files(guide: Path) -> dict[str, Path]:
     return files
 
 
+def english_skill(guide: Path, root: Path | None = None) -> Path:
+    return (root or guide) / SKILL_EN
+
+
+def check_english_skill(guide: Path, root: Path | None = None, prefix: str = '') -> list[str]:
+    """The English instructions must exist, parse as a skill, and not be the Chinese file."""
+    path = english_skill(guide, root)
+    name = f'{prefix}{SKILL_EN}'
+    if not path.is_file():
+        return [f'{name}: missing (the skill ships Chinese and English instructions)']
+    errors = [f'{name}: {error}' for error in check_skill(path.read_text(encoding='utf-8'))]
+    chinese = (root or guide) / 'SKILL.md'
+    if chinese.is_file() and path.read_bytes() == chinese.read_bytes():
+        errors.append(f'{name}: identical to SKILL.md; write the English instructions')
+    return errors
+
+
 def check(repo: Path, guide: Path) -> list[str]:
     errors: list[str] = []
-    for required in ('SKILL.md', 'README.md'):
+    for required in ('SKILL.md', 'README.md', SKILL_EN):
         if not (guide / required).is_file():
             return [f'{guide}: missing {required}']
     pages = {locale: {p.name for p in source_files(guide / locale, '*.md')} for locale in LOCALES}
@@ -216,13 +237,13 @@ def check(repo: Path, guide: Path) -> list[str]:
         errors.append(f'zh/en pages differ: only zh {sorted(pages["zh"] - pages["en"])}, '
                       f'only en {sorted(pages["en"] - pages["zh"])}')
     harmony = harmony_files(guide)
-    ours = {*guide_files(guide), *(f'{HARMONY}/{target}' for target in harmony)}
+    ours = {*guide_files(guide), SKILL_EN, f'{HARMONY}/{SKILL_EN}', *(f'{HARMONY}/{target}' for target in harmony)}
     for other in guide.rglob('*'):
         if other.name.startswith('._'):
             continue
         rel = other.relative_to(guide).as_posix()
         if other.is_file() and rel not in ours:
-            errors.append(f'{rel}: not part of the guide (SKILL.md, README.md, zh/*.md, en/*.md)')
+            errors.append(f'{rel}: not part of the guide (SKILL.md, SKILL.en.md, README.md, zh/*.md, en/*.md)')
     for target in sorted(harmony.keys() - guide_files(guide).keys()):
         errors.append(f'{HARMONY}/{target}: takes the place of nothing in the guide')
     only = {locale: {t.split('/')[1] for t in harmony if t.startswith(f'{locale}/')} for locale in LOCALES}
@@ -237,8 +258,10 @@ def check(repo: Path, guide: Path) -> list[str]:
         if stated != [version]:
             errors.append(f'{name}: want one line `> dsh-go {version}` (app/pubspec.yaml), found {stated}')
     errors += check_skill((guide / 'SKILL.md').read_text(encoding='utf-8'))
+    errors += check_english_skill(guide)
     if 'SKILL.md' in harmony:
         errors += [f'{HARMONY}/{error}' for error in check_skill(harmony['SKILL.md'].read_text(encoding='utf-8'))]
+        errors += check_english_skill(guide, guide / HARMONY, f'{HARMONY}/')
     ids = read_page_ids(repo / 'app/lib/links/page_links.dart', repo / 'app/lib/ui/settings/index/spots.dart')
     res = repo / 'app/android/app/src/main/res'
     for locale in LOCALES:
@@ -261,10 +284,14 @@ def assets(guide: Path) -> dict[str, bytes]:
     manifest = {target.replace('/', '-'): target for target in files}
     out = {flat: files[target].read_bytes() for flat, target in manifest.items()}
     record: dict[str, object] = {'name': SKILL, 'files': manifest}
+    out['en-SKILL.md'] = english_skill(guide).read_bytes()
+    record['locales'] = {'en': {'en-SKILL.md': 'SKILL.md'}}
     harmony = harmony_files(guide)
     if harmony:
         record[HARMONY] = {f'{HARMONY}-' + target.replace('/', '-'): target for target in harmony}
         out.update({f'{HARMONY}-' + target.replace('/', '-'): page.read_bytes() for target, page in harmony.items()})
+        out['harmony-en-SKILL.md'] = english_skill(guide, guide / HARMONY).read_bytes()
+        record['harmonyLocales'] = {'en': {'harmony-en-SKILL.md': 'SKILL.md'}}
     out['manifest.json'] = (json.dumps(record, ensure_ascii=False, indent=2) + '\n').encode()
     return out
 

@@ -127,7 +127,7 @@ String tavernTokenCount(int tokens, {required bool zh}) {
   if (tokens < 10000) return '$tokens';
   if (zh) {
     final wan = tokens / 10000;
-    return '${wan >= 100 ? wan.round() : wan.toStringAsFixed(1)}万';
+    return '${wan >= 100 ? wan.round() : wan.toStringAsFixed(1)}万'; // l10n:keep Chinese unit
   }
   final k = tokens / 1000;
   return k >= 1000 ? '${(k / 1000).toStringAsFixed(1)}M' : '${k >= 100 ? k.round() : k.toStringAsFixed(1)}k';

@@ -7,9 +7,10 @@
 // Strings live in lib/l10n/parts/<area>_{zh,en}.arb; tool/l10n_merge.py
 // merges them and regenerates lib/l10n/gen/.
 
-import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
+import '../companion/companion_language.dart' show companionLanguageSource;
 import 'gen/app_localizations.dart';
 
 export 'gen/app_localizations.dart';
@@ -37,22 +38,33 @@ abstract final class AppLocale {
 
   static L10n get l10n => _l10n;
 
-  /// Switches [appL10n] to [locale] (zh_CN or en).
+  static final ValueNotifier<Locale> _changes = ValueNotifier(_locale);
+
+  /// Locale changes for services and cached content outside the widget tree.
+  static ValueListenable<Locale> get changes => _changes;
+
+  /// Switches UI text and notifies content consumers of the same language.
   static void use(Locale locale) {
-    final next = locale.languageCode == 'en' ? en : zhCN;
+    final next = resolve(locale, null);
+    // Prompt text outside the widget tree (the companion's) reads the same
+    // language through a resolver instead of importing Flutter's l10n.
+    companionLanguageSource = () => isEnglish ? 'en' : 'zh';
     if (next == _locale) return;
     _locale = next;
     _l10n = lookupL10n(next);
+    _changes.value = next;
   }
 
-  /// Chinese for any Chinese system language, English for everything else.
+  /// The first supported system language wins. Unsupported and empty lists
+  /// fall back to English, consistently with native resource selection.
   static Locale resolve(Locale? chosen, List<Locale>? system) {
-    if (chosen != null) return chosen.languageCode == 'en' ? en : zhCN;
+    if (chosen != null) return chosen.languageCode.toLowerCase() == 'zh' ? zhCN : en;
     for (final l in system ?? const <Locale>[]) {
-      if (l.languageCode == 'zh') return zhCN;
-      if (l.languageCode == 'en') return en;
+      final language = l.languageCode.toLowerCase();
+      if (language == 'zh') return zhCN;
+      if (language == 'en') return en;
     }
-    return (system == null || system.isEmpty) ? zhCN : en;
+    return en;
   }
 }
 

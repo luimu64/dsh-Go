@@ -2,5 +2,10 @@
   "name": "dsh-go-support",
   "files": {
     "SKILL.md": "SKILL.md"
+  },
+  "locales": {
+    "en": {
+      "SKILL.en.md": "SKILL.md"
+    }
   }
 }

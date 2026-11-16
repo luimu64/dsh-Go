@@ -252,18 +252,27 @@ final class IOSPhoneClipboard {
     guard let saved = lease else { return true }
     guard foreground(), current() else { return false }
     let prompt = saved.pasteAttempted
-      ? "请先核对目标应用已经完成或取消粘贴。恢复原剪贴板前不会再发送粘贴；原内容仅保存在本 App 内存，不发送给模型。"
-      : "上次没有派发粘贴；恢复临时保存的原剪贴板后，才会另行询问新的手机动作。"
-    let allowed = await actions.confirm(request, title: "恢复原剪贴板？", detail: prompt,
-      allow: "已核对，恢复", deny: "暂不恢复")
+      ? AppLanguage.words(
+        "First confirm that the target app has finished or cancelled the paste. No further paste is sent before the original clipboard is restored; the original content stays only in this app's memory and is not sent to the model.",
+        "请先核对目标应用已经完成或取消粘贴。恢复原剪贴板前不会再发送粘贴；原内容仅保存在本 App 内存，不发送给模型。")
+      : AppLanguage.words(
+        "No paste was sent last time; after the temporarily saved original clipboard is restored, a new phone action will be asked about separately.",
+        "上次没有派发粘贴；恢复临时保存的原剪贴板后，才会另行询问新的手机动作。")
+    let allowed = await actions.confirm(
+      request, title: AppLanguage.words("Restore the original clipboard?", "恢复原剪贴板？"), detail: prompt,
+      allow: AppLanguage.words("Checked; restore", "已核对，恢复"), deny: AppLanguage.words("Not yet", "暂不恢复"))
     guard allowed, current(), foreground(), lease === saved else { return false }
     do {
       try await restore(id: saved.id, current: current)
       return current()
     } catch IOSPhoneClipboardError.changed {
-      let replace = await actions.confirm(request, title: "剪贴板已经变化",
-        detail: "现在的剪贴板已不属于上次临时粘贴。是否用保存的旧内容覆盖它？暂不恢复会保留现在的剪贴板和本 App 中的旧副本；可到设置中另行决定。",
-        allow: "覆盖并恢复旧内容", deny: "暂不恢复")
+      let replace = await actions.confirm(
+        request, title: AppLanguage.words("The clipboard has changed", "剪贴板已经变化"),
+        detail: AppLanguage.words(
+          "The current clipboard no longer belongs to the last temporary paste. Overwrite it with the saved old content? Not restoring keeps the current clipboard and the old copy in this app; you can decide separately in settings.",
+          "现在的剪贴板已不属于上次临时粘贴。是否用保存的旧内容覆盖它？暂不恢复会保留现在的剪贴板和本 App 中的旧副本；可到设置中另行决定。"),
+        allow: AppLanguage.words("Overwrite and restore the old content", "覆盖并恢复旧内容"),
+        deny: AppLanguage.words("Not yet", "暂不恢复"))
       guard replace, current(), foreground(), lease === saved else { return false }
       do {
         try await restore(id: saved.id, overwriteChanged: true, current: current)

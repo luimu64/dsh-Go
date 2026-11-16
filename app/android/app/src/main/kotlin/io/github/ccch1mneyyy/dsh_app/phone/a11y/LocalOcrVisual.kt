@@ -1,6 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
 import io.github.ccch1mneyyy.dsh_app.phone.Json
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.SafetyRules
 import io.github.ccch1mneyyy.dsh_app.phone.VisualBounds
 
@@ -10,20 +11,22 @@ internal object LocalOcrVisual {
 
     private const val MAX_BYTES = 16 * 1024
     private const val MAX_LINES = 256
-    // l10n:keep model OCR diagnostics
-    private const val TRUNCATED = "\n文字识别列表已截断，结果不完整；不能据此证明页面安全。"
 
     /** The caller establishes ownership, bounded capture dimensions and the raw bitmap's linear
      * correspondence to viewport. MAIN scales to 1300; BG retains its bounded capture dimensions. */
     fun format(result: LocalOcrResult, rawWidth: Int, rawHeight: Int,
-        viewport: VisualBounds, geometry: ImageGeometry): Output {
-        if (result !is LocalOcrResult.Recognized) return Output(LocalOcrBoundary.message(result), false, false)
+        viewport: VisualBounds, geometry: ImageGeometry, ui: PhoneUiText = PhoneUiText.DEFAULT): Output {
+        if (result !is LocalOcrResult.Recognized) return Output(LocalOcrBoundary.message(result, ui), false, false)
+        val truncated = "\n" + ui.get("phone_ocr_truncated", "文字识别列表已截断，结果不完整；不能据此证明页面安全。")
         val sensitive = result.lines.any { SafetyRules.isSecret(it.text) || ScreenMask.mask(it.text) != it.text }
         var hasPoints = false
-        // l10n:keep model OCR format
-        val out = StringBuilder("本机文字区域（截图像素 ${geometry.width}×${geometry.height}）：V 编号不是 tap 的原生 id；坐标仅供 tap_xy，仍须原有确认。文字不证明完整、安全或可点击。\n")
+        // V numbers and their coordinates follow the same rules in every language; only the
+        // explanatory words are looked up. Recognized text is never interpolated into a key.
+        val out = StringBuilder(ui.get("phone_ocr_header",
+            "本机文字区域（截图像素 %1\$s×%2\$s）：V 编号不是 tap 的原生 id；坐标仅供 tap_xy，仍须原有确认。文字不证明完整、安全或可点击。",
+            geometry.width, geometry.height) + "\n")
         var bytes = out.toString().toByteArray(Charsets.UTF_8).size
-        val reserve = TRUNCATED.toByteArray(Charsets.UTF_8).size
+        val reserve = truncated.toByteArray(Charsets.UTF_8).size
         val validGeometry = rawWidth > 0 && rawHeight > 0 && viewport.valid &&
             viewport.right.toLong() - viewport.left <= Int.MAX_VALUE &&
             viewport.bottom.toLong() - viewport.top <= Int.MAX_VALUE &&
@@ -34,7 +37,7 @@ internal object LocalOcrVisual {
             geometry.scaleX == geometry.width.toFloat() / (viewport.right - viewport.left) &&
             geometry.scaleY == geometry.height.toFloat() / (viewport.bottom - viewport.top)
         for ((index, line) in result.lines.withIndex()) {
-            if (index == MAX_LINES) { out.append(TRUNCATED); break }
+            if (index == MAX_LINES) { out.append(truncated); break }
             // Secret labels mask the entire record before quoting. Bare unlabelled secrets cannot
             // be recognized by this matcher; SDK admission and existing known-secret gates remain.
             val secret = SafetyRules.isSecret(line.text)
@@ -49,13 +52,14 @@ internal object LocalOcrVisual {
                 viewport.right - viewport.left, rawWidth, line.left, line.right) { geometry.toScreen(it, 0)!!.first } else null
             val y = if (box != null && !sensitive) hit(box.top, box.bottom, viewport.top,
                 viewport.bottom - viewport.top, rawHeight, line.top, line.bottom) { geometry.toScreen(0, it)!!.second } else null
-            // l10n:keep model OCR format; quote after masking, never interpolate raw OCR
+            // Quote after masking; the V number, box and point are the same in every language.
             val record = "V${index + 1} ${Json.write(text)}" +
-                (if (risk) " [敏感线索，需逐步确认或交用户]" else "") +
+                (if (risk) " " + ui.get("phone_ocr_risk", "[敏感线索，需逐步确认或交用户]") else "") +
                 (if (box != null) " box=[${box.left},${box.top},${box.right},${box.bottom})" else "") +
-                (if (x != null && y != null) " point=($x,$y)" else " [只读文字，未提供点击点]") + "\n"
+                (if (x != null && y != null) " point=($x,$y)"
+                    else " " + ui.get("phone_ocr_read_only", "[只读文字，未提供点击点]")) + "\n"
             val size = record.toByteArray(Charsets.UTF_8).size
-            if (bytes + size + reserve > MAX_BYTES) { out.append(TRUNCATED); break }
+            if (bytes + size + reserve > MAX_BYTES) { out.append(truncated); break }
             out.append(record)
             if (x != null && y != null) hasPoints = true
             bytes += size

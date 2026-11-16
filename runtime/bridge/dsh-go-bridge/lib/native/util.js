@@ -63,19 +63,54 @@ export function parseText(v) {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-/** Text -> string for a locale: exact, language part, en, zh, first value. */
+/** Text -> string for a locale: exact, language, en, zh, first value. */
 export function resolveText(text, locale) {
   if (text === undefined || text === null) return undefined;
   if (typeof text === "string") return text;
-  const want = typeof locale === "string" ? locale.toLowerCase().replaceAll("_", "-") : "";
-  if (want && text[want] !== undefined) return text[want];
+  const want = typeof locale === "string" ? tag(locale) : "";
+  const entries = Object.entries(text).map(([key, value]) => [tag(key), value]);
+  const exact = entries.find(([key]) => key === want);
+  if (exact !== undefined) return exact[1];
   const lang = want.split("-")[0];
-  if (lang && text[lang] !== undefined) return text[lang];
-  if (lang) {
-    const prefixed = Object.keys(text).find((k) => k.split("-")[0] === lang);
-    if (prefixed !== undefined) return text[prefixed];
+  const own = lang ? bestVariant(entries, want, lang) : undefined;
+  if (own !== undefined) return own;
+  const english = bestVariant(entries, "en", "en");
+  if (english !== undefined) return english;
+  const chinese = bestVariant(entries, "zh", "zh");
+  if (chinese !== undefined) return chinese;
+  return Object.values(text)[0];
+}
+
+function tag(id) {
+  return String(id).trim().toLowerCase().replaceAll("_", "-");
+}
+
+/**
+ * The best value of one language among [entries] ([normalized key, value] pairs), or undefined.
+ * Sorted by key first, so ties pick the same text whatever order the manifest wrote its keys in; a
+ * language with variants prefers the one sharing the requested script or region.
+ */
+function bestVariant(entries, locale, language) {
+  const matches = entries.filter(([key]) => key === language || key.startsWith(`${language}-`)).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  if (matches.length === 0) return undefined;
+  const direct = matches.find(([key]) => key === language);
+  if (direct !== undefined) return direct[1];
+  const subtags = new Set(locale.split("-").slice(1));
+  if (language === "zh") {
+    // Taiwan, Hong Kong and Macao write traditional; the mainland, Singapore and Malaysia simplified.
+    if (["tw", "hk", "mo"].some((r) => subtags.has(r))) subtags.add("hant");
+    if (["cn", "sg", "my"].some((r) => subtags.has(r))) subtags.add("hans");
   }
-  return text.en ?? text.zh ?? Object.values(text)[0];
+  let best = matches[0];
+  let bestScore = -1;
+  for (const entry of matches) {
+    const score = entry[0].split("-").slice(1).filter((part) => subtags.has(part)).reduce((sum, part) => sum + (part.length === 4 ? 2 : 1), 0);
+    if (score > bestScore) {
+      best = entry;
+      bestScore = score;
+    }
+  }
+  return best[1];
 }
 
 export function compareSemver(a, b) {

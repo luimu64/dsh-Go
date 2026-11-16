@@ -16,6 +16,7 @@ import '../../ui/plugins/seats/seat_island.dart';
 import '../../ui/plugins/seats/seat_links.dart';
 import '../../ui_config/ui_config_state.dart' show uiConfigProvider, uiSeatOverridesProvider;
 import '../native/native_state.dart' show nativePanelsProvider;
+import '../plugin_text.dart';
 import 'seat_inventory.dart';
 import 'seat_models.dart';
 import 'seat_planner.dart';
@@ -65,6 +66,7 @@ final seatInventoryProvider = Provider.autoDispose<SeatInventory?>((ref) {
     ClientInventory.combine(bundles: bundles, boot: boot, bridge: bridge),
     namespaces: namespaces,
     webReachable: client.canReadWebBoot,
+    locale: ref.watch(pluginTextLocaleProvider),
     nativePanels: ref.watch(nativePanelsProvider),
   );
 });

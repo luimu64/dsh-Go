@@ -174,6 +174,7 @@ List<(String, Map<String, Object?>)> tavernStageCues({required bool you, require
 /// The feeling a paragraph names first, as one of the stage's emotions; null
 /// when it names none. Words for a cold or bitter smile don't count as happy.
 String? tavernEmotionIn(String text) {
+  // l10n:keep Words the words are matched against, in both languages.
   final plain = text.replaceAll(RegExp('冷笑|嘲笑|苦笑|讥笑|干笑|皮笑肉不笑|sneer', caseSensitive: false), '');
   int? first;
   String? found;
@@ -187,6 +188,8 @@ String? tavernEmotionIn(String text) {
   return found;
 }
 
+// l10n:keep-begin The words a feeling is matched by: Chinese and English
+// are recognised whatever the app language.
 const _emotionWords = {
   'happy': r'笑|开心|高兴|欣喜|雀跃|\bsmil|\blaugh|\bgrin|\bgiggl',
   'shy': r'脸红|害羞|羞涩|红了脸|耳根.{0,2}红|\bblush',
@@ -196,3 +199,4 @@ const _emotionWords = {
   'worried': r'担心|不安|紧张|忧虑|\bworr|\bnervous|\banxious',
   'confused': r'疑惑|困惑|歪头|不解|茫然|\bconfus|\bpuzzl|\bfrown',
 };
+// l10n:keep-end

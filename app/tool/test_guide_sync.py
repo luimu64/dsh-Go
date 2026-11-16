@@ -18,6 +18,16 @@ whenToUse: How to use the app.
 Read [README](README.md).
 """
 
+SKILL_EN = """---
+# dsh-go:managed — the dsh-go app keeps this skill up to date
+name: dsh-go-guide
+description: The user guide in English.
+whenToUse: How to use the app.
+---
+
+Read [README](README.md).
+"""
+
 PAGE = {
     'zh': '# 引擎\n\n<!-- nav: commonSettings,hubSettingsEngine -->\n`设置 › 引擎` · [打开](dshgo://open/engine)\n\n点**启动**，或点**停止操作**。见 [设置](02-settings.md)。\n',
     'en': '# Engine\n\n<!-- nav: commonSettings,hubSettingsEngine -->\n`Settings › Engine` · [Open](dshgo://open/engine)\n\nTap **Start**, or **Stop actions**. See [Settings](02-settings.md).\n',
@@ -57,6 +67,7 @@ class GuideSyncTest(unittest.TestCase):
         self.write('app/lib/links/page_links.dart', PAGE_LINKS)
         self.write('app/lib/ui/settings/index/spots.dart', SPOTS)
         self.write('docs/guide/SKILL.md', SKILL)
+        self.write('docs/guide/SKILL.en.md', SKILL_EN)
         self.write('docs/guide/README.md', '# Guide\n\n> dsh-go 0.9.2\n\n- [引擎](zh/01-engine.md)\n- [Engine](en/01-engine.md)\n')
         for locale, text in PAGE.items():
             self.write(f'docs/guide/{locale}/01-engine.md', text)
@@ -82,9 +93,13 @@ class GuideSyncTest(unittest.TestCase):
         manifest = json.loads((assets / 'manifest.json').read_text())
         self.assertEqual(manifest['name'], 'dsh-go-guide')
         self.assertEqual(manifest['files']['zh-01-engine.md'], 'zh/01-engine.md')
-        self.assertEqual(set(manifest['files']), {p.name for p in assets.iterdir()} - {'manifest.json'})
+        self.assertEqual(manifest['locales'], {'en': {'en-SKILL.md': 'SKILL.md'}})
+        self.assertEqual(
+            set(manifest['files']) | {'en-SKILL.md'},
+            {p.name for p in assets.iterdir()} - {'manifest.json'})
         for flat, target in manifest['files'].items():
             self.assertEqual((assets / flat).read_bytes(), (self.guide / target).read_bytes())
+        self.assertEqual((assets / 'en-SKILL.md').read_bytes(), (self.guide / 'SKILL.en.md').read_bytes())
 
     def test_appledouble_metadata_does_not_enter_the_bundled_guide(self):
         self.write('docs/guide/zh/._01-engine.md', 'not a guide page')
@@ -115,6 +130,7 @@ class GuideSyncTest(unittest.TestCase):
     def test_harmony_page_ships_beside_the_one_it_replaces(self):
         self.harmony_pages()
         self.write('docs/guide/harmony/SKILL.md', SKILL)
+        self.write('docs/guide/harmony/SKILL.en.md', SKILL_EN)
         self.write('docs/guide/harmony/README.md', '# Guide\n\n> dsh-go 0.9.2\n\n[引擎](zh/01-engine.md)\n')
         self.assertEqual(guide_sync.run(self.repo, write=True), [])
         self.assertEqual(guide_sync.run(self.repo, write=False), [])
@@ -125,8 +141,10 @@ class GuideSyncTest(unittest.TestCase):
         # Android's own map doesn't move: the file set and what each file holds.
         self.assertEqual(manifest['files']['zh-01-engine.md'], 'zh/01-engine.md')
         self.assertNotIn('harmony-zh-01-engine.md', manifest['files'])
+        self.assertEqual(manifest['harmonyLocales'], {'en': {'harmony-en-SKILL.md': 'SKILL.md'}})
         self.assertEqual(
-            set(manifest['files']) | set(manifest['harmony']), {p.name for p in assets.iterdir()} - {'manifest.json'})
+            set(manifest['files']) | set(manifest['harmony']) | {'en-SKILL.md', 'harmony-en-SKILL.md'},
+            {p.name for p in assets.iterdir()} - {'manifest.json'})
 
     def test_no_harmony_pages_no_harmony_in_the_manifest(self):
         self.assertEqual(guide_sync.run(self.repo, write=True), [])
@@ -210,6 +228,12 @@ class GuideSyncTest(unittest.TestCase):
     def test_both_languages_hold_the_same_pages(self):
         (self.guide / 'en/02-settings.md').unlink()
         self.assertFails('zh/en pages differ')
+
+    def test_english_instructions_are_required_and_not_a_copy(self):
+        (self.guide / 'SKILL.en.md').unlink()
+        self.assertFails('missing SKILL.en.md')
+        self.write('docs/guide/SKILL.en.md', SKILL)
+        self.assertFails('identical to SKILL.md')
 
     def test_skill_front_matter(self):
         self.write('docs/guide/SKILL.md', SKILL.replace('# dsh-go:managed — the dsh-go app keeps this skill up to date\n', ''))

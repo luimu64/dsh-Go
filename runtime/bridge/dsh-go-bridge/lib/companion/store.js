@@ -145,9 +145,9 @@ export function createCompanionStore({ filePath, now = Date.now, io = fs } = {})
     // Internal recall seam: same transaction, schema and authoritative clock
     // as CRUD. Keep the legacy /context selector and wire response unchanged.
     now: clock,
-    getRecallContext() {
+    getRecallContext({ language = 'zh' } = {}) {
       return transaction((doc, at) => ({ ...envelope(doc), storeId: doc.storeId.toLowerCase(),
-        asOf: at, ...selectRecallContext(doc.memories, at) }));
+        asOf: at, ...selectRecallContext(doc.memories, at, language) }));
     },
     getSnapshot() { return transaction((doc, at) => snapshot(doc, at)); },
     getMemories() { return transaction((doc) => ({ ...envelope(doc), memories: copy(doc.memories) })); },

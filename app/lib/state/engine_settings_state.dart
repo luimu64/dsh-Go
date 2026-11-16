@@ -19,6 +19,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/l10n.dart';
 import 'connection_state.dart';
 import 'engine_error_text.dart';
+import 'locale_state.dart';
 import 'media_catalog.dart' show mediaKeyRefsOf;
 import 'plugins_state.dart';
 
@@ -1099,12 +1100,19 @@ String? chineseText(LocalizedText? text) {
   return plain != null && _cjk.hasMatch(plain) ? plain.trim() : null;
 }
 
-/// The inventory joined with the bundle list: titles in Chinese, the bundle
-/// and version each entry comes from. Pure for testing.
+/// The inventory joined with the bundle list in the active app language.
 ({List<InventoryItem> global, Map<String, List<InventoryItem>> presets}) inventoryItems(
   PluginInventory inventory,
-  List<PluginBundle> bundles,
-) {
+  List<PluginBundle> bundles, {
+  String? locale,
+}) {
+  final language = locale ?? AppLocale.current.languageCode;
+  String? textOf(LocalizedText? text) {
+    if (language == 'zh') return chineseText(text);
+    final value = text?.resolve(language).trim();
+    return value == null || value.isEmpty ? null : value;
+  }
+
   ({String? source, String? bundle, String? version}) origin(String? entryId, String moduleName) {
     PluginBundle? owner;
     for (final b in bundles) {
@@ -1117,13 +1125,13 @@ String? chineseText(LocalizedText? text) {
       }
       return (source: null, bundle: null, version: null);
     }
-    final title = owner.meta?.title?.resolve('zh');
+    final title = textOf(owner.meta?.title);
     final name =
         _bundleNames[owner.name] ?? (title == null || title == owner.name ? shortModuleName(owner.name) : title);
     return (source: name, bundle: owner.name, version: owner.version);
   }
 
-  String titleOf(PluginDisplayMeta? meta, String moduleName) => chineseText(meta?.title) ?? shortModuleName(moduleName);
+  String titleOf(PluginDisplayMeta? meta, String moduleName) => textOf(meta?.title) ?? shortModuleName(moduleName);
 
   final providedBy = <String, List<String>>{};
   for (final preset in inventory.presets) {
@@ -1142,7 +1150,7 @@ String? chineseText(LocalizedText? text) {
           entryId: e.entryId,
           moduleName: e.moduleName,
           title: titleOf(e.meta, e.moduleName),
-          description: chineseText(e.meta?.description),
+          description: textOf(e.meta?.description),
           system: chineseText(e.meta?.title) == null,
           icon: e.meta?.icon,
           status: inventoryStatus(enabled: e.enabled, fiberPhase: e.fiberPhase),
@@ -1164,7 +1172,7 @@ String? chineseText(LocalizedText? text) {
               entryId: row.entryId ?? row.moduleName,
               moduleName: row.moduleName,
               title: titleOf(row.meta, row.moduleName),
-              description: chineseText(row.meta?.description),
+              description: textOf(row.meta?.description),
               system: chineseText(row.meta?.title) == null,
               icon: row.meta?.icon,
               status: inventoryStatus(enabled: row.enabled, fiberPhase: row.fiberPhase, conditional: row.conditional),
@@ -1196,6 +1204,7 @@ class InventorySnapshot {
 /// where the relay does not let it through), joined with the bundle list;
 /// refreshed on plugin changes. Null while not connected.
 final pluginInventoryProvider = FutureProvider.autoDispose<InventorySnapshot?>((ref) async {
+  final locale = ref.watch(effectiveAppLocaleProvider).languageCode;
   final conn = ref.watch(activeConnectionProvider.select((c) => c.value));
   if (conn == null) return null;
   final client = conn.client;
@@ -1221,6 +1230,6 @@ final pluginInventoryProvider = FutureProvider.autoDispose<InventorySnapshot?>((
     }
   }
   final bundles = await ref.watch(installedPluginsProvider.future).catchError((Object _) => null) ?? const [];
-  final items = inventoryItems(inventory, bundles);
+  final items = inventoryItems(inventory, bundles, locale: locale);
   return InventorySnapshot(inventory: inventory, global: items.global, presets: items.presets);
 }, retry: (_, _) => null);

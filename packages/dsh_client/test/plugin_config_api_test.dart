@@ -46,8 +46,16 @@ Map<String, Object?> _entry({String revision = 'r1', Map<String, Object?> user =
   'base': {'language': 'auto', 'threads': 2},
   'user': user,
   'secrets': [
-    {'path': ['apiKey'], 'configured': true, 'credentialRef': 'SENSEVOICE_KEY', 'writable': true},
-    {'path': ['token'], 'configured': false},
+    {
+      'path': ['apiKey'],
+      'configured': true,
+      'credentialRef': 'SENSEVOICE_KEY',
+      'writable': true,
+    },
+    {
+      'path': ['token'],
+      'configured': false,
+    },
   ],
   'writable': true,
 };
@@ -72,7 +80,13 @@ class _Bridge {
   Object? list = {
     'v': 1,
     'entries': [
-      {'entryId': 'speech-to-text-sensevoice', 'package': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice', 'label': {'zh': '本机语音识别', 'en': 'On-device recognition'}, 'state': 'active', 'configurable': true},
+      {
+        'entryId': 'speech-to-text-sensevoice',
+        'package': '@deepseek-ai/dsh-experimental-speech-to-text-sensevoice',
+        'label': {'zh': '本机语音识别', 'en': 'On-device recognition'},
+        'state': 'active',
+        'configurable': true,
+      },
       {'entryId': 'nested', 'state': 'unsupported', 'configurable': false, 'reason': 'nested-include'},
       {'state': 'active'},
     ],
@@ -163,7 +177,10 @@ void main() {
 
   test('the list: entries with why one cannot be edited; no routes reads null', () async {
     final entries = (await client.listPluginConfig())!;
-    expect(entries.map((e) => e.entryId), ['speech-to-text-sensevoice', 'nested'], reason: 'an entry without id is dropped');
+    expect(entries.map((e) => e.entryId), [
+      'speech-to-text-sensevoice',
+      'nested',
+    ], reason: 'an entry without id is dropped');
     expect(entries.first.configurable, isTrue);
     expect(entries.first.label!.resolve('en'), 'On-device recognition');
     expect(entries.last.reason, 'nested-include');
@@ -254,19 +271,42 @@ void main() {
     expect(bridge.requests.last.$2, '$dshGoPluginConfigPath/a%2Fb%20c');
   });
 
+  test('each request carries the app language when given, and only then', () async {
+    await client.listPluginConfig(locale: 'en');
+    expect(bridge.requests.last.$2, '$dshGoPluginConfigPath?locale=en');
+    await client.readPluginConfig('speech-to-text-sensevoice', locale: 'zh-CN');
+    expect(bridge.requests.last.$2, '$dshGoPluginConfigPath/speech-to-text-sensevoice?locale=zh-CN');
+    await client.writePluginConfig('speech-to-text-sensevoice', revision: 'r1', ops: const [], locale: 'en');
+    expect(bridge.requests.last.$2, '$dshGoPluginConfigPath/speech-to-text-sensevoice?locale=en');
+    await client.listPluginConfig(locale: '  ');
+    expect(bridge.requests.last.$2, dshGoPluginConfigPath, reason: 'a blank language asks for no locale');
+    await client.readPluginConfig('speech-to-text-sensevoice');
+    expect(bridge.requests.last.$2, endsWith('/speech-to-text-sensevoice'), reason: 'no query by default');
+  });
+
   test('a write sends the revision as read and the path ops; the answer is the new entry', () async {
     bridge.entry = _entry(revision: 'r2', user: {'threads': 4});
     final detail = await client.writePluginConfig(
       'speech-to-text-sensevoice',
       revision: 'r1',
-      ops: const [SettingsOp.set(['threads'], 4), SettingsOp.unset(['language'])],
+      ops: const [
+        SettingsOp.set(['threads'], 4),
+        SettingsOp.unset(['language']),
+      ],
     );
     expect(bridge.requests.last.$1, 'POST');
     expect(bridge.requests.last.$3, {
       'revision': 'r1',
       'ops': [
-        {'op': 'set', 'path': ['threads'], 'value': 4},
-        {'op': 'unset', 'path': ['language']},
+        {
+          'op': 'set',
+          'path': ['threads'],
+          'value': 4,
+        },
+        {
+          'op': 'unset',
+          'path': ['language'],
+        },
       ],
     });
     expect(detail.revision, 'r2');
@@ -277,7 +317,13 @@ void main() {
     Future<DshRemoteException> refusal(int status, Object? body) async {
       bridge.refuse = (status, body);
       try {
-        await client.writePluginConfig('x', revision: 'r1', ops: const [SettingsOp.unset(['a'])]);
+        await client.writePluginConfig(
+          'x',
+          revision: 'r1',
+          ops: const [
+            SettingsOp.unset(['a']),
+          ],
+        );
       } on DshRemoteException catch (error) {
         return error;
       }
@@ -339,7 +385,11 @@ void main() {
     bridge.refuse = (200, {'v': 2, 'entryId': 'x'});
     await expectLater(client.readPluginConfig('x'), throwsA(isA<DshProtocolException>()));
     bridge.refuse = (200, {'v': 1, 'entryId': 'x', 'revision': 3, 'schema': {}});
-    await expectLater(client.readPluginConfig('x'), throwsA(isA<DshProtocolException>()), reason: 'revision is a token');
+    await expectLater(
+      client.readPluginConfig('x'),
+      throwsA(isA<DshProtocolException>()),
+      reason: 'revision is a token',
+    );
   });
 
   test('a write that outlives its deadline throws a transport error (outcome unknown)', () async {
@@ -348,7 +398,9 @@ void main() {
       client.writePluginConfig(
         'x',
         revision: 'r1',
-        ops: const [SettingsOp.unset(['a'])],
+        ops: const [
+          SettingsOp.unset(['a']),
+        ],
         timeout: const Duration(milliseconds: 50),
       ),
       throwsA(isNot(isA<DshRemoteException>())),

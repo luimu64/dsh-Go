@@ -55,7 +55,7 @@ class _Bridge extends DshConnection {
     int? maxResponseBytes,
   }) async => snapshot();
   @override
-  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) async {
+  Future<DshHttpResponse> postJson(String path, Object? body, {Map<String, String>? query, Duration? timeout}) async {
     revision++;
     return snapshot();
   }

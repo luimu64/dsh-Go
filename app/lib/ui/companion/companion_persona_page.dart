@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../companion/companion_language.dart';
 import '../../companion/companion_state.dart';
 import '../../l10n/l10n.dart';
 import '../providers/provider_widgets.dart';
@@ -67,8 +68,17 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
 
   String? _given(String text) => text.trim().isEmpty ? null : text.trim();
 
-  /// The default persona under the name she would go by with [name].
-  String _defaultFor(String? name) => companionPersonaPart(name: name ?? widget.packName);
+  /// The default persona under the name she would go by with [name], in the
+  /// language the page is showing.
+  String _defaultFor(String? name) =>
+      companionPersonaPart(name: name ?? widget.packName, language: companionLanguage);
+
+  /// Every language's default: saving one of these is still "no custom text",
+  /// so switching languages never turns the app's default into the person's.
+  Iterable<String> _defaultTexts(String? name) => [
+    companionPersonaPart(name: name ?? widget.packName, language: 'zh'),
+    companionPersonaPart(name: name ?? widget.packName, language: 'en'),
+  ];
 
   void _edited() {
     _saveTimer?.cancel();
@@ -80,7 +90,9 @@ class _CompanionPersonaPageState extends ConsumerState<CompanionPersonaPage> {
     final name = _given(_name.text);
     // Still the default (under whichever name): nothing of their own to keep.
     final text = _persona.text.trim();
-    final own = text == _defaultFor(name).trim() || text == companionPersonaDefault.trim() ? '' : text;
+    final own = _defaultTexts(name).map((d) => d.trim()).contains(text) || text == companionPersonaDefault.trim()
+        ? ''
+        : text;
     return (name, CompanionPersonaSettings(custom: own, callMe: _callMe.text.trim()));
   }
 

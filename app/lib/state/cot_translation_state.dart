@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
 import 'connection_state.dart';
+import 'locale_state.dart';
 
 /// The app's interface language, the target of `auto`.
 String get reasoningUiLanguage => AppLocale.current.languageCode;
@@ -39,6 +40,9 @@ typedef ReasoningTranslator = Future<String> Function(
 
 /// The Host call behind [ReasoningTranslator] (a seam for tests).
 final reasoningTranslatorProvider = Provider<ReasoningTranslator?>((ref) {
+  // A language switch rebuilds the translator with the new target rather than
+  // leaving a closure that reads the previous interface language.
+  ref.watch(effectiveAppLocaleProvider);
   final client = ref.watch(activeConnectionProvider).value?.client;
   if (client == null) return null;
   return (text, {required limits, sessionId}) => client.translateReasoning(
@@ -79,10 +83,14 @@ final _reasoningOtherLetters = RegExp(
 /// go out one at a time, the still-growing tail stays original, results are
 /// cached by fragment text, and a failure keeps the original until [retry].
 class ReasoningTranslation extends ChangeNotifier {
-  ReasoningTranslation({required this.maxTextChars, required this.translate});
+  ReasoningTranslation({required this.maxTextChars, required this.translate, this.language});
 
   final int maxTextChars;
   final Future<String> Function(String text) translate;
+
+  /// The interface language the cached translations were made for; null
+  /// until the first [update] names one.
+  String? language;
 
   final Map<String, String> _cache = {};
   List<ReasoningFragment> _fragments = const [];
@@ -101,8 +109,17 @@ class ReasoningTranslation extends ChangeNotifier {
   bool get hasTranslation => _cache.isNotEmpty;
 
   /// Adopts the current reasoning and queues newly completed fragments.
-  void update(String source, {required bool running}) {
+  ///
+  /// [language] names the interface language the translation is for; when it
+  /// differs from the cached one, the cache and any failure restart so text
+  /// translated for the previous language is never shown.
+  void update(String source, {required bool running, String? language}) {
     if (_disposed) return;
+    if (language != null && language != this.language) {
+      this.language = language;
+      _cache.clear();
+      _failed = false;
+    }
     _fragments = reasoningFragments(source, running: running, maxTextChars: maxTextChars);
     notifyListeners();
     unawaited(_run());

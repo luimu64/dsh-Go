@@ -8,6 +8,7 @@ import call from '@ohos.telephony.call';
 import calendarManager from '@ohos.calendarManager';
 import { loadShareKit } from '../plugins/HmsKits';
 import { PhoneReminders, PhoneReminderDenied, PhoneReminderRefused } from './PhoneReminders';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export class PhoneEffectDenied extends Error {
   code: string;
@@ -40,7 +41,7 @@ function rawText(args: Map<string, Object>, key: string): string {
 
 function required(args: Map<string, Object>, key: string): string {
   const value = args.get(key);
-  if (typeof value !== 'string' || value.trim() === '') throw new PhoneEffectDenied('invalid_arguments', `缺少 ${key}。`);
+  if (typeof value !== 'string' || value.trim() === '') throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick(`缺少 ${key}。`, `${key} is required.`));
   return value;
 }
 
@@ -50,7 +51,7 @@ function unsupported(message: string): never { throw new PhoneEffectDenied('unsu
 // invalid days such as February 30. Local date-times use the phone's time zone.
 function timestamp(value: string): number {
   const match = /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?(Z|[+-]\d{2}:\d{2})?$/.exec(value);
-  if (!match) throw new PhoneEffectDenied('invalid_arguments', '日程时间格式无效。');
+  if (!match) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('日程时间格式无效。', 'The event time format is invalid.'));
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
@@ -61,10 +62,10 @@ function timestamp(value: string): number {
     Number(match[4]) > 23 || Number(match[5]) > 59 || Number(match[6] || '0') > 59 ||
     (zone.length > 1 && (Number(zone.substring(1, 3)) > 18 || Number(zone.substring(4)) > 59 ||
       (Number(zone.substring(1, 3)) === 18 && Number(zone.substring(4)) !== 0)))) {
-    throw new PhoneEffectDenied('invalid_arguments', '日程时间超出范围。');
+    throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('日程时间超出范围。', 'The event time is out of range.'));
   }
   const result = Date.parse(value.replace(' ', 'T'));
-  if (!Number.isFinite(result)) throw new PhoneEffectDenied('invalid_arguments', '日程时间无法解析。');
+  if (!Number.isFinite(result)) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('日程时间无法解析。', 'The event time could not be parsed.'));
   return result;
 }
 
@@ -75,7 +76,7 @@ function calendarTimestamp(value: string): number {
   const date = new Date(result);
   if (date.getFullYear() !== Number(value.substring(0, 4)) ||
     date.getMonth() + 1 !== Number(value.substring(5, 7)) || date.getDate() !== Number(value.substring(8, 10))) {
-    throw new PhoneEffectDenied('invalid_arguments', '日程日期在手机时区中不存在。');
+    throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('日程日期在手机时区中不存在。', 'That event date does not exist in the phone time zone.'));
   }
   return result;
 }
@@ -105,29 +106,29 @@ export class PhoneEffects {
     const dispatch = (): void => { beforeEffect(); dispatched = true; };
     try {
       if (tool === 'mcp__phone__open') {
-        if (args.get('background') === true) unsupported('鸿蒙不支持后台屏打开。');
+        if (args.get('background') === true) unsupported(AppLanguage.pick('鸿蒙不支持后台屏打开。', 'HarmonyOS does not support opening apps on a background display.'));
         const app = text(args, 'app');
         const url = text(args, 'url');
-        if ((app === '') === (url === '')) throw new PhoneEffectDenied('invalid_arguments', 'app 和 url 必须恰好提供一个。');
+        if ((app === '') === (url === '')) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('app 和 url 必须恰好提供一个。', 'Provide exactly one of app or url.'));
         if (url !== '') {
           dispatch();
           await this.context.openLink(url);
         } else {
-          if (!/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(app)) unsupported('请提供应用包名；无法可靠解析应用显示名。');
+          if (!/^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(app)) unsupported(AppLanguage.pick('请提供应用包名；无法可靠解析应用显示名。', 'Provide the app bundle name; the display name cannot be resolved reliably.'));
           const want: Want = { bundleName: app, action: 'ohos.want.action.home', entities: ['entity.system.home'] };
           dispatch();
           await this.context.startAbility(want);
         }
-        return outcome('succeeded', true, 'opened_ui', '已请求打开目标界面，未确认其中的操作完成。', 'opened_ui', 'opened_ui');
+        return outcome('succeeded', true, 'opened_ui', AppLanguage.pick('已请求打开目标界面，未确认其中的操作完成。', 'The target screen was requested, but actions in it are not confirmed complete.'), 'opened_ui', 'opened_ui');
       }
       if (tool === 'mcp__phone__notify') {
         const title = required(args, 'title');
         const body = required(args, 'text');
-        if (!await notificationManager.isNotificationEnabled()) throw new PhoneEffectDenied('permission_denied', '请先在系统中允许通知。');
+        if (!await notificationManager.isNotificationEnabled()) throw new PhoneEffectDenied('permission_denied', AppLanguage.pick('请先在系统中允许通知。', 'Allow notifications in system settings first.'));
         const slotType = notificationManager.SlotType.SERVICE_INFORMATION;
         const slot = await notificationManager.getSlot(slotType);
         if (slot && (slot.enabled === false || slot.notificationLevel === notificationManager.SlotLevel.LEVEL_NONE)) {
-          throw new PhoneEffectDenied('permission_denied', '服务通知通道已关闭。');
+          throw new PhoneEffectDenied('permission_denied', AppLanguage.pick('服务通知通道已关闭。', 'The service notification channel is off.'));
         }
         PhoneEffects.notificationSequence = (PhoneEffects.notificationSequence % 2147483646) + 1;
         const request: notificationManager.NotificationRequest = {
@@ -140,36 +141,36 @@ export class PhoneEffects {
         // publish creates a missing slot itself; no pre-permit addSlot mutation.
         dispatch();
         await notificationManager.publish(request);
-        return outcome('succeeded', true, 'notification_published', '通知已发布，未确认用户已看到。', 'notification_published');
+        return outcome('succeeded', true, 'notification_published', AppLanguage.pick('通知已发布，未确认用户已看到。', 'The notification was published, but the user is not confirmed to have seen it.'), 'notification_published');
       }
       if (tool === 'mcp__phone__clipboard') {
         if (args.get('get') === true) {
-          if (args.has('set')) throw new PhoneEffectDenied('invalid_arguments', '不能同时读写剪贴板。');
-          unsupported('鸿蒙手机工具不读取剪贴板。');
+          if (args.has('set')) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('不能同时读写剪贴板。', 'The clipboard cannot be read and written at the same time.'));
+          unsupported(AppLanguage.pick('鸿蒙手机工具不读取剪贴板。', 'HarmonyOS phone tools do not read the clipboard.'));
         }
         const value = args.get('set');
-        if (typeof value !== 'string') throw new PhoneEffectDenied('invalid_arguments', '需要 set 字符串。');
+        if (typeof value !== 'string') throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('需要 set 字符串。', 'A set string is required.'));
         const data = pasteboard.createPlainTextData(value);
         const board = pasteboard.getSystemPasteboard();
         dispatch();
         await board.setData(data);
-        return outcome('succeeded', true, 'clipboard_written', '文字已写入剪贴板。', 'clipboard_written');
+        return outcome('succeeded', true, 'clipboard_written', AppLanguage.pick('文字已写入剪贴板。', 'The text was written to the clipboard.'), 'clipboard_written');
       }
-      if (tool === 'mcp__phone__handoff') unsupported('交还等待与继续必须由当前原生 owner 处理。');
-      if (tool !== 'mcp__phone__intent') unsupported('未实现的手机工具。');
+      if (tool === 'mcp__phone__handoff') unsupported(AppLanguage.pick('交还等待与继续必须由当前原生 owner 处理。', 'Handoff waiting and continuing must be handled by the current native owner.'));
+      if (tool !== 'mcp__phone__intent') unsupported(AppLanguage.pick('未实现的手机工具。', 'This phone tool is not implemented.'));
       const kind = required(args, 'kind').trim();
       if (kind === 'alarm' || kind === 'timer') {
         await PhoneReminders.schedule(this.context, args, dispatch);
-        return outcome('succeeded', true, 'reminder_scheduled', '系统已接受提醒；到点将由系统提醒，不代表引擎任务会自动运行。', 'reminder_scheduled');
+        return outcome('succeeded', true, 'reminder_scheduled', AppLanguage.pick('系统已接受提醒；到点将由系统提醒，不代表引擎任务会自动运行。', 'The system accepted the reminder; it will alert at that time, but the engine task does not run automatically.'), 'reminder_scheduled');
       } else if (kind === 'dial') {
         const number = required(args, 'number').trim();
-        if (!/^\+?[0-9][0-9 ()-]{1,30}$/.test(number)) throw new PhoneEffectDenied('invalid_arguments', '电话号码格式无效，不支持服务码。');
+        if (!/^\+?[0-9][0-9 ()-]{1,30}$/.test(number)) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('电话号码格式无效，不支持服务码。', 'The phone number format is invalid; service codes are not supported.'));
         const phoneNumber = number.replace(/ /g, '');
         dispatch();
         await call.makeCall(this.context, phoneNumber);
       } else if (kind === 'share') {
         const content = required(args, 'text');
-        if (text(args, 'app') !== '') unsupported('公开分享面板不能强制指定目标应用。');
+        if (text(args, 'app') !== '') unsupported(AppLanguage.pick('公开分享面板不能强制指定目标应用。', 'The public share sheet cannot force a target app.'));
         const kit = await loadShareKit();
         const data = kit.createData({ utd: 'general.plain-text', content });
         const controller = kit.createController(data);
@@ -184,9 +185,9 @@ export class PhoneEffects {
         const beginTime = calendarTimestamp(begin);
         const endText = text(args, 'end');
         const exclusiveEnd = endText === '' ? (allDay ? nextLocalDay(beginTime) : beginTime + 3600000) : calendarTimestamp(endText);
-        if (exclusiveEnd < beginTime) throw new PhoneEffectDenied('invalid_arguments', '日程结束早于开始。');
+        if (exclusiveEnd < beginTime) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('日程结束早于开始。', 'The event ends before it starts.'));
         if (allDay && exclusiveEnd === beginTime) {
-          throw new PhoneEffectDenied('invalid_arguments', '全天日程结束必须晚于开始。');
+          throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('全天日程结束必须晚于开始。', 'An all-day event must end after it starts.'));
         }
         // Calendar Kit expands an all-day endTime to 24:00 of its own date.
         // The wire end is exclusive: midnight therefore belongs to the previous day.
@@ -198,8 +199,8 @@ export class PhoneEffects {
         const calendar = calendarManager.getCalendarManager(this.context);
         dispatch();
         const id = await calendar.editEvent(event);
-        if (id < 0) return outcome('cancelled', true, 'user_cancelled', '用户取消了日程创建。');
-        if (!(id > 0)) return outcome('unknown', true, 'unknown', '日程界面没有返回有效结果。');
+        if (id < 0) return outcome('cancelled', true, 'user_cancelled', AppLanguage.pick('用户取消了日程创建。', 'The user cancelled event creation.'));
+        if (!(id > 0)) return outcome('unknown', true, 'unknown', AppLanguage.pick('日程界面没有返回有效结果。', 'The event screen returned no valid result.'));
       } else if (kind === 'settings') {
         const page = required(args, 'page').trim();
         if (page === 'mobile_network') {
@@ -216,43 +217,43 @@ export class PhoneEffects {
           settings.openNfcSettingsPage(this.context);
         } else if (page === 'app_notifications') {
           const app = required(args, 'app').trim();
-          if (app !== this.context.abilityInfo.bundleName) unsupported('公开通知设置接口只支持本应用，不能替换目标应用。');
+          if (app !== this.context.abilityInfo.bundleName) unsupported(AppLanguage.pick('公开通知设置接口只支持本应用，不能替换目标应用。', 'The public notification settings API only supports this app and cannot target another app.'));
           dispatch();
           await notificationManager.openNotificationSettings(this.context);
         } else {
-          unsupported('此设置页尚无已验证的同义公开系统映射。');
+          unsupported(AppLanguage.pick('此设置页尚无已验证的同义公开系统映射。', 'This settings page has no verified public system equivalent yet.'));
         }
       } else if (kind === 'navigate') {
-        if (text(args, 'map') !== '') unsupported('公开导航选择器不能强制指定地图应用。');
+        if (text(args, 'map') !== '') unsupported(AppLanguage.pick('公开导航选择器不能强制指定地图应用。', 'The public navigation picker cannot force a map app.'));
         const lat = args.get('lat');
         const lng = args.get('lng');
-        if (lat === undefined && lng === undefined) unsupported('纯文本目的地不能可靠转换成路线规划坐标。');
+        if (lat === undefined && lng === undefined) unsupported(AppLanguage.pick('纯文本目的地不能可靠转换成路线规划坐标。', 'A plain-text destination cannot be converted to route coordinates reliably.'));
         if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-          throw new PhoneEffectDenied('invalid_arguments', '需要有效的 GCJ-02 经纬度。');
+          throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('需要有效的 GCJ-02 经纬度。', 'Valid GCJ-02 latitude and longitude are required.'));
         }
         const mode = text(args, 'mode') || 'drive';
         const modes: string[] = ['drive', 'walk', 'ride', 'transit'];
         const vehicleType = modes.indexOf(mode);
-        if (vehicleType < 0) throw new PhoneEffectDenied('invalid_arguments', '出行方式无效。');
+        if (vehicleType < 0) throw new PhoneEffectDenied('invalid_arguments', AppLanguage.pick('出行方式无效。', 'The travel mode is invalid.'));
         const params: Record<string, Object> = { 'sceneType': 1, 'destinationLatitude': lat, 'destinationLongitude': lng,
           'destinationName': text(args, 'destination'), 'vehicleType': vehicleType };
         let panelError = false;
         const callback: common.AbilityStartCallback = { onError: (_code: number, _name: string, _message: string): void => { panelError = true; } };
         dispatch();
         await this.context.startAbilityByType('navigation', params, callback);
-        if (panelError) return outcome('unknown', true, 'sdk_failed', '导航选择器没有确认打开。');
+        if (panelError) return outcome('unknown', true, 'sdk_failed', AppLanguage.pick('导航选择器没有确认打开。', 'The navigation picker did not confirm opening.'));
       } else {
-        unsupported(`鸿蒙暂未实现 ${kind} 的同义公开系统事务。`);
+        unsupported(AppLanguage.pick(`鸿蒙暂未实现 ${kind} 的同义公开系统事务。`, `HarmonyOS has no public system equivalent for ${kind} yet.`));
       }
-      return outcome('succeeded', true, 'opened_ui', '已打开系统界面，未确认目标事务完成。', 'opened_ui', 'opened_ui');
+      return outcome('succeeded', true, 'opened_ui', AppLanguage.pick('已打开系统界面，未确认目标事务完成。', 'The system screen opened, but the target transaction is not confirmed complete.'), 'opened_ui', 'opened_ui');
     } catch (error) {
       if (error instanceof PhoneReminderRefused) return outcome('failed', true, 'reminder_refused', error.message);
-      if (dispatched) return outcome('unknown', true, 'sdk_failed', '系统调用未返回可靠结果；请确认实际状态，不要自动重试。');
+      if (dispatched) return outcome('unknown', true, 'sdk_failed', AppLanguage.pick('系统调用未返回可靠结果；请确认实际状态，不要自动重试。', 'The system call returned no reliable result. Check the actual state; do not retry automatically.'));
       if (error instanceof PhoneEffectDenied || error instanceof PhoneReminderDenied) {
         const status = error.code === 'cancelled' ? 'cancelled' : error.code === 'deadline_expired' ? 'timed_out' : 'failed';
         return outcome(status, false, error.code, error.message);
       }
-      return outcome('failed', false, 'preparation_failed', '系统动作准备失败，没有派发。');
+      return outcome('failed', false, 'preparation_failed', AppLanguage.pick('系统动作准备失败，没有派发。', 'Preparing the system action failed; nothing was dispatched.'));
     }
   }
 }

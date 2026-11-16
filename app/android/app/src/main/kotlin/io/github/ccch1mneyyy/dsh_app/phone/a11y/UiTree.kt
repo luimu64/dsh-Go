@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 
 // A plain copy of the accessibility tree: what ScreenFormat needs and nothing
@@ -129,15 +130,16 @@ class CollectedItems {
     internal data class PageRead(val added: Int, val found: Boolean, val stopReason: String?)
 
     /** Keep the readable prefix even when this capture cannot justify another scroll. */
-    internal fun readPage(texts: List<String>, until: String?, incomplete: Boolean): PageRead {
+    internal fun readPage(texts: List<String>, until: String?, incomplete: Boolean,
+                          ui: PhoneUiText = PhoneUiText.DEFAULT): PageRead {
         var added = 0
         var found = false
         for (text in texts) if (add(text)) {
             added++
             if (until != null && text.contains(until, ignoreCase = true)) found = true
         }
-        // l10n:keep agent screen result
-        val stop = if (incomplete) "页面只读了一部分，无法确认列表是否到底" else null
+        // Only the stop sentence is presentation; the items stay as they were read.
+        val stop = if (incomplete) ui.get("phone_collect_page_partial", "页面只读了一部分，无法确认列表是否到底") else null
         return PageRead(added, found, stop)
     }
 

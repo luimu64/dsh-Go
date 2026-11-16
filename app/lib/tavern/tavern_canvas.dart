@@ -283,6 +283,9 @@ String tavernCanvasDocument({
           if (noScripts) "script-src-attr 'none'",
         ].join('; ')
       : null;
+  // l10n:keep-begin Our page's own HTML/JS. The Chinese in it is comments for
+  // whoever reads this source; every label it shows comes from
+  // TavernCanvasLabels, which the caller localizes.
   return '''<!doctype html>
 <html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -1502,4 +1505,5 @@ ${tavernCanvasHelpersJs(mvu: mvu)}
   audioReport();
 })();
 </script></body></html>''';
+  // l10n:keep-end
 }

@@ -36,11 +36,13 @@ import CompanionWidgetPlugin from '../plugins/CompanionWidgetPlugin';
 import Want from '@ohos.app.ability.Want';
 import AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import window from '@ohos.window';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export default class EntryAbility extends FlutterAbility {
   private keyboardLog: OhosKeyboardLog = new OhosKeyboardLog();
 
   onCreate(want: Want, launch: AbilityConstant.LaunchParam): void {
+    AppLanguage.init(this.context);
     HmsShareInbox.receive(this.context, want, launch);
     ShortcutsPlugin.receive(want, launch);
     super.onCreate(want, launch);

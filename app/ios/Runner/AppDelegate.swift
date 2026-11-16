@@ -2,10 +2,20 @@ import Flutter
 import Security
 import UIKit
 import UserNotifications
+import WidgetKit
 
 @main
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private var companionVoice: IOSCompanionVoice?
+  private var languageObserver: NSObjectProtocol?
+
+  /// The widget extension cannot read the app's Flutter preferences, so the
+  /// chosen language is mirrored into the shared App Group. It stores the
+  /// choice (`system` / `zh` / `en`), not the resolved language, so a system
+  /// language change while the app is closed still reaches the widget.
+  private static let companionGroup = "group.io.github.ccch1mneyyy.dshgo"
+  private static let companionLanguageKey = "dsh.companion.language"
+  private static let companionWidgetKind = "DSHCompanionWidget"
 
   override func application(
     _ application: UIApplication,
@@ -14,6 +24,12 @@ import UserNotifications
     // Before launch finishes, or the tap that launched the app is lost.
     UNUserNotificationCenter.current().delegate = NotifyTaps.shared
     forgetPreviousInstall()
+    mirrorAppLanguage()
+    languageObserver = NotificationCenter.default.addObserver(
+      forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      Task { @MainActor in self?.mirrorAppLanguage() }
+    }
     #if DSH_PHONE_SELF_RUNNER_DIAGNOSTICS
     let preflight = ProcessInfo.processInfo.arguments.contains("--dsh-phone-preflight")
       || ProcessInfo.processInfo.environment["DSH_PHONE_PREFLIGHT"] == "1"
@@ -53,6 +69,16 @@ import UserNotifications
     guard !defaults.bool(forKey: marker) else { return }
     SecItemDelete([kSecClass: kSecClassGenericPassword] as CFDictionary)
     defaults.set(true, forKey: marker)
+  }
+
+  private func mirrorAppLanguage() {
+    let chosen = UserDefaults.standard.string(forKey: AppLanguage.defaultsKey)
+    let stored: String
+    if chosen == "zh" || chosen == "en", let chosen { stored = chosen } else { stored = "system" }
+    guard let defaults = UserDefaults(suiteName: Self.companionGroup) else { return }
+    guard defaults.string(forKey: Self.companionLanguageKey) != stored else { return }
+    defaults.set(stored, forKey: Self.companionLanguageKey)
+    WidgetCenter.shared.reloadTimelines(ofKind: Self.companionWidgetKind)
   }
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {

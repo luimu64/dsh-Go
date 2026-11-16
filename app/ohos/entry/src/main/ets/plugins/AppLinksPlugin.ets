@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // 未编译、未在真机核实。公开接口和未实现边界见 app-links-channels.md。
 import i18n from '@ohos.i18n';
 import UIAbility from '@ohos.app.ability.UIAbility';
@@ -245,17 +246,17 @@ export default class AppLinksPlugin implements FlutterPlugin, AbilityAware, Meth
   private scanQrCode(result: MethodResult): void {
     const ability = this.ability?.getAbility();
     if (!ability || !AppLinksPlugin.foreground.has(ability)) {
-      result.error('no_ability', '应用窗口当前不可用。', null);
+      result.error('no_ability', AppLanguage.pick('应用窗口当前不可用。', 'The app window is currently unavailable.'), null);
       return;
     }
-    if (AppLinksPlugin.scanning) { result.error('busy', '扫码页面已经打开。', null); return; }
+    if (AppLinksPlugin.scanning) { result.error('busy', AppLanguage.pick('扫码页面已经打开。', 'The scan page is already open.'), null); return; }
     AppLinksPlugin.scanning = true;
     AppLinksPlugin.scan(ability.context).then((text: string | null): void => {
       AppLinksPlugin.scanning = false;
       try { result.success(text); } catch (_error) { /* The engine left while the scan page was open. */ }
     }).catch((error: Error): void => {
       AppLinksPlugin.scanning = false;
-      const failure = error instanceof ScanFailure ? error : new ScanFailure('failed', '系统扫码没有完成。');
+      const failure = error instanceof ScanFailure ? error : new ScanFailure('failed', AppLanguage.pick('系统扫码没有完成。', 'The system scan did not complete.'));
       try { result.error(failure.code, failure.message, null); } catch (_error) { /* Engine left. */ }
     });
   }
@@ -263,22 +264,22 @@ export default class AppLinksPlugin implements FlutterPlugin, AbilityAware, Meth
   // Scan Kit loads on the first scan only: a device without it answers 'unavailable'
   // and nothing else on dsh/app depends on it.
   private static async scan(context: common.UIAbilityContext): Promise<string | null> {
-    if (!canIUse('SystemCapability.Multimedia.Scan.ScanBarcode')) throw new ScanFailure('unavailable', '这台设备没有系统扫码。');
+    if (!canIUse('SystemCapability.Multimedia.Scan.ScanBarcode')) throw new ScanFailure('unavailable', AppLanguage.pick('这台设备没有系统扫码。', 'This device has no system scan.'));
     let kit: ScanKit;
     try {
       kit = await import('./HmsKits').then((kits: ESObject): Promise<ScanKit> => kits.loadScanKit());
     } catch (_error) {
-      throw new ScanFailure('unavailable', '这台设备没有系统扫码。');
+      throw new ScanFailure('unavailable', AppLanguage.pick('这台设备没有系统扫码。', 'This device has no system scan.'));
     }
     let scanned: scanBarcode.ScanResult;
     try {
       scanned = await kit.startScan(context, { scanTypes: [kit.qrCode], enableMultiMode: false, enableAlbum: true });
     } catch (error) {
       if ((error as BusinessError).code === SCAN_CANCELED) return null;
-      throw new ScanFailure('failed', '系统扫码没有完成。');
+      throw new ScanFailure('failed', AppLanguage.pick('系统扫码没有完成。', 'The system scan did not complete.'));
     }
     const text = scanned.originalValue;
-    if (typeof text !== 'string' || text.length === 0) throw new ScanFailure('failed', '没有读到二维码内容。');
+    if (typeof text !== 'string' || text.length === 0) throw new ScanFailure('failed', AppLanguage.pick('没有读到二维码内容。', 'No QR code content was read.'));
     return text;
   }
 
@@ -286,25 +287,25 @@ export default class AppLinksPlugin implements FlutterPlugin, AbilityAware, Meth
     switch (call.method) {
       case 'getTimeZoneId':
         try { result.success(i18n.getTimeZone().getID()); }
-        catch (_error) { result.error('ohos_timezone', '无法读取系统时区，请重试。', null); }
+        catch (_error) { result.error('ohos_timezone', AppLanguage.pick('无法读取系统时区，请重试。', 'Could not read the system time zone. Try again.'), null); }
         return;
       case 'bringToFront': {
         const ability = this.ability?.getAbility();
-        if (!ability) { result.error('no_ability', '应用窗口当前不可用。', null); return; }
+        if (!ability) { result.error('no_ability', AppLanguage.pick('应用窗口当前不可用。', 'The app window is currently unavailable.'), null); return; }
         try {
           const info = ability.context.abilityInfo;
           ability.context.startAbility({ bundleName: info.bundleName, abilityName: info.name })
             .then(() => result.success(null))
-            .catch(() => result.error('ohos_foreground', '系统未允许回到前台，请从应用图标打开。', null));
+            .catch(() => result.error('ohos_foreground', AppLanguage.pick('系统未允许回到前台，请从应用图标打开。', 'The system did not allow returning to the foreground. Open the app from its icon.'), null));
         } catch (_error) {
-          result.error('ohos_foreground', '系统未允许回到前台，请从应用图标打开。', null);
+          result.error('ohos_foreground', AppLanguage.pick('系统未允许回到前台，请从应用图标打开。', 'The system did not allow returning to the foreground. Open the app from its icon.'), null);
         }
         return;
       }
       case 'setRefreshRateMode': {
         const mode: string = call.argument('mode');
         if (!['auto', 'max', 'system'].includes(mode)) {
-          result.error('ohos_unsupported', '未知的刷新率模式。', null);
+          result.error('ohos_unsupported', AppLanguage.pick('未知的刷新率模式。', 'Unknown refresh rate mode.'), null);
           return;
         }
         this.frames?.setMode(mode);

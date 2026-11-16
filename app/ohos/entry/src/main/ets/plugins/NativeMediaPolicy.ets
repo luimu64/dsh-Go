@@ -1,4 +1,5 @@
 import { Any, MethodCall } from '@ohos/flutter_ohos';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export class NativeMediaError extends Error {
   readonly code: string;
@@ -19,7 +20,7 @@ export class NativeMediaKey {
     if (typeof owner !== 'string' || !/^[0-9a-f]{16,64}$/.test(owner) ||
         typeof generation !== 'number' || !Number.isSafeInteger(generation) || generation < 0 || generation > 2147483647 ||
         typeof lease !== 'string' || lease.length < 1 || lease.length > 256 || /[\x00-\x1f\x7f]/.test(lease)) {
-      throw new NativeMediaError('bad-request', '媒体操作缺少有效的所有者、世代或授权。');
+      throw new NativeMediaError('bad-request', AppLanguage.pick('媒体操作缺少有效的所有者、世代或授权。', 'The media operation is missing a valid owner, generation, or lease.'));
     }
     return new NativeMediaKey(owner, generation, lease);
   }
@@ -33,7 +34,7 @@ export function nativeClipRelative(cacheDir: string, key: NativeMediaKey, path: 
   if (!cacheDir.startsWith('/') || cacheDir.endsWith('/') || /[\x00-\x1f\x7f]/.test(cacheDir) ||
       typeof path !== 'string' || path !== cacheDir + '/' + relative || typeof type !== 'string' ||
       !['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/aac'].includes(type)) {
-    throw new NativeMediaError('media-invalid', '只能播放当前所有者下载到应用缓存的音频片段。');
+    throw new NativeMediaError('media-invalid', AppLanguage.pick('只能播放当前所有者下载到应用缓存的音频片段。', 'Only an audio clip that the current owner downloaded to the app cache can be played.'));
   }
   return relative;
 }

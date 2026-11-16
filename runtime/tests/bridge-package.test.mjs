@@ -15,7 +15,10 @@ function packedFiles() {
     encoding: "utf8",
     shell: process.platform === "win32",
   });
-  return new Set(JSON.parse(out)[0].files.map((file) => file.path));
+  // npm 12 keys the result by package name; earlier releases return an array.
+  const result = JSON.parse(out);
+  const packages = Array.isArray(result) ? result : Object.values(result);
+  return new Set(packages[0].files.map((file) => file.path));
 }
 
 function localImports(file) {

@@ -40,8 +40,9 @@ class LocalizedText {
   }
 
   /// `zh_CN` → `zh-cn`: plugins spell language ids both ways (schemastery
-  /// takes whatever keys `.i18n()` is given).
-  static String _tag(String id) => id.toLowerCase().replaceAll('_', '-');
+  /// takes whatever keys `.i18n()` is given). Separators and case are folded
+  /// so `zh-Hant`, `zh_Hant` and `ZH-HANT` all name the same text.
+  static String _tag(String id) => id.trim().toLowerCase().replaceAll('_', '-');
 
   static final _han = RegExp(r'[\u3400-\u9fff]');
 
@@ -55,17 +56,60 @@ class LocalizedText {
   /// Plain text is what `.description()` gave before `.i18n()` added
   /// languages (schemastery keeps it under `''`): a Chinese plugin that only
   /// translated into English must still read in Chinese for a Chinese UI.
+  ///
+  /// When a language has several variants and none matches [locale] exactly,
+  /// the one sharing its script or region wins, and otherwise the first by
+  /// key: the same text is picked however the JSON happens to order its
+  /// keys, so a section does not switch languages between reads.
   String resolve([String locale = 'zh']) {
     final tagged = {for (final MapEntry(:key, :value) in values.entries) _tag(key): value};
     final wanted = _tag(locale);
     final language = wanted.split('-').first;
-    String? of(String language) =>
-        tagged[language] ?? tagged.entries.where((e) => e.key.startsWith('$language-')).map((e) => e.value).firstOrNull;
     final plain = tagged[''];
     // Chinese is told apart by its characters; anything else counts as the
     // other UI language.
     final plainMatches = plain != null && _han.hasMatch(plain) == (language == 'zh');
-    return tagged[wanted] ?? of(language) ?? (plainMatches ? plain : null) ?? of('en') ?? plain ?? values.values.first;
+    return tagged[wanted] ??
+        _variant(tagged, wanted, language) ??
+        (plainMatches ? plain : null) ??
+        _variant(tagged, 'en', 'en') ??
+        plain ??
+        values.values.first;
+  }
+
+  /// The best of [language]'s variants in [tagged], or null when it has none.
+  /// Candidates are sorted by key first, so ties keep the same pick.
+  static String? _variant(Map<String, String> tagged, String locale, String language) {
+    if (language.isEmpty) return null;
+    final matches = [
+      for (final key in tagged.keys)
+        if (key == language || key.startsWith('$language-')) key,
+    ]..sort();
+    if (matches.isEmpty) return null;
+    if (matches.first == language) return tagged[language];
+    final subtags = {...locale.split('-').skip(1)};
+    if (language == 'zh') {
+      // A plain region names a script for Chinese: Taiwan, Hong Kong and
+      // Macao write traditional, the mainland, Singapore and Malaysia
+      // simplified. Only used to choose among variants the plugin wrote.
+      if (subtags.any(const {'tw', 'hk', 'mo'}.contains)) subtags.add('hant');
+      if (subtags.any(const {'cn', 'sg', 'my'}.contains)) subtags.add('hans');
+    }
+    var best = matches.first;
+    var bestScore = -1;
+    for (final key in matches) {
+      final score = key
+          .split('-')
+          .skip(1)
+          .where(subtags.contains)
+          .map((subtag) => subtag.length == 4 ? 2 : 1)
+          .fold(0, (sum, weight) => sum + weight);
+      if (score > bestScore) {
+        best = key;
+        bestScore = score;
+      }
+    }
+    return tagged[best];
   }
 
   /// Every variant, for search.
@@ -639,9 +683,9 @@ extension PluginsApi on DshClient {
   Future<List<PluginBundle>> listBundles() async {
     final read = tryBackgroundListRead(BackgroundListKind.bundles);
     if (read != null) return (await read) as List<PluginBundle>;
-    return asListOrEmpty(await rpc.call('pluginManager/listBundles'))
-        .map(PluginBundle.fromJson)
-        .toList(growable: false);
+    return asListOrEmpty(
+      await rpc.call('pluginManager/listBundles'),
+    ).map(PluginBundle.fromJson).toList(growable: false);
   }
 
   Future<List<PluginEntry>> listPlugins() async {

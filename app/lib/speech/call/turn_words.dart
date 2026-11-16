@@ -16,6 +16,8 @@ enum OverWords {
   speech,
 }
 
+// l10n:keep-begin Spoken words to recognise, not text to show: both languages
+// are matched whatever the app language (the recognizer may hear either).
 const _backchannel = [
   '嗯哼', '嗯', '哦', '噢', '喔', '啊', '呃', '对', '是的', '是', '好的', '好', '行', '明白', '了解', '可以', '没错', //
   'mhm', 'mmhmm', 'uhhuh', 'okay', 'ok', 'yeah', 'yes', 'yep', 'right', 'sure', 'got it', 'gotit', 'i see', 'isee',
@@ -25,6 +27,7 @@ const _stop = [
   '停', '停下', '停一下', '先停', '先停一下', '等一下', '等等', '等会', '等会儿', '别说了', '不用说了', '打住', '好了好了', //
   'stop', 'wait', 'hold on', 'holdon',
 ];
+// l10n:keep-end
 
 final _noise = RegExp(r'[^\p{L}\p{N} ]', unicode: true);
 

@@ -24,10 +24,29 @@ private struct CompanionProvider: TimelineProvider {
   }
 }
 
+private enum CompanionLanguage {
+  static let group = "group.io.github.ccch1mneyyy.dshgo"
+  static let key = "dsh.companion.language"
+
+  /// Mirrors Dart's AppLocale.resolve: the app's explicit choice first, then
+  /// the first preferred Chinese or English language, else English.
+  static func resolved(preferredLanguages: [String] = Locale.preferredLanguages) -> String {
+    let chosen = UserDefaults(suiteName: group)?.string(forKey: key)
+    if chosen == "zh" || chosen == "en", let chosen { return chosen }
+    for identifier in preferredLanguages {
+      let tag = identifier.lowercased()
+      let language = tag.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init)
+      if language == "zh" { return "zh" }
+      if language == "en" { return "en" }
+    }
+    return "en"
+  }
+}
+
 private struct CompanionView: View {
   let entry: CompanionEntry
   @Environment(\.widgetFamily) private var family
-  private var chinese: Bool { Locale.preferredLanguages.first?.hasPrefix("zh") == true }
+  private var chinese: Bool { CompanionLanguage.resolved() == "zh" }
   private func words(_ en: String, _ zh: String) -> String { chinese ? zh : en }
   private var background: some View {
     LinearGradient(colors: [Color(red: 0.05, green: 0.20, blue: 0.29), Color(red: 0.10, green: 0.36, blue: 0.40)],

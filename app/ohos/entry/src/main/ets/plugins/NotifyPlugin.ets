@@ -1,5 +1,6 @@
 // 普通通知使用现有 title/text/fullText；锁屏内容隐藏由系统设置控制，待真机核实。
 import notificationManager from '@ohos.notificationManager';
+import { AppLanguage } from '../i18n/AppLanguage';
 import commonEventManager from '@ohos.commonEventManager';
 import wantAgent, { WantAgent } from '@ohos.app.ability.wantAgent';
 import Want from '@ohos.app.ability.Want';
@@ -84,7 +85,7 @@ class TapSigner {
       await store.flush();
       return key;
     }
-    if (!/^[0-9a-f]{64}$/.test(saved)) throw new NotifyError('ohos_notify_storage', '通知凭据不可用，请重新打开应用。');
+    if (!/^[0-9a-f]{64}$/.test(saved)) throw new NotifyError('ohos_notify_storage', AppLanguage.pick('通知凭据不可用，请重新打开应用。', 'Notification credentials are unavailable. Reopen the app.'));
     // A failed flush may have left a value in the Preferences memory cache.
     await store.flush();
     const bytes = new Uint8Array(32);
@@ -153,7 +154,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
       const work: Promise<Any> = mutate ? this.serial(() => this.handle(call, generation)) : this.handle(call, generation);
       work.then((value: Any) => result.success(value)).catch((error: Error) => {
         if (error instanceof NotifyError) result.error(error.code, error.message, null);
-        else result.error('ohos_notify_failed', '系统通知操作未完成，请检查通知设置后重试。', null);
+        else result.error('ohos_notify_failed', AppLanguage.pick('系统通知操作未完成，请检查通知设置后重试。', 'The system notification action did not complete. Check notification settings and try again.'), null);
       });
     } });
     this.taps.setStreamHandler({
@@ -308,7 +309,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
 
   private async approvalButton(action: NotifyApproval, title: string, signer: TapSigner): Promise<notificationManager.NotificationActionButton> {
     const payload = JSON.stringify(action);
-    if (payload.length > 8192) throw new NotifyError('bad_args', '通知操作信息过长。');
+    if (payload.length > 8192) throw new NotifyError('bad_args', AppLanguage.pick('通知操作信息过长。', 'Notification action data is too long.'));
     const signature = await signer.sign(payload);
     const agent = await wantAgent.getWantAgent({ wants: [{ bundleName: this.bundleName,
       action: APPROVAL_ACTION, uri: 'dsh-notification-action://' + signature,
@@ -323,14 +324,14 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
     const entry = this.approvals.get(label);
     if (!entry || !entry.submitted || entry.action.actionId !== call.argument('actionId')) return;
     const result: Any = call.argument('result');
-    if (!['handled', 'gone', 'failed'].includes(result as string)) throw new NotifyError('bad_args', '未知通知操作结果。');
+    if (!['handled', 'gone', 'failed'].includes(result as string)) throw new NotifyError('bad_args', AppLanguage.pick('未知通知操作结果。', 'Unknown notification action result.'));
     this.ensureCurrent(generation);
     this.approvals.delete(label);
     if (result === 'failed') {
       entry.request.actionButtons = [entry.openButton];
       entry.request.content = {
         notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
-        normal: { title: 'DSH Go', text: '未能完成审批，请打开应用处理。' }
+        normal: { title: 'DSH Go', text: AppLanguage.pick('未能完成审批，请打开应用处理。', 'Approval could not be completed. Open the app to handle it.') }
       };
       await notificationManager.publish(entry.request);
     } else {
@@ -345,7 +346,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
   }
 
   private ensureCurrent(generation: number): void {
-    if (!this.context || this.generation !== generation) throw new NotifyError('ohos_detached', '通知通道已关闭。');
+    if (!this.context || this.generation !== generation) throw new NotifyError('ohos_detached', AppLanguage.pick('通知通道已关闭。', 'The notification channel is closed.'));
   }
 
   private async permissions(): Promise<NotifyPermission> {
@@ -356,7 +357,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
       await notificationManager.addSlot(SLOT);
       slot = await notificationManager.getSlot(SLOT);
     }
-    if (slot === null || typeof slot.enabled !== 'boolean') throw new NotifyError('ohos_notify_failed', '系统通知渠道状态未知，请重试。');
+    if (slot === null || typeof slot.enabled !== 'boolean') throw new NotifyError('ohos_notify_failed', AppLanguage.pick('系统通知渠道状态未知，请重试。', 'The system notification channel state is unknown. Try again.'));
     return { enabled: enabled, slot: slot.enabled && slot.notificationLevel !== notificationManager.SlotLevel.LEVEL_NONE };
   }
 
@@ -365,7 +366,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
 
   private async openAgent(route: NotifyRoute, signer: TapSigner): Promise<WantAgent> {
     const payload = JSON.stringify(route);
-    if (payload.length > 8192) throw new NotifyError('bad_args', '通知跳转信息过长。');
+    if (payload.length > 8192) throw new NotifyError('bad_args', AppLanguage.pick('通知跳转信息过长。', 'Notification link data is too long.'));
     const signature = await signer.sign(payload);
     return await wantAgent.getWantAgent({ wants: [{ bundleName: this.bundleName, abilityName: this.abilityName,
       action: ACTION, uri: 'dsh-notification://' + signature,
@@ -390,25 +391,25 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
     if (call.argument('enabled') !== true || activity === null || activity === undefined) {
       await this.clearLive(); return;
     }
-    if (!(activity instanceof Map)) throw new NotifyError('bad_args', '进度通知缺少有效状态。');
+    if (!(activity instanceof Map)) throw new NotifyError('bad_args', AppLanguage.pick('进度通知缺少有效状态。', 'The progress notification has no valid state.'));
     const data: Map<string, Any> = activity as Map<string, Any>;
     const kind: Any = data.get('kind');
     // ChatAlerts remains the sole owner of completion/error notifications.
     if (kind === 'done' || kind === 'failed') { await this.clearLive(); return; }
-    if (kind !== 'running' && kind !== 'waiting') throw new NotifyError('bad_args', '进度通知状态无效。');
+    if (kind !== 'running' && kind !== 'waiting') throw new NotifyError('bad_args', AppLanguage.pick('进度通知状态无效。', 'The progress notification state is invalid.'));
     const session: Any = data.get('sessionId');
     const host: Any = data.get('host');
     const text: Any = data.get('publicText');
     const eventId: Any = data.get('eventId') ?? '';
     if (typeof session !== 'string' || session.length === 0 || session.length > 200 ||
         typeof host !== 'string' || typeof text !== 'string' || text.length === 0 || typeof eventId !== 'string') {
-      throw new NotifyError('bad_args', '进度通知缺少有效的会话或公开文字。');
+      throw new NotifyError('bad_args', AppLanguage.pick('进度通知缺少有效的会话或公开文字。', 'The progress notification needs a valid session and public text.'));
     }
     const signer = this.signer;
-    if (!signer) throw new NotifyError('ohos_detached', '通知通道已关闭。');
-    if (this.bundleName === '' || this.abilityName === '') throw new NotifyError('no_ability', '请先打开应用窗口。');
+    if (!signer) throw new NotifyError('ohos_detached', AppLanguage.pick('通知通道已关闭。', 'The notification channel is closed.'));
+    if (this.bundleName === '' || this.abilityName === '') throw new NotifyError('no_ability', AppLanguage.pick('请先打开应用窗口。', 'Open the app window first.'));
     const permission = await this.permissions();
-    if (!permission.enabled || !permission.slot) throw new NotifyError('permission', '系统未允许此类通知，请在通知设置中开启。');
+    if (!permission.enabled || !permission.slot) throw new NotifyError('permission', AppLanguage.pick('系统未允许此类通知，请在通知设置中开启。', 'The system does not allow this notification type. Enable it in notification settings.'));
     const route: NotifyRoute = { sessionId: session, host: host, kind: 'live', eventId: eventId };
     const agent = await this.openAgent(route, signer);
     const request: notificationManager.NotificationRequest = {
@@ -425,26 +426,26 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
 
   private async show(call: MethodCall, generation: number): Promise<void> {
     const signer = this.signer;
-    if (!signer) throw new NotifyError('ohos_detached', '通知通道已关闭。');
-    if (this.bundleName === '' || this.abilityName === '') throw new NotifyError('no_ability', '请先打开应用窗口。');
+    if (!signer) throw new NotifyError('ohos_detached', AppLanguage.pick('通知通道已关闭。', 'The notification channel is closed.'));
+    if (this.bundleName === '' || this.abilityName === '') throw new NotifyError('no_ability', AppLanguage.pick('请先打开应用窗口。', 'Open the app window first.'));
     const group = call.argument('group') as string;
     const key = call.argument('key') as string;
     const route: NotifyRoute = { sessionId: call.argument('sessionId') as string,
       host: (call.argument('host') ?? '') as string, kind: (call.argument('kind') ?? '') as string,
       eventId: (call.argument('eventId') ?? '') as string };
-    if (!group || !key || !route.sessionId || route.sessionId.length > 200) throw new NotifyError('bad_args', '通知缺少有效的会话标识。');
+    if (!group || !key || !route.sessionId || route.sessionId.length > 200) throw new NotifyError('bad_args', AppLanguage.pick('通知缺少有效的会话标识。', 'The notification has no valid session id.'));
     const label = await this.label(group, key);
     this.approvals.delete(label);
     const title = (call.argument('title') ?? 'DSH Go') as string;
     const text = (call.argument('text') ?? '') as string;
-    const publicText = (call.argument('publicText') ?? '有新的会话提醒') as string;
+    const publicText = (call.argument('publicText') ?? AppLanguage.pick('有新的会话提醒', 'New chat reminder')) as string;
     const fullText = (call.argument('fullText') ?? '') as string;
     if (typeof title !== 'string' || typeof text !== 'string' || typeof publicText !== 'string' || typeof fullText !== 'string') {
-      throw new NotifyError('bad_args', '通知标题和正文必须是文字。');
+      throw new NotifyError('bad_args', AppLanguage.pick('通知标题和正文必须是文字。', 'The notification title and body must be text.'));
     }
     // Public SDK content fields cannot be empty. Keep real nonempty content verbatim.
     const shownTitle = title || 'DSH Go';
-    const shownText = text || publicText || '有新的会话提醒';
+    const shownText = text || publicText || AppLanguage.pick('有新的会话提醒', 'New chat reminder');
     let content: notificationManager.NotificationContent = {
       notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
       normal: { title: shownTitle, text: shownText }
@@ -455,7 +456,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
         briefText: shownText, expandedTitle: shownTitle }
     };
     const permission = await this.permissions();
-    if (!permission.enabled || !permission.slot) throw new NotifyError('permission', '系统未允许此类通知，请在通知设置中开启。');
+    if (!permission.enabled || !permission.slot) throw new NotifyError('permission', AppLanguage.pick('系统未允许此类通知，请在通知设置中开启。', 'The system does not allow this notification type. Enable it in notification settings.'));
     const agent = await this.openAgent(route, signer);
     const request: notificationManager.NotificationRequest = {
       id: 0, label: label, groupName: await this.group(group),
@@ -465,16 +466,16 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
     let pending: PendingApproval | undefined;
     const epoch = this.actionEpoch;
     if (call.argument('canApprove') === true) {
-      const openButton: notificationManager.NotificationActionButton = { title: '打开应用处理', wantAgent: agent };
+      const openButton: notificationManager.NotificationActionButton = { title: AppLanguage.pick('打开应用处理', 'Open app to handle'), wantAgent: agent };
       request.actionButtons = [openButton];
       const token: Any = call.argument('requestToken');
       if (typeof token === 'number' && Number.isSafeInteger(token) && token > 0 && route.eventId !== '' && await this.enableActions(generation)) {
         try {
           const action: NotifyApproval = { actionId: util.generateRandomUUID(), requestToken: token,
             group: group, key: key, sessionId: route.sessionId, host: route.host, eventId: route.eventId, decision: 'rejected' };
-          const reject = await this.approvalButton(action, '拒绝', signer);
+          const reject = await this.approvalButton(action, AppLanguage.pick('拒绝', 'Decline'), signer);
           action.decision = 'allowed-once';
-          const allow = await this.approvalButton(action, '允许本次', signer);
+          const allow = await this.approvalButton(action, AppLanguage.pick('允许本次', 'Allow once'), signer);
           if (this.actionEpoch === epoch && this.actionSink) {
             request.actionButtons = [reject, allow, openButton];
             pending = { action: action, request: request, openButton: openButton, submitted: false };
@@ -523,7 +524,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
         return null;
       }
       case 'requestPermission': {
-        if (!this.ability) throw new NotifyError('no_ability', '请先回到应用窗口再打开通知设置。');
+        if (!this.ability) throw new NotifyError('no_ability', AppLanguage.pick('请先回到应用窗口再打开通知设置。', 'Return to the app window before opening notification settings.'));
         try {
           await notificationManager.requestEnableNotification(this.ability.getAbility().context);
         } catch (error) {
@@ -534,7 +535,7 @@ export default class NotifyPlugin implements FlutterPlugin, AbilityAware, NewWan
         return await notificationManager.isNotificationEnabled();
       }
       case 'openSettings': case 'openLiveSettings': {
-        if (!this.ability) throw new NotifyError('no_ability', '请先回到应用窗口再打开通知设置。');
+        if (!this.ability) throw new NotifyError('no_ability', AppLanguage.pick('请先回到应用窗口再打开通知设置。', 'Return to the app window before opening notification settings.'));
         // Answers when the panel closes, so whoever reads the status next reads what was chosen there.
         await notificationManager.openNotificationSettingsWithResult(this.ability.getAbility().context);
         return true;

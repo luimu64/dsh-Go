@@ -524,3 +524,14 @@ test('HTTP recall lifecycle uses one store, exact envelope, strict bodies and pr
   assert.equal(off.body.status, 'retired');
   assert.equal((await request('/recall')).body.supported, false);
 });
+
+test('the recall intro follows the app language without translating memory text', () => {
+  const memory = { kind: 'fact', text: '喜欢下雨天' };
+  const zh = formatRecallSection([memory]);
+  const en = formatRecallSection([memory], 'en');
+  assert(zh.text.startsWith('以下是用户已确认的背景资料'));
+  assert(en.text.startsWith('The following is background the user has confirmed'));
+  assert(!en.text.includes('以下是用户已确认'));
+  assert(en.text.includes('喜欢下雨天'), 'stored memory text stays as the person wrote it');
+  assert.equal(selectRecallContext([], 100, 'en').text, '');
+});

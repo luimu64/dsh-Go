@@ -74,7 +74,8 @@ class _Bridge extends DshConnection {
   });
 
   @override
-  Future<DshHttpResponse> postJson(String path, Object? body, {Duration? timeout}) => get(path);
+  Future<DshHttpResponse> postJson(String path, Object? body, {Map<String, String>? query, Duration? timeout}) =>
+      get(path);
 
   @override
   Future<DshHttpResponse> getBounded(

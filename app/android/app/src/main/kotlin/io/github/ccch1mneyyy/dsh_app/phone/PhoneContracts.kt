@@ -145,6 +145,9 @@ data class Availability(val ok: Boolean, val reason: String? = null, val userRea
 interface PhoneDriver {
     val screen: PhoneScreen
 
+    /** Model-facing words for this driver's own default refusals; a real driver overrides it. */
+    fun uiText(): PhoneUiText = PhoneUiText.DEFAULT
+
     fun availability(): Availability
 
     fun observe(detail: Boolean, image: Boolean): ScreenSnapshot
@@ -183,11 +186,11 @@ interface PhoneDriver {
     fun target(screenId: String, elementId: Int): TargetInfo?
 
     /** Captures only the original committed observation's editor. */
-    fun prepareFocusInput(screenId: String): Either<String, FocusInput> =
-        Either.Left("当前屏幕不能核实原焦点输入连接；请 handoff，不要改用全文替换或重复输入。") // l10n:keep agent focus result
+    fun prepareFocusInput(screenId: String): Either<String, FocusInput> = Either.Left(uiText().get(
+        "phone_focus_refused_default", "当前屏幕不能核实原焦点输入连接；请 handoff，不要改用全文替换或重复输入。"))
     /** Native reviewed-route operation; default drivers cannot execute it. */
-    fun prepareSkillReplayStep(step: SkillReplayStep): Either<String, SkillReplayPlan> =
-        Either.Left("当前屏幕不支持已核手机路线，未执行。") // l10n:keep agent replay result
+    fun prepareSkillReplayStep(step: SkillReplayStep): Either<String, SkillReplayPlan> = Either.Left(uiText().get(
+        "phone_replay_refused_default", "当前屏幕不支持已核手机路线，未执行。"))
 
     /** Pure memory, tied to this exact published observation; independent of image acceptance. */
     fun visualScope(screenId: String): VisualScope? = null
@@ -379,19 +382,31 @@ fun interface PhoneUiText {
     fun get(key: String, fallback: String, vararg args: Any): String =
         resolve(key, args.toList()) ?: String.format(java.util.Locale.ROOT, fallback, *args)
 
-    fun role(value: String): String = when (value) {
-        "按钮" -> get("phone_role_button", value) // l10n:keep model role key
-        "输入框" -> get("phone_role_input", value) // l10n:keep model role key
-        "列表" -> get("phone_role_list", value) // l10n:keep model role key
-        "开关" -> get("phone_role_switch", value) // l10n:keep model role key
-        "勾选框" -> get("phone_role_checkbox", value) // l10n:keep model role key
-        "单选" -> get("phone_role_radio", value) // l10n:keep model role key
-        "滑块" -> get("phone_role_slider", value) // l10n:keep model role key
-        "下拉框" -> get("phone_role_dropdown", value) // l10n:keep model role key
-        "链接" -> get("phone_role_link", value) // l10n:keep model role key
-        "标签" -> get("phone_role_tab", value) // l10n:keep model role key
-        "图片" -> get("phone_role_image", value) // l10n:keep model role key
-        "文本" -> get("phone_role_text", value) // l10n:keep model role key
+    fun role(value: String): String = when {
+        // A locked input keeps its stable Chinese token for identity; the card shows words.
+        value == "输入框(密码，不可代填)" -> get("phone_screen_role_password_input", value)
+        value.startsWith("输入框(") && value.endsWith("，不可代填)") -> {
+            val word = value.removePrefix("输入框(").removeSuffix("，不可代填)")
+            get("phone_screen_role_secret_input", value, when (word) {
+                "支付密码" -> get("phone_secret_payment", word)
+                "密码" -> get("phone_secret_password", word)
+                "安全码" -> get("phone_secret_security_code", word)
+                else -> get("phone_secret_code", word)
+            })
+        }
+        value == "按钮" -> get("phone_role_button", value) // l10n:keep model role key
+        value == "输入框" -> get("phone_role_input", value) // l10n:keep model role key
+        value == "列表" -> get("phone_role_list", value) // l10n:keep model role key
+        value == "开关" -> get("phone_role_switch", value) // l10n:keep model role key
+        value == "勾选框" -> get("phone_role_checkbox", value) // l10n:keep model role key
+        value == "单选" -> get("phone_role_radio", value) // l10n:keep model role key
+        value == "滑块" -> get("phone_role_slider", value) // l10n:keep model role key
+        value == "下拉框" -> get("phone_role_dropdown", value) // l10n:keep model role key
+        value == "链接" -> get("phone_role_link", value) // l10n:keep model role key
+        value == "标签" -> get("phone_role_tab", value) // l10n:keep model role key
+        value == "图片" -> get("phone_role_image", value) // l10n:keep model role key
+        value == "文本" -> get("phone_role_text", value) // l10n:keep model role key
+        value == "标题" -> get("phone_role_heading", value) // l10n:keep model role key
         else -> value
     }
 

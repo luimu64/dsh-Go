@@ -5,6 +5,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.background
 
 import android.os.Bundle
 import android.os.Parcel
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -187,117 +188,79 @@ object Proto {
     const val FLAG_FOCUSED = 1 shl 7
 }
 
-/** Stable reason codes → one short Chinese sentence for the model (after Phase's set). */
+/**
+ * Stable reason codes → one short sentence for the model. The sentence follows the app language
+ * through [PhoneUiText]; the Chinese literal at each branch stays the fallback that pure-JVM
+ * tests and a missing resolver see. Codes, wire fields and error names are never translated.
+ */
 object Reasons {
-    fun of(code: String?, detail: String?, textAccepted: Boolean = false): String {
+    fun of(code: String?, detail: String?, textAccepted: Boolean = false,
+           ui: PhoneUiText = PhoneUiText.DEFAULT): String {
         if (textAccepted) {
-            // l10n:keep agent input receipt
-            if (code == "treeCleanupPending") return "输入框已接受文字请求，但树连接清理未确认。请先结束任务或重试清理，不要自动重复输入或提交。"
+            if (code == "treeCleanupPending") return ui.get("phone_reason_text_cleanup",
+                "输入框已接受文字请求，但树连接清理未确认。请先结束任务或重试清理，不要自动重复输入或提交。")
             val after = when (code) {
-                // l10n:keep agent input receipt
-                "textTargetChanged" -> "随后输入框或焦点发生变化"
-                // l10n:keep agent input receipt
-                "textReadbackMismatch" -> "回读与预期不一致"
-                // l10n:keep agent input receipt
-                else -> "后续核验或提交未确认"
+                "textTargetChanged" -> ui.get("phone_reason_after_target", "随后输入框或焦点发生变化")
+                "textReadbackMismatch" -> ui.get("phone_reason_after_readback", "回读与预期不一致")
+                else -> ui.get("phone_reason_after_unconfirmed", "后续核验或提交未确认")
             }
             // No text/readback is included, and an accepted request is not a verified write.
-            // l10n:keep agent input receipt
-            return "输入框已接受文字请求，但$after。请先重新观察，不要自动重复输入或提交。"
+            return ui.get("phone_reason_text_accepted",
+                "输入框已接受文字请求，但%1\$s。请先重新观察，不要自动重复输入或提交。", after)
         }
-        return withDetail(of(code), detail)
+        return withDetail(of(code, ui), detail, ui)
     }
 
-    fun withDetail(reason: String, detail: String?): String = reason + detail?.let { "（$it）" }.orEmpty()
+    fun withDetail(reason: String, detail: String?, ui: PhoneUiText = PhoneUiText.DEFAULT): String =
+        reason + detail?.let { ui.get("phone_background_reason_detail", "（%1\$s）", it) }.orEmpty()
 
-    fun of(code: String?): String = when (code) {
-        // l10n:keep agent resource protocol
-        "scopeUnsupported" -> "所选后台服务不支持任务资源归属，请更新并显式重新连接；未发送新的资源请求"
-        // l10n:keep agent resource protocol
-        "scopeBusy", "scopeCapacity" -> "后台资源正在占用或清理，请等待原任务收尾后再开始"
-        // l10n:keep agent resource protocol
-        "scopeModeMismatch" -> "后台服务仍采用原兼容模式，请先清理并关闭通道，再显式重新连接"
-        // l10n:keep agent resource protocol
-        "scopeIdentityUnavailable" -> "后台回复归属未确认，请保留原任务并尝试清理，不要重发动作"
-        // l10n:keep agent background protocol
-        "viewportUnsupported" -> "当前特权端不支持横屏视口，请更新或重新连接后重试；未打开应用"
-        // l10n:keep agent background protocol
-        "viewportConflict" -> "当前后台屏的视口与新设置不同，请先结束或交还后台屏，再新建；未改变当前视口"
+    fun of(code: String?, ui: PhoneUiText = PhoneUiText.DEFAULT): String = when (code) {
         null -> ""
-        // l10n:keep privileged protocol
-        "identityChanged" -> "特权通道身份已改变，请重新开始任务"
-        // l10n:keep privileged protocol
-        "permissionRequired", "channelDisabled" -> "不打扰模式未启用或授权已撤销"
-        // l10n:keep privileged protocol
-        "systemOperationDenied" -> "系统拒绝了后台屏操作"
-        // l10n:keep privileged protocol
-        "launchDenied" -> "系统拒绝在后台屏启动此应用"
-        // l10n:keep privileged protocol
-        "launchCancelled" -> "后台屏应用启动请求已取消，未自动重试"
-        // l10n:keep privileged protocol
-        "notLaunchable" -> "此应用没有可启动的界面"
-        // l10n:keep privileged protocol
-        "launchUnconfirmed" -> "已请求在后台屏打开，但 4 秒内后台屏上没有出现应用界面；可以重新读后台屏确认，或再打开一次"
-        // l10n:keep privileged protocol
-        "displayUnsupported" -> "此系统不支持所需的独立焦点虚拟屏，未改用主屏"
-        // l10n:keep privileged protocol
-        "displayReleaseFailed" -> "未收到后台屏资源释放的完整回执"
-        // l10n:keep privileged protocol
-        "displayMissing" -> "本次任务还没有后台屏，请先启动目标应用"
-        // l10n:keep privileged protocol
-        "displayTargetChanged" -> "后台屏前台任务不属于目标应用，未继续操作"
-        // l10n:keep agent target identity
-        "targetIdentityUnsupported" -> "当前后台服务不支持目标应用身份核验，请更新并重新连接；未派发新的启动请求"
-        // l10n:keep agent target identity
-        "targetIdentityChanged" -> "目标应用身份已变化，已停止后续操作。先重新打开应用或结束任务；不要自动重复刚才的输入或动作"
-        // l10n:keep agent target identity
-        "targetIdentityUnavailable" -> "无法确认目标应用身份，已停止后续操作。先重新打开应用或结束任务；先前动作是否完成需核对，不要自动重试"
-        // l10n:keep agent target identity
-        "foregroundChanged" -> "后台屏上的应用已经换了，这次没有执行。请先重新读后台屏，按新界面再操作"
-        // l10n:keep agent target identity
-        "targetLeftDisplay" -> "应用离开了后台屏，现在在主屏上（它可能已在主屏运行，或不支持在后台屏运行）。可以改在主屏操作，或请用户先在主屏关掉这个应用后再打开"
-        // l10n:keep privileged protocol
-        "secureWindow" -> "此页面受保护（支付或密码），请交还用户在主屏完成"
-        // l10n:keep privileged protocol
-        "frameNotReady" -> "画面尚未就绪；稍后仅重新读屏，不要重放刚才动作"
-        // l10n:keep privileged protocol
-        "staleSnapshot" -> "后台屏快照已过期，请重新观察后再操作"
-        // l10n:keep privileged protocol
-        "elementMissing" -> "该元素已不在后台屏当前界面上"
-        // l10n:keep privileged protocol
-        "textUnsupported" -> "此输入框不支持直接写入文字"
-        // l10n:keep privileged protocol
-        "textConnectionUnavailable" -> "后台屏文字输入服务不可用"
-        // l10n:keep privileged protocol
-        "treeCleanupPending" -> "后台屏树连接清理未确认，请先结束任务或重试清理；不要自动重复刚才动作"
-        // l10n:keep privileged protocol
-        "textFocusMissing" -> "后台屏上没有已聚焦的输入框"
-        // l10n:keep privileged protocol
-        "textTargetChanged" -> "后台屏输入框或焦点已改变，未继续输入"
-        // l10n:keep privileged protocol
-        "textRequiresManual" -> "此输入框需要用户手动输入"
-        // l10n:keep privileged protocol
-        "textReadbackMismatch" -> "文字已提交，但输入框内容与预期不一致"
-        // l10n:keep privileged protocol
-        "inputApiUnavailable" -> "此系统没有可用的后台屏输入接口，无法点按或输入"
-        // l10n:keep privileged protocol
-        "inputRejected" -> "未能确认后台屏输入结果；动作可能已发出，请重新观察，不要重复动作"
-        // l10n:keep privileged protocol
-        "screenshotFailed" -> "未取得后台屏画面，可重新观察；不要重放已派发的动作"
-        // l10n:keep privileged protocol
-        "treeUnavailable" -> "未能读取后台屏控件树，请重新观察"
-        // l10n:keep privileged protocol
-        "locked" -> "设备已锁定，后台屏操作已停止"
-        // l10n:keep privileged protocol
-        "invalidArguments" -> "后台屏动作参数无效"
-        // l10n:keep privileged protocol
-        "cancelled" -> "后台屏操作已停止，已派发动作不代表已撤销"
-        // l10n:keep privileged protocol
-        "timeout" -> "后台屏操作超时，已派发动作不代表已撤销"
-        // l10n:keep privileged protocol
-        else -> "不打扰模式暂不可用，请检查授权、服务和设备支持情况"
+        "scopeUnsupported" -> ui.get("phone_reason_scope_unsupported", "所选后台服务不支持任务资源归属，请更新并显式重新连接；未发送新的资源请求")
+        "scopeBusy, scopeCapacity" -> ui.get("phone_reason_scope_busy", "后台资源正在占用或清理，请等待原任务收尾后再开始")
+        "scopeModeMismatch" -> ui.get("phone_reason_scope_mode", "后台服务仍采用原兼容模式，请先清理并关闭通道，再显式重新连接")
+        "scopeIdentityUnavailable" -> ui.get("phone_reason_scope_identity", "后台回复归属未确认，请保留原任务并尝试清理，不要重发动作")
+        "viewportUnsupported" -> ui.get("phone_reason_viewport_unsupported", "当前特权端不支持横屏视口，请更新或重新连接后重试；未打开应用")
+        "viewportConflict" -> ui.get("phone_reason_viewport_conflict", "当前后台屏的视口与新设置不同，请先结束或交还后台屏，再新建；未改变当前视口")
+        "identityChanged" -> ui.get("phone_reason_identity_changed", "特权通道身份已改变，请重新开始任务")
+        "permissionRequired, channelDisabled" -> ui.get("phone_reason_permission_required", "不打扰模式未启用或授权已撤销")
+        "systemOperationDenied" -> ui.get("phone_reason_system_denied", "系统拒绝了后台屏操作")
+        "launchDenied" -> ui.get("phone_reason_launch_denied", "系统拒绝在后台屏启动此应用")
+        "launchCancelled" -> ui.get("phone_reason_launch_cancelled", "后台屏应用启动请求已取消，未自动重试")
+        "notLaunchable" -> ui.get("phone_reason_not_launchable", "此应用没有可启动的界面")
+        "launchUnconfirmed" -> ui.get("phone_reason_launch_unconfirmed", "已请求在后台屏打开，但 4 秒内后台屏上没有出现应用界面；可以重新读后台屏确认，或再打开一次")
+        "displayUnsupported" -> ui.get("phone_reason_display_unsupported", "此系统不支持所需的独立焦点虚拟屏，未改用主屏")
+        "displayReleaseFailed" -> ui.get("phone_reason_release_failed", "未收到后台屏资源释放的完整回执")
+        "displayMissing" -> ui.get("phone_reason_display_missing", "本次任务还没有后台屏，请先启动目标应用")
+        "displayTargetChanged" -> ui.get("phone_reason_display_target_changed", "后台屏前台任务不属于目标应用，未继续操作")
+        "targetIdentityUnsupported" -> ui.get("phone_reason_identity_unsupported", "当前后台服务不支持目标应用身份核验，请更新并重新连接；未派发新的启动请求")
+        "targetIdentityChanged" -> ui.get("phone_reason_identity_mismatch", "目标应用身份已变化，已停止后续操作。先重新打开应用或结束任务；不要自动重复刚才的输入或动作")
+        "targetIdentityUnavailable" -> ui.get("phone_reason_identity_unavailable", "无法确认目标应用身份，已停止后续操作。先重新打开应用或结束任务；先前动作是否完成需核对，不要自动重试")
+        "foregroundChanged" -> ui.get("phone_reason_foreground_changed", "后台屏上的应用已经换了，这次没有执行。请先重新读后台屏，按新界面再操作")
+        "targetLeftDisplay" -> ui.get("phone_reason_target_left_display", "应用离开了后台屏，现在在主屏上（它可能已在主屏运行，或不支持在后台屏运行）。可以改在主屏操作，或请用户先在主屏关掉这个应用后再打开")
+        "secureWindow" -> ui.get("phone_reason_secure_window", "此页面受保护（支付或密码），请交还用户在主屏完成")
+        "frameNotReady" -> ui.get("phone_reason_frame_not_ready", "画面尚未就绪；稍后仅重新读屏，不要重放刚才动作")
+        "staleSnapshot" -> ui.get("phone_reason_stale_snapshot", "后台屏快照已过期，请重新观察后再操作")
+        "elementMissing" -> ui.get("phone_reason_element_missing", "该元素已不在后台屏当前界面上")
+        "textUnsupported" -> ui.get("phone_reason_text_unsupported", "此输入框不支持直接写入文字")
+        "textConnectionUnavailable" -> ui.get("phone_reason_text_connection", "后台屏文字输入服务不可用")
+        "treeCleanupPending" -> ui.get("phone_reason_tree_cleanup", "后台屏树连接清理未确认，请先结束任务或重试清理；不要自动重复刚才动作")
+        "textFocusMissing" -> ui.get("phone_reason_text_focus_missing", "后台屏上没有已聚焦的输入框")
+        "textTargetChanged" -> ui.get("phone_reason_text_target_changed", "后台屏输入框或焦点已改变，未继续输入")
+        "textRequiresManual" -> ui.get("phone_reason_text_manual", "此输入框需要用户手动输入")
+        "textReadbackMismatch" -> ui.get("phone_reason_text_readback", "文字已提交，但输入框内容与预期不一致")
+        "inputApiUnavailable" -> ui.get("phone_reason_input_unavailable", "此系统没有可用的后台屏输入接口，无法点按或输入")
+        "inputRejected" -> ui.get("phone_reason_input_rejected", "未能确认后台屏输入结果；动作可能已发出，请重新观察，不要重复动作")
+        "screenshotFailed" -> ui.get("phone_reason_screenshot_failed", "未取得后台屏画面，可重新观察；不要重放已派发的动作")
+        "treeUnavailable" -> ui.get("phone_reason_tree_unavailable", "未能读取后台屏控件树，请重新观察")
+        "locked" -> ui.get("phone_reason_locked", "设备已锁定，后台屏操作已停止")
+        "invalidArguments" -> ui.get("phone_reason_arguments", "后台屏动作参数无效")
+        "cancelled" -> ui.get("phone_reason_cancelled", "后台屏操作已停止，已派发动作不代表已撤销")
+        "timeout" -> ui.get("phone_reason_timeout", "后台屏操作超时，已派发动作不代表已撤销")
+        else -> ui.get("phone_reason_unavailable", "不打扰模式暂不可用，请检查授权、服务和设备支持情况")
     }
 }
+
 
 /** Length-prefixed frames for the adb stream transport. Pure java.io, JVM-testable. */
 object Frames {

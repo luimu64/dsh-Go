@@ -30,6 +30,7 @@ class BridgePluginConfigApi implements PluginConfigApi {
     this.client,
     this.fallback, {
     required this.scope,
+    this.locale,
     this.readTimeout = const Duration(seconds: 10),
     this.writeTimeout = const Duration(seconds: 60),
   });
@@ -38,6 +39,15 @@ class BridgePluginConfigApi implements PluginConfigApi {
 
   /// The plugins as the plugin manager lists them now (asked at each call).
   final PluginConfigScope Function() scope;
+
+  /// The app's UI language, read at each request so a Host answers labels and
+  /// messages in the language on screen (null: its own default).
+  final String Function()? locale;
+
+  String? get _localeTag {
+    final tag = locale?.call().trim();
+    return tag == null || tag.isEmpty ? null : tag;
+  }
 
   /// What a Host without the routes serves.
   final PluginConfigApi fallback;
@@ -90,7 +100,7 @@ class BridgePluginConfigApi implements PluginConfigApi {
     if (_supported == false) return fallback.describe();
     final List<PluginConfigEntrySummary>? listed;
     try {
-      listed = await client.listPluginConfig(timeout: readTimeout);
+      listed = await client.listPluginConfig(timeout: readTimeout, locale: _localeTag);
     } catch (error) {
       throw pluginConfigFailureOf(error);
     }
@@ -111,7 +121,7 @@ class BridgePluginConfigApi implements PluginConfigApi {
     _ensureInScope(ns);
     if (!_bridge) return fallback.read(ns);
     try {
-      return _form(await client.readPluginConfig(ns, timeout: readTimeout));
+      return _form(await client.readPluginConfig(ns, timeout: readTimeout, locale: _localeTag));
     } on DshRemoteException catch (error) {
       if (error.code == 'plugin-config/entry-unavailable') {
         _credentialRefs.remove(ns);
@@ -148,7 +158,13 @@ class BridgePluginConfigApi implements PluginConfigApi {
     _ensureInScope(ns);
     final PluginConfigEntryDetail detail;
     try {
-      detail = await client.writePluginConfig(ns, revision: '$revision', ops: ops, timeout: writeTimeout);
+      detail = await client.writePluginConfig(
+        ns,
+        revision: '$revision',
+        ops: ops,
+        timeout: writeTimeout,
+        locale: _localeTag,
+      );
     } catch (error) {
       throw pluginConfigFailureOf(error);
     }

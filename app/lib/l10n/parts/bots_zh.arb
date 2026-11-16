@@ -650,6 +650,20 @@
       }
     }
   },
+  "botsYearDate": "{year}/{month}/{day}",
+  "@botsYearDate": {
+    "placeholders": {
+      "year": {
+        "type": "int"
+      },
+      "month": {
+        "type": "String"
+      },
+      "day": {
+        "type": "int"
+      }
+    }
+  },
   "botsCopyGroupNumber": "复制群号",
   "botsQrCodeLabel": "{title}二维码",
   "@botsQrCodeLabel": {

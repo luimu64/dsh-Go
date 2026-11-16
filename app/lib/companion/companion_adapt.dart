@@ -42,13 +42,16 @@ Future<Map<String, Object?>> companionAdaptAsk({
   Map<String, Object?>? current,
   CompanionAdaptEvidence evidence = const CompanionAdaptEvidence(),
   void Function(int input, int output)? onUsage,
+  String? language,
 }) async {
   final text = StringBuffer();
   await for (final delta in streamCompanionReply(
     client: client,
     apiKey: apiKey,
-    system: companionAdaptSystem,
-    lines: [CompanionLine.user(companionAdaptRequest(probe, note: note, current: current, evidence: evidence))],
+    system: companionAdaptSystemFor(language),
+    lines: [
+      CompanionLine.user(companionAdaptRequest(probe, note: note, current: current, evidence: evidence, language: language)),
+    ],
     maxTokens: 3000,
     onUsage: onUsage,
   )) {

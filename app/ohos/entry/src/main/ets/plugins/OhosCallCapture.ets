@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // Communication-source capture. AEC and device behavior are not device-verified.
 import audio from '@ohos.multimedia.audio';
 import systemDateTime from '@ohos.systemDateTime';
@@ -85,7 +86,7 @@ export class OhosCallCapture {
     const value: audio.AudioStreamInfo = capturer.getStreamInfoSync();
     if (value.samplingRate !== audio.AudioSamplingRate.SAMPLE_RATE_16000 || value.channels !== audio.AudioChannel.CHANNEL_1 ||
       value.sampleFormat !== audio.AudioSampleFormat.SAMPLE_FORMAT_S16LE || value.encodingType !== audio.AudioEncodingType.ENCODING_TYPE_RAW) {
-      throw new VoiceFailure('audio', '设备未提供16kHz单声道PCM16通话录音。', 100);
+      throw new VoiceFailure('audio', AppLanguage.pick('设备未提供16kHz单声道PCM16通话录音。', 'The device did not provide 16 kHz mono PCM16 call recording.'), 100);
     }
   }
   private async open(): Promise<void> {
@@ -100,7 +101,7 @@ export class OhosCallCapture {
     capturer.on('readData', this.read); this.subscribed = true;
     capturer.on('audioInterrupt', this.interrupt); this.interruptSubscribed = true;
     this.started = true; await capturer.start(); this.ensureCurrent(); this.format(capturer);
-    if (this.fault) throw new VoiceFailure('audio', '通话录音已被中断。', 100);
+    if (this.fault) throw new VoiceFailure('audio', AppLanguage.pick('通话录音已被中断。', 'Call recording was interrupted.'), 100);
     this.running = true; this.defer();
   }
   private clearAudio(): void {

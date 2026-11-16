@@ -41,11 +41,22 @@ data class PhoneCaller(val sessionId: String, val runId: String, val callId: Str
  * the connection keeps reading (and answering pings) while a call waits for the person.
  */
 class McpServer(
-    private val tools: List<Map<String, Any?>>,
+    /** Read per `tools/list`, so the app language can change while the bridge lives. */
+    private val tools: () -> List<Map<String, Any?>>,
     private val call: (name: String, args: Map<String, Any?>, caller: PhoneCaller?) -> ToolOutput,
     private val serverVersion: String = "1",
     private val diagnostics: ((Map<String, Any?>, PhoneCaller?) -> ToolOutput)? = null,
+    /** The unexpected-error wrapper follows the app language; the JSON-RPC codes never change. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
 ) {
+    /** A catalog that does not change for the life of the bridge. */
+    constructor(
+        tools: List<Map<String, Any?>>,
+        call: (name: String, args: Map<String, Any?>, caller: PhoneCaller?) -> ToolOutput,
+        serverVersion: String = "1",
+        diagnostics: ((Map<String, Any?>, PhoneCaller?) -> ToolOutput)? = null,
+    ) : this({ tools }, call, serverVersion, diagnostics)
+
     sealed interface Dispatch {
         /** Nothing to send (notification, response, blank line). */
         object None : Dispatch
@@ -98,7 +109,7 @@ class McpServer(
         return when (method) {
             "initialize" -> Dispatch.Reply(result(id, initializeResult(params["protocolVersion"] as? String)))
             "ping" -> Dispatch.Reply(result(id, emptyMap<String, Any?>()))
-            "tools/list" -> Dispatch.Reply(result(id, mapOf("tools" to tools)))
+            "tools/list" -> Dispatch.Reply(result(id, mapOf("tools" to tools())))
             "dsh-go/phone-run-end" -> {
                 val session = PhoneCaller.identifier(params["sessionId"])
                 val run = PhoneCaller.identifier(params["runId"])
@@ -146,8 +157,10 @@ class McpServer(
             if (name == DiagnosticsTool.NAME && diagnostics != null) diagnostics.invoke(args, caller)
             else (handler ?: call)(name, args, caller)
         } catch (e: Throwable) {
-            // l10n:keep agent tool error
-            ToolOutput("手机操控出错：${e.javaClass.simpleName}${e.message?.let { "：$it" } ?: ""}", isError = true)
+            // The class name and the thrown message are the host's own words: never looked up.
+            val detail = e.message?.let { ui.get("phone_tool_error_detail", "：%1\$s", it) } ?: ""
+            ToolOutput(ui.get("phone_tool_error_wrapper", "手机操控出错：%1\$s%2\$s",
+                e.javaClass.simpleName, detail), isError = true)
         }
         val line = result(id, toolResult(out))
         // Only the exact, fully encoded original response can bind its displayed focus evidence.

@@ -23,6 +23,7 @@ import '../../companion/companion_context.dart';
 import '../../companion/companion_initiative.dart';
 import '../../companion/companion_initiative_owner.dart';
 import '../../companion/companion_keeper.dart';
+import '../../companion/companion_language.dart';
 import '../../companion/companion_late_use.dart';
 import '../../companion/companion_moves.dart';
 import '../../companion/companion_light.dart';
@@ -495,7 +496,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   void _closer(int step) {
     _stage.command('emotion', {'name': 'happy', 'hold': 3200});
     _stage.command('action', {'name': 'hop'});
-    _remember('pet', '你觉得和对方又亲近了一些');
+    _remember('pet', companionPick('你觉得和对方又亲近了一些', 'You feel a little closer to the person.'));
     if (!mounted || _running || _sending) return;
     final l10n = context.l10n;
     _say(switch (step) {
@@ -587,12 +588,12 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     // A hug is affection the way a pat is: the same event for her state.
     if (kind == 'pat' || kind == 'hug') _event('pet');
     _remember('pet', switch ((zone, kind)) {
-      (_, 'hug') => '对方刚才抱了抱你',
-      (_, 'tease') => '对方刚才连着戳你',
-      (_, 'shake') => '对方刚才摇晃手机，把你晃晕了',
-      (_, 'pat') => '对方刚才摸了摸你的头',
-      ('tail', _) => '对方刚才碰了你的尾巴',
-      ('face', _) => '对方刚才戳了戳你的脸',
+      (_, 'hug') => companionPick('对方刚才抱了抱你', 'The person just hugged you.'),
+      (_, 'tease') => companionPick('对方刚才连着戳你', 'The person just poked you again and again.'),
+      (_, 'shake') => companionPick('对方刚才摇晃手机，把你晃晕了', 'The person just shook the phone and made you dizzy.'),
+      (_, 'pat') => companionPick('对方刚才摸了摸你的头', 'The person just patted your head.'),
+      ('tail', _) => companionPick('对方刚才碰了你的尾巴', 'The person just touched your tail.'),
+      ('face', _) => companionPick('对方刚才戳了戳你的脸', 'The person just poked your cheek.'),
       _ => null,
     });
     if (_running || _sending) return; // Her words first.
@@ -632,10 +633,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       _stage.command('activity', {'name': id, 'remainingMs': _localActivity[id]!.inMilliseconds});
     }
     _remember(id == 'snack' ? 'feed' : 'pet', switch (id) {
-      _ when invited => '你邀请对方陪你在海草软垫上歇一会儿，对方答应了',
-      'snack' => '对方刚才给你吃了一块点心',
-      'play' => '对方刚才陪你玩了泡泡球',
-      _ => '对方刚才让你在海草软垫上歇一会儿',
+      _ when invited => companionPick(
+        '你邀请对方陪你在海草软垫上歇一会儿，对方答应了',
+        'You invited the person to rest with you on the seaweed cushion, and they said yes.',
+      ),
+      'snack' => companionPick('对方刚才给你吃了一块点心', 'The person just gave you a snack.'),
+      'play' => companionPick('对方刚才陪你玩了泡泡球', 'The person just played bubble ball with you.'),
+      _ => companionPick('对方刚才让你在海草软垫上歇一会儿', 'The person just let you rest on the seaweed cushion.'),
     });
     if (_running || _sending) return;
     final l10n = context.l10n;
@@ -933,14 +937,17 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     null => l10n.companionGreetFirstNameless,
   };
 
-  /// Her persona as the person has it, under the name she goes by.
-  String _persona() {
+  /// Her persona as the person has it, under the name she goes by. [language]
+  /// is the snapshot taken at the request boundary, so a language switch
+  /// mid-flight cannot half-translate one prompt.
+  String _persona([String? language]) {
     final persona = ref.read(companionPersonaProvider);
     return companionPersona(
       custom: persona.custom,
       name: ref.read(companionNameProvider) ?? _character.name,
       callMe: persona.callMe,
-      moves: _moves.rules(),
+      moves: _moves.rules(language: language),
+      language: language,
     );
   }
 
@@ -1014,6 +1021,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     setState(() => _adapting = true);
     _say(l10n.companionAdaptStart);
     _stage.command('mood', {'mood': 'thinking'});
+    final language = companionLanguage;
     final client = ref.read(companionLightClientProvider)();
     try {
       final adapter = await companionAdaptAsk(
@@ -1022,6 +1030,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
         probe: probe,
         note: note,
         current: probe.adapted ? await companionAdapterRead(store.pack) : null,
+        language: language,
         onUsage: (input, output) {
           if (mounted) ref.read(usageStatsProvider.notifier).tokens(input, output);
         },
@@ -1123,7 +1132,10 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
   void _renamedTo(String name) {
     if (!mounted || !_stageReady) return;
     final l10n = context.l10n;
-    _remember('renamed', '对方刚给你起了新名字「$name」');
+    _remember(
+      'renamed',
+      companionPick('对方刚给你起了新名字「$name」', 'The person just gave you a new name, "$name".'),
+    );
     _stage.command('emotion', {'name': 'happy', 'hold': 3200});
     _stage.command('action', {'name': 'hop'});
     _say(l10n.companionRenamed(name));
@@ -1724,6 +1736,8 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     final raw = _input.text;
     final text = raw.trim();
     if (text.isEmpty || _sending || _lightReply != null) return;
+    // One language for this line and everything sent beside it.
+    final language = companionLanguage;
     _acted();
     _hush();
     _retireGreeting();
@@ -1768,13 +1782,14 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
           : await client.companionPromptCapability(binding.sessionId);
       if (!current()) return;
       if (capability == null && !firstInline) _contextUnsupported();
-      final profile = _contextProfile();
+      final profile = _contextProfile(language, includeLanguage: capability?.languages.contains('en') ?? false);
       final sent = await chat.send(
-        firstInline ? '${appNote('（从现在起请扮演下面的角色，直接开始，不要复述这段设定。）\n${_persona()}')}\n$raw' : raw,
+        firstInline ? '${appNote(companionInlinePersonaFor(language))}\n$raw' : raw,
         verbatim: true,
         beforeDeliver: capability == null || client == null
             ? null
-            : (requestId) => _prepareContext(client, capability, binding.sessionId, requestId, raw, profile, current),
+            : (requestId) =>
+                  _prepareContext(client, capability, binding.sessionId, requestId, raw, profile, current),
       );
       if (!current()) return;
       if (!sent) throw StateError(ref.read(chatProvider(binding.sessionId)).error ?? 'send');
@@ -1794,7 +1809,7 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
 
   /// Who she is to this host: persona, name, what she calls the person, her
   /// own moves. Sent when it differs from what the host acknowledged.
-  CompanionContextProfile _contextProfile() {
+  CompanionContextProfile _contextProfile(String? language, {bool includeLanguage = true}) {
     final persona = ref.read(companionPersonaProvider);
     String cap(String text, int most) {
       if (text.runes.length <= most) return text;
@@ -1807,7 +1822,9 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
       persona: cap(persona.custom.trim(), 4000),
       name: cap((ref.read(companionNameProvider) ?? _character.name ?? '').replaceAll(RegExp(r'\s+'), ' ').trim(), 24),
       callMe: cap(persona.callMe.replaceAll(RegExp(r'\s+'), ' ').trim(), 40),
-      moves: cap(_moves.rules() ?? '', 1024),
+      moves: cap(_moves.rules(language: language) ?? '', 1024),
+      language: companionLanguageOf(language),
+      includeLanguage: includeLanguage,
     );
   }
 
@@ -2151,11 +2168,13 @@ class _CompanionPageState extends ConsumerState<CompanionPage> implements Compan
     _lightText = '';
     _lightAsked = text;
     final client = _lightClient = ref.read(companionLightClientProvider)();
+    // Light mode has no host handshake: snapshot the language with this turn.
+    final language = companionLanguage;
     _lightReply =
         streamCompanionReply(
           client: client,
           apiKey: key,
-          system: companionLightSystem(memories, persona: _persona()),
+          system: companionLightSystem(memories, persona: _persona(language), language: language),
           lines: history.context(),
           context: turnContext,
           onUsage: (input, output) {

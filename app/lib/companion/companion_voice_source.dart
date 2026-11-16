@@ -17,13 +17,19 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../speech/deepseek_speech.dart';
+import 'companion_language.dart';
 
 /// The order the voice page lists them in. [deepseek] is DeepSeek's own speech
 /// API, paid by the signed-in account or the API key (deepseek_speech.dart).
 enum CompanionVoiceSource { deepseek, system, preset, openai, custom }
 
 /// Her style, for services that take one, when the person hasn't written their own.
-const companionVoiceStyleDefault = '用自然、温柔、带一点俏皮的少女语气说，像在陪朋友聊天。';
+const companionVoiceStyleDefaultZh = '用自然、温柔、带一点俏皮的少女语气说，像在陪朋友聊天。';
+const companionVoiceStyleDefaultEn =
+    'Speak in a natural, gentle, slightly playful young woman\'s voice, like chatting with a friend.';
+
+/// The default speaking style in the language the app is showing.
+String get companionVoiceStyleDefault => companionEnglish ? companionVoiceStyleDefaultEn : companionVoiceStyleDefaultZh;
 
 /// A voice a preset offers: its id at the service, and what kind it is.
 typedef CompanionPresetVoice = ({String id, String? kind});
@@ -35,16 +41,21 @@ typedef CompanionPresetVoice = ({String id, String? kind});
 class CompanionVoicePreset {
   const CompanionVoicePreset({
     required this.id,
-    required this.name,
+    required String name,
+    this.englishName,
     required this.site,
     required this.voices,
     required this.build,
     this.styled = false,
     this.clones = false,
-  });
+    // Preserve the public `name` argument while storing its untranslated value.
+    // ignore: prefer_initializing_formals
+  }) : _name = name;
 
   final String id;
-  final String name;
+  final String _name;
+  final String? englishName;
+  String get name => companionEnglish ? englishName ?? _name : _name;
 
   /// Where to get a key.
   final String site;
@@ -67,6 +78,7 @@ final companionVoicePresets = <CompanionVoicePreset>[
   CompanionVoicePreset(
     id: 'mimo',
     name: '小米 MiMo',
+    englishName: 'Xiaomi MiMo',
     site: 'platform.xiaomimimo.com',
     styled: true,
     clones: true,
@@ -130,6 +142,7 @@ final companionVoicePresets = <CompanionVoicePreset>[
   CompanionVoicePreset(
     id: 'siliconflow',
     name: '硅基流动',
+    englishName: 'SiliconFlow',
     site: 'cloud.siliconflow.cn',
     voices: const [
       (id: 'claire', kind: 'f'),
@@ -154,6 +167,7 @@ final companionVoicePresets = <CompanionVoicePreset>[
   CompanionVoicePreset(
     id: 'bailian',
     name: '阿里云百炼',
+    englishName: 'Alibaba Cloud Model Studio',
     site: 'bailian.console.aliyun.com',
     voices: const [
       (id: 'Cherry', kind: 'f'),

@@ -6,6 +6,8 @@
 
 import 'package:flutter/foundation.dart';
 
+import 'companion_language.dart';
+
 /// A faces the stage knows (`emotions` in app/assets/companion/stage.js).
 const _emotions = {
   '平静': 'calm',
@@ -157,20 +159,32 @@ CompanionReply parseCompanionReply(
 
 /// What goes in front of a message the person sends: the small facts the model
 /// can't otherwise know, in the 〔〕 aside the persona explains. Null without any.
-String? companionAside({DateTime? now, List<String> notes = const []}) {
+/// [language] is the app's prompt language at the request boundary.
+String? companionAside({DateTime? now, List<String> notes = const [], String? language}) {
+  final english = companionIsEnglish(language);
   final parts = [
     if (now != null)
-      '${now.month}月${now.day}日 ${_weekday[now.weekday - 1]} '
-          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
+      english
+          ? '${_monthsEn[now.month - 1]} ${now.day} ${_weekdayEn[now.weekday - 1]} '
+                '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}'
+          : '${now.month}月${now.day}日 ${_weekday[now.weekday - 1]} '
+                '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}',
     for (final note in notes) note.replaceAll(RegExp(r'\s*\n\s*'), ' '),
   ];
-  return parts.isEmpty ? null : '〔${parts.join('，')}〕';
+  return parts.isEmpty ? null : '〔${parts.join(english ? ', ' : '，')}〕';
 }
 
 const _weekday = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+const _weekdayEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const _monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /// The aside line [companionAside] writes: it always starts with the date.
-final _asideLine = RegExp(r'^〔\d{1,2}月\d{1,2}日 周[一二三四五六日] \d{2}:\d{2}[^\n]*〕$');
+/// Both the Chinese and English forms are recognized, so messages written
+/// before a language switch still read as the person's own words.
+final _asideLine = RegExp(
+  r'^〔(?:\d{1,2}月\d{1,2}日 周[一二三四五六日] |(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2} '
+  r'(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun) )\d{2}:\d{2}[^\n]*〕$',
+);
 
 /// What the person actually typed, out of a message the page sent: whatever
 /// the page put in front of it (the persona, its changes, her name, moves) all

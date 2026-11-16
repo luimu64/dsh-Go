@@ -1,4 +1,3 @@
-# One patch per line, in application order. Keep every .diff exactly once.
 cordis-effect-dispose-completion.diff
 credentials-decimal-refs.diff
 fs-create-exclusive.diff
@@ -149,7 +148,7 @@ fork-default-effort.diff
 config-editor-lock-order.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
-# HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
+zzzzzzzzzzzzzzz-native-app-locale-override.diff
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
 ohos-hap-native-libraries.diff

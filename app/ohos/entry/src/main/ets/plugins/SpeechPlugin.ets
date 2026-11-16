@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // dsh/speech playback contract, aligned with the 8faafe6 Android snapshot.
 // Call capture uses the Android energy fallback; no NeuralGate equivalence claim.
 import UIAbility from '@ohos.app.ability.UIAbility';
@@ -111,7 +112,7 @@ export default class SpeechPlugin implements FlutterPlugin, AbilityAware {
       this.handle(call, binding).then((value: Any): void => {
         try { result.success(value); } catch (_) { /* transport retired; exactly one reply attempt */ }
       }, (_error: Error): void => {
-        try { result.error('speech-output', '音频输出操作未完成，请停止后重试。', null); } catch (_) {}
+        try { result.error('speech-output', AppLanguage.pick('音频输出操作未完成，请停止后重试。', 'The audio output operation did not complete. Stop it and try again.'), null); } catch (_) {}
       });
     } });
   }

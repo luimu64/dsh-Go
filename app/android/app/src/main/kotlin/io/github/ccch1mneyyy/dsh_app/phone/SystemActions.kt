@@ -61,6 +61,7 @@ object AppVisibility : Application.ActivityLifecycleCallbacks {
 
 /** System tools on Android: no permission beyond what the app already has, plus SET_ALARM (normal). */
 class SystemActions(private val app: Context) : SystemApi {
+    private val ui = PhoneStrings.of(app)
     private val pm: PackageManager = app.packageManager
     private val main = Handler(Looper.getMainLooper())
     private val nm = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -286,14 +287,15 @@ class SystemActions(private val app: Context) : SystemApi {
 
     override fun notify(title: String, text: String): SysResult {
         if (!nm.areNotificationsEnabled()) {
-            // l10n:keep agent tool result
-            return SysResult(false, "DSH 没有通知权限，通知发不出去。请用户在系统设置里允许 DSH 发通知。")
+            return SysResult(false, ui.get("phone_system_no_notification_permission",
+                "DSH 没有通知权限，通知发不出去。请用户在系统设置里允许 DSH 发通知。"))
         }
         ensureChannel(CHANNEL_NOTIFY, AppStrings.get(app, R.string.phone_reminder_channel), NotificationManager.IMPORTANCE_DEFAULT)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
             nm.getNotificationChannel(CHANNEL_NOTIFY)?.importance == NotificationManager.IMPORTANCE_NONE) {
-            // l10n:keep agent tool result
-            return SysResult(false, "DSH 的「${AppStrings.get(app, R.string.phone_reminder_channel)}」通知渠道已关闭。请用户在系统设置中开启该渠道后再试。")
+            return SysResult(false, ui.get("phone_system_channel_closed",
+                "DSH 的「%1\$s」通知渠道已关闭。请用户在系统设置中开启该渠道后再试。",
+                AppStrings.get(app, R.string.phone_reminder_channel)))
         }
         val open = PendingIntent.getActivity(
             app, 0, Intent(app, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -307,20 +309,19 @@ class SystemActions(private val app: Context) : SystemApi {
             .setAutoCancel(true)
             .build()
         nm.notify(TAG, ids.incrementAndGet(), n)
-        // l10n:keep agent tool result
-        return SysResult(true, "已发通知「${SafetyRules.quoteText(title, 30)}」。")
+        return SysResult(true, ui.get("phone_system_notified", "已发通知「%1\$s」。", SafetyRules.quoteText(title, 30)))
     }
 
     override fun clipboardSet(text: String): SysResult {
-        // l10n:keep agent tool result
-        if (text.length > 100_000) return SysResult(false, "内容太长（超过 10 万字）。")
+        if (text.length > 100_000) return SysResult(false,
+            ui.get("phone_system_clipboard_too_long", "内容太长（超过 10 万字）。"))
         val ok = onMain {
             val cm = app.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             cm.setPrimaryClip(ClipData.newPlainText("DSH", text))
             true
         } == true
-        // l10n:keep agent tool result
-        return if (ok) SysResult(true, "已写入剪贴板（${text.length} 字）。") else SysResult(false, "写剪贴板失败。")
+        return if (ok) SysResult(true, ui.get("phone_system_clipboard_written", "已写入剪贴板（%1\$s 字）。", text.length))
+        else SysResult(false, ui.get("phone_system_clipboard_write_failed", "写剪贴板失败。"))
     }
 
     override fun clipboardGet(): SysResult {
@@ -331,20 +332,18 @@ class SystemActions(private val app: Context) : SystemApi {
         }
         if (text.isNullOrEmpty()) {
             return if (visible || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                // l10n:keep agent tool result
-                SysResult(true, "剪贴板是空的。")
+                SysResult(true, ui.get("phone_system_clipboard_empty", "剪贴板是空的。"))
             } else {
-                // l10n:keep agent tool result
-                SysResult(false, "读不到剪贴板：系统只允许前台应用读，DSH 不在前台。请用户切回 DSH 再说，或直接把内容发给你。")
+                SysResult(false, ui.get("phone_system_clipboard_foreground",
+                    "读不到剪贴板：系统只允许前台应用读，DSH 不在前台。请用户切回 DSH 再说，或直接把内容发给你。"))
             }
         }
         val limit = 20_000
         // Keep a complete surrogate pair out of the preview when it crosses the limit.
         val end = if (text.length > limit && text[limit - 1].isHighSurrogate() && text[limit].isLowSurrogate()) limit - 1 else limit
-        // l10n:keep agent tool result
-        val shown = if (text.length > limit) text.take(end) + "\n…（后面还有 ${text.length - end} 字）" else text
-        // l10n:keep agent tool result
-        return SysResult(true, "剪贴板内容：\n$shown")
+        val shown = if (text.length > limit) text.take(end) +
+            ui.get("phone_system_clipboard_truncated", "\n…（后面还有 %1\$s 字）", text.length - end) else text
+        return SysResult(true, ui.get("phone_system_clipboard_content", "剪贴板内容：\n%1\$s", shown))
     }
 
     private fun <T> onMain(block: () -> T): T? {

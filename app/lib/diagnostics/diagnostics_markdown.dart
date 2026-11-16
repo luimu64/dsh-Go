@@ -1,9 +1,11 @@
 // The diagnostics snapshot as one compact Markdown file. The app writes it
 // inside the engine's rootfs (`$DSH_HOME/dsh-app/diagnostics.md`) so the
-// agent there can read it by itself when the person reports a problem.
+// agent there can read it by itself when the person reports a problem. It is
+// also what a person reads in the export, so it follows the app language.
 
 import 'dart:convert';
 
+import '../l10n/l10n.dart';
 import '../state/app_info.dart';
 import 'diagnostics_bundle.dart';
 import 'diagnostics_channel.dart';
@@ -19,13 +21,22 @@ const diagnosticsSystemImeEvents = 12;
 /// longer worth reading. The zip export stays available for everything else.
 const diagnosticsMarkdownBytes = 16 * 1024;
 
+/// [zh] or its English [en] equivalent, following the app language.
+String _t(String zh, String en) => AppLocale.isEnglish ? en : zh;
+
 /// Renders [s]. Pure: tests build a snapshot and compare, secrets go through
 /// [redactDiagnostics] on the way out. The UTF-8 budget includes the notice.
 String diagnosticsMarkdown(DiagnosticsSnapshot s, {int maxBytes = diagnosticsMarkdownBytes}) {
   final b = StringBuffer()
-    ..writeln('# DSH Go 本机诊断')
+    ..writeln(_t('# DSH Go 本机诊断', '# DSH Go diagnostics'))  // l10n:keep zh half of the bilingual pair
     ..writeln()
-    ..writeln('> App 写在引擎里的环境快照，给排查问题用；已脱敏。生成时间：${_time(s.at)}。')
+    ..writeln(
+      _t(
+        '> App 写在引擎里的环境快照，给排查问题用；已脱敏。生成时间：${_time(s.at)}。',  // l10n:keep zh half of the bilingual pair
+        '> An environment snapshot the app writes into the engine for troubleshooting; redacted. '
+            'Generated: ${_time(s.at)}.',
+      ),
+    )
     ..writeln();
   _systemIme(b, s);
   _environment(b, s);
@@ -34,12 +45,16 @@ String diagnosticsMarkdown(DiagnosticsSnapshot s, {int maxBytes = diagnosticsMar
   _phone(b, s);
   _performance(b, s);
   _errors(b, s);
-  _log(b, '引擎日志（尾部）', s.engineLog, diagnosticsEngineLines);
-  _log(b, '失败前后的日志（尾部）', s.failureLog, diagnosticsFailureLines);
+  _log(b, _t('引擎日志（尾部）', 'Engine log (tail)'), s.engineLog, diagnosticsEngineLines);  // l10n:keep zh half of the bilingual pair
+  _log(b, _t('失败前后的日志（尾部）', 'Log around the failure (tail)'), s.failureLog, diagnosticsFailureLines);  // l10n:keep zh half of the bilingual pair
   final text = redactDiagnostics(b.toString());
   final bytes = utf8.encode(text);
   if (bytes.length <= maxBytes) return text;
-  const notice = '\n…（诊断文件过长，已截断；完整内容用 设置 → 诊断 的导出包）\n';
+  final notice = _t(
+    '\n…（诊断文件过长，已截断；完整内容用 设置 → 诊断 的导出包）\n',  // l10n:keep zh half of the bilingual pair
+    '\n... (diagnostics file too long, truncated; use the export bundle in Settings → Diagnostics for '
+        'the full content)\n',
+  );
   final noticeBytes = utf8.encode(notice);
   final contentBudget = maxBytes - noticeBytes.length;
   if (contentBudget < 0) return _utf8Prefix(noticeBytes, maxBytes);
@@ -62,15 +77,33 @@ void _systemIme(StringBuffer b, DiagnosticsSnapshot s) {
   final at = DateTime.fromMillisecondsSinceEpoch(evidence.capturedAt, isUtc: true);
   if (evidence.source == 'ohosWindowGeometry') {
     b
-      ..writeln('## 本应用键盘几何（手动导出，ohosWindowGeometry）')
+      ..writeln(_t('## 本应用键盘几何（手动导出，ohosWindowGeometry）', '## Keyboard geometry of this app (manual export, ohosWindowGeometry)'))  // l10n:keep zh half of the bilingual pair
       ..writeln('- capturedAt: ${at.toIso8601String()} · code: ${evidence.code} · events: ${evidence.events.length}')
-      ..writeln('- 仅本应用主窗口回调；最近120秒、最多64条；坐标与尺寸单位px。时间戳是回调收到时间，不是系统动作发生时间。')
-      ..writeln('- 不含输入内容或系统日志；不能据此推断其他窗口、完整浮动键盘轨迹或系统输入法内部状态。');
+      ..writeln(
+        _t(
+          '- 仅本应用主窗口回调；最近120秒、最多64条；坐标与尺寸单位px。时间戳是回调收到时间，不是系统动作发生时间。',  // l10n:keep zh half of the bilingual pair
+          '- Callbacks of this app\'s main window only; last 120 seconds, at most 64; coordinates and '
+              'sizes in px. A timestamp is when the callback was received, not when the system acted.',
+        ),
+      )
+      ..writeln(
+        _t(
+          '- 不含输入内容或系统日志；不能据此推断其他窗口、完整浮动键盘轨迹或系统输入法内部状态。',  // l10n:keep zh half of the bilingual pair
+          '- No typed content or system logs; it cannot show other windows, a complete floating '
+              'keyboard path, or the input method\'s internal state.',
+        ),
+      );
     if (evidence.events.isEmpty) {
-      b.writeln('- 没有可用记录；空记录或失败不能证明键盘行为正常。');
+      b.writeln(_t('- 没有可用记录；空记录或失败不能证明键盘行为正常。', '- No usable records; an empty capture or a failure does not prove the keyboard behaved normally.'));  // l10n:keep zh half of the bilingual pair
     } else {
       final recent = evidence.events.reversed.take(diagnosticsSystemImeEvents).toList().reversed;
-      b.writeln('- 最近${recent.length}条，ZIP保留完整有界记录；同毫秒条目按回调收到顺序排列：');
+      b.writeln(
+        _t(
+          '- 最近${recent.length}条，ZIP保留完整有界记录；同毫秒条目按回调收到顺序排列：',  // l10n:keep zh half of the bilingual pair
+          '- Most recent ${recent.length} events; the ZIP keeps the full bounded capture; entries in '
+              'the same millisecond are in callback order:',
+        ),
+      );
       for (final event in recent) {
         b.writeln('  - ${event.timestamp} ${event.event} geometry=${jsonEncode(event.geometry)}');
       }
@@ -104,70 +137,85 @@ void _environment(StringBuffer b, DiagnosticsSnapshot s) {
   final device = s.native.device;
   final manifest = s.native.manifest;
   b
-    ..writeln('## 环境')
-    ..writeln('- App：${_join([AppInfo.version, app['versionName'], app['versionCode']?.toString()])}')
-    ..writeln('- 设备：${_join([device['manufacturer'], device['brand'], device['model'], _android(device)], mono: true)}')
-    ..writeln('- 设备资源：${_join([_mb(device['memoryMb'], '内存'), _mb(device['freeStorageMb'], '剩余存储')])}')
-    ..writeln('- ABI：${st.abi ?? '—'}');
+    ..writeln(_t('## 环境', '## Environment'))  // l10n:keep zh half of the bilingual pair
+    ..writeln('- ${_t('App', 'App')}${_t('：', ': ')}${_join([AppInfo.version, app['versionName'], app['versionCode']?.toString()])}')
+    ..writeln(
+      '- ${_t('设备', 'Device')}${_t('：', ': ')}${_join([device['manufacturer'], device['brand'], device['model'], _android(device)], mono: true)}',  // l10n:keep zh half of the bilingual pair
+    )
+    ..writeln(
+      '- ${_t('设备资源', 'Device resources')}${_t('：', ': ')}'  // l10n:keep zh half of the bilingual pair
+      '${_join([_mb(device['memoryMb'], _t('内存', 'Memory')), _mb(device['freeStorageMb'], _t('剩余存储', 'Free storage'))])}',  // l10n:keep zh half of the bilingual pair
+    )
+    ..writeln('- ABI${_t('：', ': ')}${st.abi ?? '—'}');
   final display = device['display'];
   if (display is Map) {
     final d = {for (final e in display.entries) '${e.key}': e.value};
     b.writeln(
-      '- 显示：${_join([if (d['widthPx'] != null && d['heightPx'] != null) '${d['widthPx']}×${d['heightPx']}', if (d['densityDpi'] != null) '${d['densityDpi']}dpi', if (d['density'] != null) '${d['density']}×', if (d['fontScale'] != null) '字号 ${d['fontScale']}'])}',
+      '- ${_t('显示', 'Display')}${_t('：', ': ')}${_join([if (d['widthPx'] != null && d['heightPx'] != null) '${d['widthPx']}×${d['heightPx']}', if (d['densityDpi'] != null) '${d['densityDpi']}dpi', if (d['density'] != null) '${d['density']}×', if (d['fontScale'] != null) '${_t('字号', 'Font scale')} ${d['fontScale']}'])}',  // l10n:keep zh half of the bilingual pair
     );
   }
   if (manifest.isNotEmpty) {
     b.writeln(
-      '- 内置运行时：${_join([manifest['runtimeVersion'], manifest['dshVersion'], manifest['nodeVersion']], mono: true)}',
+      '- ${_t('内置运行时', 'Bundled runtime')}${_t('：', ': ')}${_join([manifest['runtimeVersion'], manifest['dshVersion'], manifest['nodeVersion']], mono: true)}',  // l10n:keep zh half of the bilingual pair
     );
   }
   b
     ..writeln(
-      '- 运行时状态：${st.phase.name} · 模式 ${st.mode.name}'
-      '${st.safeState.name != 'off' ? ' · 安全模式 ${st.safeState.name}${st.safeReason == null ? '' : '（${st.safeReason}）'}' : ''}'
-      '${st.strikes > 0 ? ' · 连续失败 ${st.strikes}' : ''}',
+      '- ${_t('运行时状态', 'Runtime state')}${_t('：', ': ')}${st.phase.name} · ${_t('模式', 'mode')} ${st.mode.name}'  // l10n:keep zh half of the bilingual pair
+      '${st.safeState.name != 'off' ? ' · ${_t('安全模式', 'safe mode')} ${st.safeState.name}${st.safeReason == null ? '' : _t('（${st.safeReason}）', ' (${st.safeReason})')}' : ''}'  // l10n:keep zh half of the bilingual pair
+      '${st.strikes > 0 ? ' · ${_t('连续失败', 'consecutive failures')} ${st.strikes}' : ''}',  // l10n:keep zh half of the bilingual pair
     )
     ..writeln(
-      '- 版本：内置 ${_short(st.bundledVersion)} · 已装 ${_short(st.installedVersion)} · DSH ${st.dshVersion ?? '—'} · Node ${st.nodeVersion ?? '—'}',
+      '- ${_t('版本', 'Versions')}${_t('：', ': ')}${_t('内置', 'bundled')} ${_short(st.bundledVersion)} · ${_t('已装', 'installed')} ${_short(st.installedVersion)} · DSH ${st.dshVersion ?? '—'} · Node ${st.nodeVersion ?? '—'}',  // l10n:keep zh half of the bilingual pair
     )
     ..writeln(
-      '- 启动方式：${st.currentExecutionMode ?? st.launchSelectedMode ?? (st.directEngineEnabled ? 'direct（未观测）' : 'proot')}'
-      '${st.launchFailureReason == null ? '' : ' · 最近失败 ${st.launchFailureReason}'}'
-      '${st.directEngineFallbackReason == null ? '' : ' · 回退 ${st.directEngineFallbackReason}'}',
+      '- ${_t('启动方式', 'Launch mode')}${_t('：', ': ')}${st.currentExecutionMode ?? st.launchSelectedMode ?? (st.directEngineEnabled ? _t('direct（未观测）', 'direct (unobserved)') : 'proot')}'  // l10n:keep zh half of the bilingual pair
+      '${st.launchFailureReason == null ? '' : ' · ${_t('最近失败', 'last failure')} ${st.launchFailureReason}'}'  // l10n:keep zh half of the bilingual pair
+      '${st.directEngineFallbackReason == null ? '' : ' · ${_t('回退', 'fallback')} ${st.directEngineFallbackReason}'}',  // l10n:keep zh half of the bilingual pair
     )
-    ..writeln('- 引擎地址：${st.baseUrl ?? '—'}（token 不回传）');
-  if (st.error case final error? when error.isNotEmpty) b.writeln('- 最近错误：$error');
-  if (st.networkBlocked) b.writeln('- 系统限制联网：${_time(st.networkBlockedAt ?? s.at)} 起');
+    ..writeln('- ${_t('引擎地址', 'Engine address')}${_t('：', ': ')}${st.baseUrl ?? '—'}${_t('（token 不回传）', ' (token not included)')}');  // l10n:keep zh half of the bilingual pair
+  if (st.error case final error? when error.isNotEmpty) {
+    b.writeln('- ${_t('最近错误', 'Last error')}${_t('：', ': ')}$error');  // l10n:keep zh half of the bilingual pair
+  }
+  if (st.networkBlocked) {
+    b.writeln('- ${_t('系统限制联网', 'Network blocked by the system')}${_t('：${_time(st.networkBlockedAt ?? s.at)} 起', ' from ${_time(st.networkBlockedAt ?? s.at)}')}');  // l10n:keep zh half of the bilingual pair
+  }
   b
     ..writeln()
-    ..writeln('## 设置')
+    ..writeln(_t('## 设置', '## Settings'))  // l10n:keep zh half of the bilingual pair
     ..writeln(
-      '- API Key：${s.settings.hasApiKey ? '已设置' : '未设置'} · 自定义服务商 ${s.settings.customProviderIds.length}'
-      ' · 主题 ${s.settings.themeMode.name} · 对话字号 ${s.settings.chatTextScale}',
+      '${_t('- API Key：', '- API Key: ')}${s.settings.hasApiKey ? _t('已设置', 'set') : _t('未设置', 'not set')} · ${_t('自定义服务商', 'custom providers')} ${s.settings.customProviderIds.length}'  // l10n:keep zh half of the bilingual pair
+      ' · ${_t('主题', 'theme')} ${s.settings.themeMode.name} · ${_t('对话字号', 'chat text size')} ${s.settings.chatTextScale}',  // l10n:keep zh half of the bilingual pair
     )
     ..writeln(
-      '- 自动起本机引擎 ${s.settings.autoStartLocal} · 自动批准命令 ${s.settings.autoApproveCommands}'
-      ' · 手机存储 ${s.settings.phoneStorage} · 完成后收起过程 ${s.settings.foldCompletedTurns}'
-      ' · 可视化回复 ${s.settings.visualReplies}',
+      '- ${_t('自动起本机引擎', 'Auto-start local engine')} ${s.settings.autoStartLocal} · ${_t('自动批准命令', 'auto-approve commands')} ${s.settings.autoApproveCommands}'  // l10n:keep zh half of the bilingual pair
+      ' · ${_t('手机存储', 'phone storage')} ${s.settings.phoneStorage} · ${_t('完成后收起过程', 'collapse finished turns')} ${s.settings.foldCompletedTurns}'  // l10n:keep zh half of the bilingual pair
+      ' · ${_t('可视化回复', 'visual replies')} ${s.settings.visualReplies}',  // l10n:keep zh half of the bilingual pair
     )
     ..writeln();
 }
 
 void _connection(StringBuffer b, DiagnosticsSnapshot s) {
-  b.writeln('## 连接');
+  b.writeln(_t('## 连接', '## Connection'));  // l10n:keep zh half of the bilingual pair
   final entries = s.connection.entries
       .where((e) => e.key != 'history' && e.value != null && '${e.value}'.isNotEmpty)
       .toList();
   if (entries.isEmpty) {
-    b.writeln('- 没有正在观察的连接');
+    b.writeln(_t('- 没有正在观察的连接', '- No connection being observed'));  // l10n:keep zh half of the bilingual pair
   } else {
     for (final e in entries) {
-      b.writeln('- ${e.key}：${e.value}');
+      b.writeln('- ${e.key}${_t('：', ': ')}${e.value}');
     }
   }
   final history = s.connection['history'];
   if (history is Map && history['events'] is List) {
-    b.writeln('- 已观察的连接历史（已丢弃 ${history['dropped']} 条；不代表观察间隙的完整时序）：');
+    b.writeln(
+      _t(
+        '- 已观察的连接历史（已丢弃 ${history['dropped']} 条；不代表观察间隙的完整时序）：',  // l10n:keep zh half of the bilingual pair
+        '- Observed connection history (${history['dropped']} dropped; not a complete order across '
+            'observation gaps):',
+      ),
+    );
     for (final event in (history['events'] as List).whereType<Map>()) {
       final fields = [
         '#${event['sequence']}',
@@ -189,30 +237,30 @@ void _connection(StringBuffer b, DiagnosticsSnapshot s) {
 }
 
 void _phone(StringBuffer b, DiagnosticsSnapshot s) {
-  b.writeln('## 手机操控（本机）');
+  b.writeln(_t('## 手机操控（本机）', '## Phone control (this device)'));  // l10n:keep zh half of the bilingual pair
   final phone = s.phone;
   if (!phone.ready) {
-    b.writeln('- 手机状态不可用');
+    b.writeln(_t('- 手机状态不可用', '- Phone status unavailable'));  // l10n:keep zh half of the bilingual pair
   } else {
     b
-      ..writeln('- 手机操控开关：${phone.enabled} · 桥接监听：${phone.bridgeListening}')
-      ..writeln('- 无障碍开关：${phone.a11y.enabled} · 服务已连接：${phone.a11y.serviceConnected}');
+      ..writeln('- ${_t('手机操控开关', 'Phone control')}${_t('：', ': ')}${phone.enabled} · ${_t('桥接监听', 'bridge listening')}${_t('：', ': ')}${phone.bridgeListening}')  // l10n:keep zh half of the bilingual pair
+      ..writeln('- ${_t('无障碍开关', 'Accessibility')}${_t('：', ': ')}${phone.a11y.enabled} · ${_t('服务已连接', 'service connected')}${_t('：', ': ')}${phone.a11y.serviceConnected}');  // l10n:keep zh half of the bilingual pair
   }
   b.writeln();
 }
 
 void _performance(StringBuffer b, DiagnosticsSnapshot s) {
-  b.writeln('## 性能');
+  b.writeln(_t('## 性能', '## Performance'));  // l10n:keep zh half of the bilingual pair
   final p = s.performance;
   if (p.isEmpty) {
-    b.writeln('- 没有采样');
+    b.writeln(_t('- 没有采样', '- No samples'));  // l10n:keep zh half of the bilingual pair
   } else {
     for (final e in p.entries) {
       final value = e.value;
       if (value is Map) {
-        b.writeln('- ${e.key}：${value.entries.map((x) => '${x.key}=${x.value}').join(' ')}');
+        b.writeln('- ${e.key}${_t('：', ': ')}${value.entries.map((x) => '${x.key}=${x.value}').join(' ')}');
       } else {
-        b.writeln('- ${e.key}：$value');
+        b.writeln('- ${e.key}${_t('：', ': ')}$value');
       }
     }
   }
@@ -222,25 +270,31 @@ void _performance(StringBuffer b, DiagnosticsSnapshot s) {
 void _evidence(StringBuffer b, DiagnosticsSnapshot s) {
   if (s.native.evidence.isEmpty) return;
   final evidence = diagnosticEvidenceFacts(s.native.evidence);
-  b.writeln('## App 故障证据（跨重启保留）');
-  b.writeln('- 可用性：${jsonEncode(evidence['availability'])}');
+  b.writeln(_t('## App 故障证据（跨重启保留）', '## App failure evidence (kept across restarts)'));  // l10n:keep zh half of the bilingual pair
+  b.writeln('- ${_t('可用性', 'Availability')}${_t('：', ': ')}${jsonEncode(evidence['availability'])}');  // l10n:keep zh half of the bilingual pair
   for (final key in ['processExits', 'appErrors', 'voiceStages']) {
     final rows = evidence[key];
     if (rows is! List) continue;
     final tail = rows.reversed.take(key == 'voiceStages' ? 8 : 3).toList().reversed;
     for (final row in tail) {
-      b.writeln('- $key：${jsonEncode(row)}');
+      b.writeln('- $key${_t('：', ': ')}${jsonEncode(row)}');
     }
   }
-  b.writeln('- 无记录或系统不提供记录，不代表没有发生故障；退出原因不等于完整崩溃堆栈。');
+  b.writeln(
+    _t(
+      '- 无记录或系统不提供记录，不代表没有发生故障；退出原因不等于完整崩溃堆栈。',  // l10n:keep zh half of the bilingual pair
+      '- No records, or the system not providing them, does not mean nothing failed; an exit reason '
+          'is not a full crash stack.',
+    ),
+  );
   b.writeln();
 }
 
 void _errors(StringBuffer b, DiagnosticsSnapshot s) {
   if (s.appErrors.isEmpty) return;
-  b.writeln('## 最近错误（App 内捕获）');
+  b.writeln(_t('## 最近错误（App 内捕获）', '## Recent errors (captured in the app)'));  // l10n:keep zh half of the bilingual pair
   for (final e in s.appErrors.reversed.take(diagnosticsErrorLines).toList().reversed) {
-    b.writeln('- ${_time(e.at)} · ${e.source.name}：${_firstLine(e.message)}');
+    b.writeln('- ${_time(e.at)} · ${e.source.name}${_t('：', ': ')}${_firstLine(e.message)}');
   }
   b.writeln();
 }
@@ -249,7 +303,12 @@ void _log(StringBuffer b, String title, List<String> lines, int maxLines) {
   if (lines.isEmpty) return;
   final tail = lines.length <= maxLines ? lines : lines.sublist(lines.length - maxLines);
   b
-    ..writeln('## $title（${lines.length} 行，取最后 ${tail.length} 行）')
+    ..writeln(
+      _t(
+        '## $title（${lines.length} 行，取最后 ${tail.length} 行）',  // l10n:keep zh half of the bilingual pair
+        '## $title (${lines.length} lines, last ${tail.length})',
+      ),
+    )
     ..writeln('```log')
     ..writeln(tail.join('\n'))
     ..writeln('```')

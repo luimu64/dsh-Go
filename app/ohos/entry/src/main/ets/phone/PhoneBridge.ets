@@ -5,6 +5,7 @@ import type { HostPhoneKey } from 'libdsh_host.so';
 import { NativeHostModule, loadNativeHost } from '../runtime/NativeHost';
 import { RuntimeChannelError } from '../runtime/RuntimeCore';
 import { PhoneEffects, PhoneEffectDenied, PhoneEffectResult } from './PhoneEffects';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 interface PhonePendingData { pending: boolean; foreground: boolean; nowMs: number; deadlineMs: number; }
 interface PhoneRequestData {
@@ -55,7 +56,7 @@ export class PhoneBridge {
 
   attach(enabled: boolean): Promise<Map<string, Object | null>> {
     if (!enabled) {
-      return Promise.reject(new RuntimeChannelError('ohos_phone_disabled', '手机工具尚未启用。'));
+      return Promise.reject(new RuntimeChannelError('ohos_phone_disabled', AppLanguage.pick('手机工具尚未启用。', 'Phone tools are not enabled.')));
     }
     if (this.pending !== null) return this.pending;
     const sequence = this.sequence;
@@ -71,7 +72,7 @@ export class PhoneBridge {
     this.host = host;
     const life = host.lifecycleSnapshot();
     if (sequence !== this.sequence || this.context() === null || life.available !== 1 || life.foreground !== 1) {
-      throw new RuntimeChannelError('ohos_phone_foreground', '请回到 DSH 前台启用手机工具。');
+      throw new RuntimeChannelError('ohos_phone_foreground', AppLanguage.pick('请回到 DSH 前台启用手机工具。', 'Return to DSH Go in the foreground to enable phone tools.'));
     }
     const current = host.phoneSnapshot();
     if (this.owner !== '' && current.available && current.bridgeGeneration === this.generation &&
@@ -83,10 +84,10 @@ export class PhoneBridge {
     const latest = host.lifecycleSnapshot();
     if (sequence !== this.sequence || this.context() === null || latest.engineGeneration !== life.engineGeneration ||
       latest.ownerGeneration !== life.ownerGeneration || latest.available !== 1 || latest.foreground !== 1) {
-      throw new RuntimeChannelError('ohos_phone_retired', '手机工具连接已变化，请重新启用。');
+      throw new RuntimeChannelError('ohos_phone_retired', AppLanguage.pick('手机工具连接已变化，请重新启用。', 'The phone tool connection changed. Enable it again.'));
     }
     const generation = host.phoneAttach(hash, life.engineGeneration, life.ownerGeneration);
-    if (generation <= 0) throw new RuntimeChannelError('ohos_phone_not_ready', '本机引擎尚未准备好手机工具连接。');
+    if (generation <= 0) throw new RuntimeChannelError('ohos_phone_not_ready', AppLanguage.pick('本机引擎尚未准备好手机工具连接。', 'The local engine is not ready for the phone tool connection yet.'));
     this.owner = owner; this.generation = generation; this.abilityGeneration = life.ownerGeneration;
     this.engineId = host.phoneSnapshot().engineId;
     return this.bootstrapMap();
@@ -95,7 +96,7 @@ export class PhoneBridge {
   private bootstrapMap(): Map<string, Object | null> {
     const baseUrl = this.host?.getState().baseUrl;
     if (typeof baseUrl !== 'string' || !/^http:\/\/127\.0\.0\.1:[0-9]{1,5}$/.test(baseUrl)) {
-      this.retire(); throw new RuntimeChannelError('ohos_phone_endpoint', '本机手机工具连接不可用。');
+      this.retire(); throw new RuntimeChannelError('ohos_phone_endpoint', AppLanguage.pick('本机手机工具连接不可用。', 'The local phone tool connection is unavailable.'));
     }
     return new Map<string, Object | null>([['v', 1], ['engineId', this.engineId],
       ['bridgeGeneration', this.generation], ['baseUrl', baseUrl], ['owner', this.owner]]);
@@ -110,7 +111,7 @@ export class PhoneBridge {
   check(key: HostPhoneKey): Map<string, Object | null> {
     this.checkScope(key);
     const raw = this.host?.phoneOperation('check', key);
-    if (typeof raw !== 'string') throw new RuntimeChannelError('ohos_phone_unknown', '手机等待状态不可用。');
+    if (typeof raw !== 'string') throw new RuntimeChannelError('ohos_phone_unknown', AppLanguage.pick('手机等待状态不可用。', 'Phone wait status is unavailable.'));
     const value = JSON.parse(raw) as PhonePendingData;
     return new Map<string, Object | null>([['pending', value.pending], ['foreground', value.foreground],
       ['nowMs', value.nowMs], ['deadlineMs', value.deadlineMs]]);
@@ -118,22 +119,22 @@ export class PhoneBridge {
 
   private checkScope(key: HostPhoneKey): void {
     if (this.host === null || this.owner === '' || key.engineId !== this.engineId || key.bridgeGeneration !== this.generation) {
-      throw new RuntimeChannelError('ohos_phone_retired', '手机操作已失效，请勿重试旧请求。');
+      throw new RuntimeChannelError('ohos_phone_retired', AppLanguage.pick('手机操作已失效，请勿重试旧请求。', 'This phone action is no longer valid. Do not retry the old request.'));
     }
   }
 
   private inspect(key: HostPhoneKey): PhoneRequestData {
     if (this.host === null || this.owner === '' || this.context() === null ||
       key.engineId !== this.engineId || key.bridgeGeneration !== this.generation) {
-      throw new RuntimeChannelError('ohos_phone_retired', '手机操作已失效，请勿重试旧请求。');
+      throw new RuntimeChannelError('ohos_phone_retired', AppLanguage.pick('手机操作已失效，请勿重试旧请求。', 'This phone action is no longer valid. Do not retry the old request.'));
     }
     const raw = this.host.phoneOperation('inspect', key);
-    if (typeof raw !== 'string') throw new RuntimeChannelError('ohos_phone_stale', '手机操作已取消、超时或派发。');
+    if (typeof raw !== 'string') throw new RuntimeChannelError('ohos_phone_stale', AppLanguage.pick('手机操作已取消、超时或派发。', 'The phone action was cancelled, timed out, or already dispatched.'));
     const request = JSON.parse(raw) as PhoneRequestData;
     if (request.engineId !== key.engineId || request.bridgeGeneration !== key.bridgeGeneration ||
       request.requestId !== key.requestId || typeof request.tool !== 'string' ||
       typeof request.args !== 'object' || request.args === null || Array.isArray(request.args)) {
-      throw new RuntimeChannelError('ohos_phone_request', '原生手机请求格式无效。');
+      throw new RuntimeChannelError('ohos_phone_request', AppLanguage.pick('原生手机请求格式无效。', 'The native phone request format is invalid.'));
     }
     return request;
   }
@@ -141,11 +142,11 @@ export class PhoneBridge {
   async execute(key: HostPhoneKey): Promise<Map<string, Object | null>> {
     const request = this.inspect(key);
     if (request.tool === 'mcp__phone__handoff') {
-      throw new RuntimeChannelError('ohos_phone_handoff', '交还操作需要当前窗口的用户继续确认。');
+      throw new RuntimeChannelError('ohos_phone_handoff', AppLanguage.pick('交还操作需要当前窗口的用户继续确认。', 'Handing over needs the user in the current window to confirm.'));
     }
-    if (this.active !== null) throw new RuntimeChannelError('ohos_phone_busy', '上一次手机系统操作尚未退出。');
+    if (this.active !== null) throw new RuntimeChannelError('ohos_phone_busy', AppLanguage.pick('上一次手机系统操作尚未退出。', 'The previous phone system action has not finished yet.'));
     const context = this.context();
-    if (context === null) throw new RuntimeChannelError('ohos_phone_foreground', '请回到 DSH 前台。');
+    if (context === null) throw new RuntimeChannelError('ohos_phone_foreground', AppLanguage.pick('请回到 DSH 前台。', 'Return to DSH Go in the foreground.'));
     const host = this.host as NativeHostModule;
     this.active = key.requestId;
     const sequence = this.sequence;
@@ -155,12 +156,12 @@ export class PhoneBridge {
       for (const name of Object.keys(request.args)) args.set(name, request.args[name]);
       result = await new PhoneEffects(context).execute(request.tool, args, (): void => {
         if (sequence !== this.sequence || this.context() !== context || host.phoneOperation('consume', key) !== true) {
-          throw new PhoneEffectDenied('cancelled_before_dispatch', '手机操作已取消、超时或不在前台，没有派发。');
+          throw new PhoneEffectDenied('cancelled_before_dispatch', AppLanguage.pick('手机操作已取消、超时或不在前台，没有派发。', 'The phone action was cancelled, timed out, or not in the foreground, so nothing was dispatched.'));
         }
       });
     } catch (_) {
       const consumed = host.phoneOperation('consumed', key);
-      result = failure(consumed !== false, 'native_effect_failed', '手机系统操作未返回可靠结果，不会自动重试。');
+      result = failure(consumed !== false, 'native_effect_failed', AppLanguage.pick('手机系统操作未返回可靠结果，不会自动重试。', 'The phone system action returned no reliable result and will not retry automatically.'));
     } finally {
       // Native finish below, not this JS flag, releases the single effect slot.
       this.active = null;
@@ -170,20 +171,20 @@ export class PhoneBridge {
 
   handoffContinue(key: HostPhoneKey): Map<string, Object | null> {
     const request = this.inspect(key);
-    if (request.tool !== 'mcp__phone__handoff') throw new RuntimeChannelError('ohos_phone_request', '此请求不是交还操作。');
+    if (request.tool !== 'mcp__phone__handoff') throw new RuntimeChannelError('ohos_phone_request', AppLanguage.pick('此请求不是交还操作。', 'This request is not a handoff.'));
     const host = this.host as NativeHostModule;
-    if (host.phoneOperation('consume', key) !== true) throw new RuntimeChannelError('ohos_phone_stale', '交还提示已失效。');
+    if (host.phoneOperation('consume', key) !== true) throw new RuntimeChannelError('ohos_phone_stale', AppLanguage.pick('交还提示已失效。', 'This handoff prompt is no longer valid.'));
     return this.finish(host, key, { status: 'succeeded', effect: 'none', evidence: 'user_confirmed',
-      dispatched: true, code: 'user_confirmed', message: '用户已回到 DSH 并确认继续。' });
+      dispatched: true, code: 'user_confirmed', message: AppLanguage.pick('用户已回到 DSH 并确认继续。', 'The user returned to DSH Go and confirmed continuing.') });
   }
 
   private finish(host: NativeHostModule, key: HostPhoneKey, supplied: PhoneEffectResult): Map<string, Object | null> {
     const consumed = host.phoneOperation('consumed', key);
     let result = supplied;
-    if (consumed === null) throw new RuntimeChannelError('ohos_phone_unknown', '手机动作状态未知，不会自动重试。');
-    if (supplied.dispatched !== consumed) result = failure(consumed === true, 'native_evidence_mismatch', '手机动作结果与原生派发记录不一致。');
+    if (consumed === null) throw new RuntimeChannelError('ohos_phone_unknown', AppLanguage.pick('手机动作状态未知，不会自动重试。', 'The phone action state is unknown and will not retry automatically.'));
+    if (supplied.dispatched !== consumed) result = failure(consumed === true, 'native_evidence_mismatch', AppLanguage.pick('手机动作结果与原生派发记录不一致。', 'The phone action result does not match the native dispatch record.'));
     if (host.phoneOperation('finish', key, resultJson(result)) !== true) {
-      throw new RuntimeChannelError('ohos_phone_stale', '手机动作回执已失效，不会自动重试。');
+      throw new RuntimeChannelError('ohos_phone_stale', AppLanguage.pick('手机动作回执已失效，不会自动重试。', 'The phone action receipt is no longer valid and will not retry automatically.'));
     }
     return resultMap(result);
   }

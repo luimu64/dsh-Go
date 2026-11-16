@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // dsh/voice / dsh/voice/events，沿用实际 Dart VoiceBridge 的方法、字节和 sessionId。
 // 录音只用公开 OH API；识别的 HMS 适配在单独文件，尚未用 HMS SDK / 真机核实。
 import common from '@ohos.app.ability.common';
@@ -68,7 +69,7 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
       this.handle(call, binding).then((value: Any): void => {
         try { result.success(value); } catch (_) { /* retired transport; never send a second reply */ }
       }).catch((error: Error): void => {
-        const failure = error instanceof VoiceFailure ? error : new VoiceFailure('audio', '语音操作未完成，请重试。', 100);
+        const failure = error instanceof VoiceFailure ? error : new VoiceFailure('audio', AppLanguage.pick('语音操作未完成，请重试。', 'The voice operation did not complete. Try again.'), 100);
         const details: Map<string, Any> | null = failure.code === 'pcm-source' ? null : new Map<string, Any>([['code', failure.voiceCode]]);
         try { result.error(failure.code, failure.message, details); } catch (_) {}
       });
@@ -186,10 +187,10 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
 
   private async permission(settings: boolean): Promise<string> {
     const ability = this.ability;
-    if (!ability || !VoicePlugin.foregroundAbilities.has(ability.getAbility())) throw new VoiceFailure('no_ability', '请回到应用前台后重试。', 9);
+    if (!ability || !VoicePlugin.foregroundAbilities.has(ability.getAbility())) throw new VoiceFailure('no_ability', AppLanguage.pick('请回到应用前台后重试。', 'Return to the app foreground and try again.'), 9);
     const binding = this.binding;
     const ui = ability.getAbility();
-    if (VoiceMicLease.permissionOpen) throw new VoiceFailure('busy', '麦克风权限窗口尚未关闭。', 8);
+    if (VoiceMicLease.permissionOpen) throw new VoiceFailure('busy', AppLanguage.pick('麦克风权限窗口尚未关闭。', 'The microphone permission dialog has not closed yet.'), 8);
     VoiceMicLease.permissionOpen = true;
     try {
       const context = ui.context;
@@ -213,28 +214,28 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
       return result.authResults[0] === -1 && result.dialogShownResults?.[0] === false ? 'blocked' : 'denied';
     } catch (error) {
       if (error instanceof VoiceFailure) throw error as Error;
-      throw new VoiceFailure('permission', '无法打开麦克风权限设置，请在系统设置中检查授权。', 9);
+      throw new VoiceFailure('permission', AppLanguage.pick('无法打开麦克风权限设置，请在系统设置中检查授权。', 'Could not open the microphone permission settings; check the authorization in system settings.'), 9);
     } finally { VoiceMicLease.permissionOpen = false; }
   }
 
   private async begin(call: MethodCall, recorder: boolean): Promise<void> {
     const binding = this.binding; const ability = this.ability;
     if (!binding || !ability || !VoicePlugin.foregroundAbilities.has(ability.getAbility())) {
-      throw new VoiceFailure('no_ability', '请回到应用前台后重试。', 5);
+      throw new VoiceFailure('no_ability', AppLanguage.pick('请回到应用前台后重试。', 'Return to the app foreground and try again.'), 5);
     }
     const id: Any = call.argument('sessionId');
     if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) {
-      throw new VoiceFailure('arguments', '缺少有效的语音会话编号。', 5);
+      throw new VoiceFailure('arguments', AppLanguage.pick('缺少有效的语音会话编号。', 'A valid voice session ID is missing.'), 5);
     }
     let seconds = 60;
     if (recorder) {
       const max: Any = call.argument('maxSeconds');
-      if (typeof max !== 'number' || !Number.isSafeInteger(max)) throw new VoiceFailure('arguments', '录音时长无效。', 100);
+      if (typeof max !== 'number' || !Number.isSafeInteger(max)) throw new VoiceFailure('arguments', AppLanguage.pick('录音时长无效。', 'The recording duration is invalid.'), 100);
       seconds = Math.max(1, Math.min(600, max));
     } else {
       const language: Any = call.argument('language');
       if (language !== undefined && language !== null && language !== 'zh-CN') {
-        throw new VoiceFailure('language', '系统语音识别仅支持中文普通话（zh-CN）。', 12);
+        throw new VoiceFailure('language', AppLanguage.pick('系统语音识别仅支持中文普通话（zh-CN）。', 'System speech recognition only supports Mandarin Chinese (zh-CN).'), 12);
       }
     }
     VoiceMicLease.assertDictationAvailable();
@@ -248,7 +249,7 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
       this.physicalLease = lease;
       if (previous) await this.cancelLease(previous);
       if (!this.live(lease)) throw retiredVoice();
-      if (!await this.permitted(ability.getAbility().context)) throw new VoiceFailure('permission', '请先允许使用麦克风。', 9);
+      if (!await this.permitted(ability.getAbility().context)) throw new VoiceFailure('permission', AppLanguage.pick('请先允许使用麦克风。', 'Allow microphone access first.'), 9);
       if (!this.live(lease)) throw retiredVoice();
       const emit = (notice: VoiceNotice): void => this.deliver(lease, notice);
       const current = (): boolean => this.live(lease);
@@ -261,7 +262,7 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
       try { await this.cancelLease(lease); } catch (_) {}
       if (this.session === lease) this.session = undefined;
       if (error instanceof VoiceFailure) throw error as Error;
-      throw new VoiceFailure(recorder ? 'audio' : 'recognizer', '无法启动语音服务，请检查权限或稍后重试。', recorder ? 100 : 5);
+      throw new VoiceFailure(recorder ? 'audio' : 'recognizer', AppLanguage.pick('无法启动语音服务，请检查权限或稍后重试。', 'Could not start the voice service; check permissions or try again later.'), recorder ? 100 : 5);
     }
   }
 
@@ -296,7 +297,7 @@ export default class VoicePlugin implements FlutterPlugin, AbilityAware {
       case 'streamingPcm': this.streamingPcm(call, binding); return null;
       case 'stop': return await this.stop();
       case 'cancel': await this.cancel(); return null;
-      default: throw new VoiceFailure('ohos_unsupported', '此语音操作尚不支持。', 5);
+      default: throw new VoiceFailure('ohos_unsupported', AppLanguage.pick('此语音操作尚不支持。', 'This voice operation is not supported yet.'), 5);
     }
   }
 }

@@ -48,6 +48,7 @@ class WebViewPage extends StatefulWidget {
     this.root = false,
     this.link,
     this.onSession,
+    this.startScript,
   });
 
   final Uri url;
@@ -96,6 +97,10 @@ class WebViewPage extends StatefulWidget {
 
   /// Lets the caller act on the live page (open a target, fill the composer).
   final DshWebLink? link;
+
+  /// JavaScript run when the page starts loading, before its own scripts
+  /// where the platform allows it (the DSH Web locale bridge).
+  final String? startScript;
 
   /// With [dshWeb]: the conversation on screen, whenever it changes (from
   /// the client's stored selection; null for none).
@@ -660,6 +665,16 @@ class _WebViewPageState extends State<WebViewPage> {
     _lifecycle = AppLifecycleListener(onHide: _onHide, onShow: _onShow);
   }
 
+  @override
+  void didUpdateWidget(WebViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.startScript != oldWidget.startScript && !_gone) {
+      if (widget.startScript case final script?) {
+        unawaited(_controller.runJavaScript(script).catchError((_) {}));
+      }
+    }
+  }
+
   /// A new WebView for [WebViewPage.url].
   void _open() {
     _files.invalidate();
@@ -688,6 +703,9 @@ class _WebViewPageState extends State<WebViewPage> {
                 _loading = true;
                 _error = null;
               });
+              if (widget.startScript case final script?) {
+                unawaited(controller.runJavaScript(script).catchError((_) {}));
+              }
             },
             onProgress: (p) {
               if (!mounted || _gone || controller != _controller) return;
@@ -696,6 +714,9 @@ class _WebViewPageState extends State<WebViewPage> {
             onPageFinished: (_) {
               if (!mounted || _gone || controller != _controller) return;
               _set(() => _loading = false);
+              if (widget.startScript case final script?) {
+                unawaited(controller.runJavaScript(script).catchError((_) {}));
+              }
               _appliedInsets = null;
               _applyInsets();
               if (widget._adapt) unawaited(_injectPhoneLayout());

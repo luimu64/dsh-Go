@@ -13,6 +13,7 @@ import { LinuxRunRequest } from './LinuxControl';
 import type { LinuxProxyConfiguration } from './LinuxControl';
 import { ManagedSkillOwner } from './ManagedSkillService';
 import { PhoneBridge } from '../phone/PhoneBridge';
+import { AppLanguage } from '../i18n/AppLanguage';
 import type { HostPhoneKey } from 'libdsh_host.so';
 
 
@@ -89,23 +90,23 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       hilog.warn(0x3F00, 'DshRuntime', '%{public}s failed with %{public}s after %{public}d ms', call.method,
         error instanceof RuntimeChannelError ? error.code : 'ohos_runtime_error', Date.now() - began);
       if (error instanceof RuntimeChannelError) result.error(error.code, error.message, null);
-      else result.error('ohos_runtime_error', '鸿蒙本机运行时操作失败，请查看状态或重新打开 App。', null);
+      else result.error('ohos_runtime_error', AppLanguage.pick('鸿蒙本机运行时操作失败，请查看状态或重新打开 App。', 'The HarmonyOS local runtime action failed. Check status or reopen the app.'), null);
     });
   }
 
   private async handle(call: MethodCall, result: MethodResult): Promise<void> {
-    if (this.controller === null) throw new RuntimeChannelError('ohos_detached', '运行时通道已解除连接。');
+    if (this.controller === null) throw new RuntimeChannelError('ohos_detached', AppLanguage.pick('运行时通道已解除连接。', 'The runtime channel is disconnected.'));
     const controller = this.controller;
     if (call.method === 'getIdleDiagnostics') { result.success(controller.getIdleDiagnostics()); return; }
     if (call.method === 'setIdleDiagnosticsEnabled') {
       const enabled: Any = call.argument('enabled');
-      if (typeof enabled !== 'boolean') throw new RuntimeChannelError('ohos_idle_diagnostics_arguments', '空闲诊断开关必须是布尔值。');
+      if (typeof enabled !== 'boolean') throw new RuntimeChannelError('ohos_idle_diagnostics_arguments', AppLanguage.pick('空闲诊断开关必须是布尔值。', 'The idle diagnostics switch must be a boolean.'));
       result.success(controller.setIdleDiagnosticsEnabled(enabled)); return;
     }
     if (call.method === 'guestRoot') { result.success(controller.paths.guestRoot); return; }
     if (call.method === 'reopenApp') {
       const ability = this.ability?.getAbility();
-      if (ability === undefined) throw new RuntimeChannelError('ohos_no_ability', '请先回到应用窗口再重新打开 App。');
+      if (ability === undefined) throw new RuntimeChannelError('ohos_no_ability', AppLanguage.pick('请先回到应用窗口再重新打开 App。', 'Return to the app window before reopening the app.'));
       try { this.phone?.retire(); } finally { await controller.stop(); }
       const info = ability.context.abilityInfo;
       try {
@@ -117,7 +118,7 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       result.success(null); return;
     }
     if (call.method === 'installManagedSkill') {
-      if (this.owner === null) throw new RuntimeChannelError('ohos_detached', '运行时通道已解除连接。');
+      if (this.owner === null) throw new RuntimeChannelError('ohos_detached', AppLanguage.pick('运行时通道已解除连接。', 'The runtime channel is disconnected.'));
       const args = new Map<string, Object | null>();
       for (const key of ['requestId', 'expectedRoot', 'expectedToken', 'expectedGeneration', 'name', 'files']) {
         args.set(key, (call.argument(key) ?? null) as Object | null);
@@ -133,7 +134,7 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       result.success(null); return;
     }
     if (call.method === 'phoneAttach') {
-      if (this.phone === null) throw new RuntimeChannelError('ohos_detached', '手机工具通道已解除连接。');
+      if (this.phone === null) throw new RuntimeChannelError('ohos_detached', AppLanguage.pick('手机工具通道已解除连接。', 'The phone tool channel is disconnected.'));
       result.success(await this.phone.attach(call.argument('enabled') === true)); return;
     }
     if (call.method === 'phoneRetire') {
@@ -144,13 +145,13 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       result.success(null); return;
     }
     if (call.method === 'phoneExecute' || call.method === 'phoneHandoffContinue' || call.method === 'phoneCancel' || call.method === 'phoneCheck') {
-      if (this.phone === null) throw new RuntimeChannelError('ohos_detached', '手机工具通道已解除连接。');
+      if (this.phone === null) throw new RuntimeChannelError('ohos_detached', AppLanguage.pick('手机工具通道已解除连接。', 'The phone tool channel is disconnected.'));
       const engine: Any = call.argument('engineId'); const generation: Any = call.argument('bridgeGeneration');
       const id: Any = call.argument('requestId'); const nonce: Any = call.argument('executionNonce');
       if (typeof engine !== 'string' || typeof generation !== 'number' || !Number.isSafeInteger(generation) ||
         generation <= 0 || engine.length === 0 || engine.length > 128 || typeof id !== 'string' || typeof nonce !== 'string' ||
         id.length === 0 || id.length > 64 || nonce.length === 0 || nonce.length > 64) {
-        throw new RuntimeChannelError('ohos_phone_request', '手机操作身份格式无效。');
+        throw new RuntimeChannelError('ohos_phone_request', AppLanguage.pick('手机操作身份格式无效。', 'The phone action identity format is invalid.'));
       }
       const key: HostPhoneKey = { engineId: engine, bridgeGeneration: generation, requestId: id, executionNonce: nonce };
       if (call.method === 'phoneExecute') result.success(await this.phone.execute(key));
@@ -159,10 +160,18 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       else result.success(this.phone.handoffContinue(key));
       return;
     }
+    if (call.method === 'setAppLanguage') {
+      const language: Any = call.argument('language');
+      if (typeof language !== 'string' || (language !== 'en' && language !== 'zh' && language !== 'zh-CN')) {
+        throw new RuntimeChannelError('ohos_app_language', AppLanguage.pick('语言只能是 en 或 zh。', 'The language must be en or zh.'));
+      }
+      await controller.setAppLanguage(language);
+      result.success(null); return;
+    }
     if (call.method === 'reset') {
       const keep: Any = call.argument('keep') ?? [];
       const reinstall: Any = call.argument('reinstall') ?? false;
-      if (!Array.isArray(keep) || typeof reinstall !== 'boolean') throw new RuntimeChannelError('ohos_reset_arguments', '重置参数无效。');
+      if (!Array.isArray(keep) || typeof reinstall !== 'boolean') throw new RuntimeChannelError('ohos_reset_arguments', AppLanguage.pick('重置参数无效。', 'The reset arguments are invalid.'));
       try { this.phone?.retire(); } finally { await controller.reset(keep as string[], reinstall); }
       return;
     }
@@ -173,21 +182,21 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
     if (call.method === 'getLinuxStatus') { result.success(await controller.getLinuxStatus()); return; }
     if (call.method === 'setLinuxEnabled') {
       const enabled: Any = call.argument('enabled');
-      if (typeof enabled !== 'boolean') throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 开关必须是布尔值。');
+      if (typeof enabled !== 'boolean') throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 开关必须是布尔值。', 'The Linux switch must be a boolean.'));
       result.success(await controller.setLinuxEnabled(enabled)); return;
     }
     if (call.method === 'setLinuxProxy') {
       const raw: Any = call.argument('proxy');
-      if (!(raw instanceof Map)) throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 代理参数无效。');
+      if (!(raw instanceof Map)) throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 代理参数无效。', 'The Linux proxy arguments are invalid.'));
       const values = raw as Map<string, Object>;
       values.forEach((value: Object, key: string): void => {
         if (!['mode', 'httpProxy', 'httpsProxy', 'noProxy'].includes(key) || typeof value !== 'string') {
-          throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 代理参数无效。');
+          throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 代理参数无效。', 'The Linux proxy arguments are invalid.'));
         }
       });
       const mode = values.get('mode');
       if (typeof mode !== 'string' || !['inherit', 'direct', 'manual'].includes(mode)) {
-        throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 代理模式无效。');
+        throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 代理模式无效。', 'The Linux proxy mode is invalid.'));
       }
       const proxy: LinuxProxyConfiguration = { mode: mode };
       if (values.has('httpProxy')) proxy.httpProxy = values.get('httpProxy') as string;
@@ -205,11 +214,11 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       if (typeof instance !== 'string' || typeof attempt !== 'string' || typeof id !== 'number' ||
           !Number.isSafeInteger(id) || id < 1 || !Array.isArray(argv) || typeof cwd !== 'string' ||
           typeof input !== 'string' || !(env instanceof Map)) {
-        throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 作业参数或请求身份无效。');
+        throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 作业参数或请求身份无效。', 'The Linux job arguments or request identity are invalid.'));
       }
       const environmentFields: string[] = [];
       (env as Map<string, Object>).forEach((value: Object, key: string): void => {
-        if (typeof key !== 'string' || typeof value !== 'string') throw new RuntimeChannelError('ohos_linux_arguments', 'Linux 环境值必须是字符串。');
+        if (typeof key !== 'string' || typeof value !== 'string') throw new RuntimeChannelError('ohos_linux_arguments', AppLanguage.pick('Linux 环境值必须是字符串。', 'Linux environment values must be strings.'));
         environmentFields.push(JSON.stringify(key) + ':' + JSON.stringify(value));
       });
       // JSON parsing creates own data properties, including a legal __proto__
@@ -257,7 +266,9 @@ export class RuntimePlugin implements FlutterPlugin, MethodCallHandler, StreamHa
       case 'setDirectEngine': case 'requestStorage':
       case 'openAllFilesAccess': case 'batteryExempt': case 'requestBatteryExempt': case 'backgroundSettings':
       case 'openBackgroundSettings': case 'openVendorSettings': case 'voiceModelLine':
-        throw new RuntimeChannelError('ohos_unsupported', `鸿蒙本机尚不支持 ${call.method}；文件请用系统选择器，其他任务可交给已连接的电脑。`);
+        throw new RuntimeChannelError('ohos_unsupported', AppLanguage.pick(
+          `鸿蒙本机尚不支持 ${call.method}；文件请用系统选择器，其他任务可交给已连接的电脑。`,
+          `The HarmonyOS local host does not support ${call.method} yet. Use the system file picker for files; other tasks can go to a connected computer.`));
       default: result.notImplemented();
     }
   }

@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.ImageObservation
 import io.github.ccch1mneyyy.dsh_app.phone.a11y.VisualFrame
@@ -34,13 +35,19 @@ internal class BackgroundVisualObservation private constructor(
 }
 
 /** Only fixed peer values become agent text; an unknown/missing field preserves the old reply. */
-internal fun backgroundVisualNote(value: Any?): String = when (value) {
+internal fun backgroundVisualNote(value: Any?): String = backgroundVisualNote(PhoneUiText.DEFAULT, value)
+
+/**
+ * The same note in the app language. The Chinese literal stays the fallback a pure JVM caller and
+ * a missing key see; the resolver is never last so call sites cannot turn it into a trailing lambda.
+ */
+internal fun backgroundVisualNote(ui: PhoneUiText, value: Any?): String = when (value) {
     // l10n:keep agent action protocol
-    "changed" -> "；与最近观察相比，画面有明显变化（不表示操作成功）"
+    "changed" -> ui.get("phone_note_bg_visual_changed", "；与最近观察相比，画面有明显变化（不表示操作成功）")
     // l10n:keep agent action protocol
-    "unchanged" -> "；与最近观察相比，未检测到明显画面变化（不表示操作失败，请勿据此重试）"
+    "unchanged" -> ui.get("phone_note_bg_visual_unchanged", "；与最近观察相比，未检测到明显画面变化（不表示操作失败，请勿据此重试）")
     // l10n:keep agent action protocol
-    "unavailable" -> "；无法与最近观察比较画面（不表示操作失败，请勿据此重试）"
+    "unavailable" -> ui.get("phone_note_bg_visual_unavailable", "；无法与最近观察比较画面（不表示操作失败，请勿据此重试）")
     else -> ""
 }
 

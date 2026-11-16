@@ -3,6 +3,7 @@ import abilityAccessCtrl from '@ohos.abilityAccessCtrl';
 import notificationManager from '@ohos.notificationManager';
 import reminderAgentManager from '@ohos.reminderAgentManager';
 import { BusinessError } from '@ohos.base';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export class PhoneReminderDenied extends Error {
   code: string;
@@ -17,16 +18,16 @@ export class PhoneReminderRefused extends Error {
 }
 
 function refusal(code: number): string | null {
-  if (code === 201) return '系统没有授予提醒权限；这个版本可能还没开通系统代理提醒。';
-  if (code === 1700001) return '请先在系统中允许通知，再设置提醒。';
-  if (code === 1700002) return '系统没有接受提醒：有效提醒已达上限，或这个版本还没开通系统代理提醒。';
+  if (code === 201) return AppLanguage.pick('系统没有授予提醒权限；这个版本可能还没开通系统代理提醒。', 'The system did not grant reminder permission; this build may not enable agent reminders.');
+  if (code === 1700001) return AppLanguage.pick('请先在系统中允许通知，再设置提醒。', 'Allow notifications in system settings before setting a reminder.');
+  if (code === 1700002) return AppLanguage.pick('系统没有接受提醒：有效提醒已达上限，或这个版本还没开通系统代理提醒。', 'The system did not accept the reminder: the limit of valid reminders was reached, or this build does not enable agent reminders.');
   return null;
 }
 
 function integer(args: Map<string, Object>, key: string, low: number, high: number): number {
   const value: Object | undefined = args.get(key);
   if (typeof value !== 'number' || !Number.isInteger(value) || value < low || value > high) {
-    throw new PhoneReminderDenied('invalid_arguments', `${key} 超出有效范围。`);
+    throw new PhoneReminderDenied('invalid_arguments', AppLanguage.pick(`${key} 超出有效范围。`, `${key} is outside the valid range.`));
   }
   return value;
 }
@@ -42,19 +43,19 @@ export class PhoneReminders {
     const previous = PhoneReminders.tail;
     const pending = previous.then(async (): Promise<void> => {
       if (!canIUse('SystemCapability.Notification.ReminderAgent')) {
-        throw new PhoneReminderDenied('unsupported', '当前设备没有系统代理提醒能力。');
+        throw new PhoneReminderDenied('unsupported', AppLanguage.pick('当前设备没有系统代理提醒能力。', 'This device does not support system agent reminders.'));
       }
       const access = abilityAccessCtrl.createAtManager();
       const grant = await access.checkAccessToken(context.applicationInfo.accessTokenId, 'ohos.permission.PUBLISH_AGENT_REMINDER');
       if (grant !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) {
-        throw new PhoneReminderDenied('permission_denied', '系统提醒权限尚未授予；请检查应用签名和提醒权限。');
+        throw new PhoneReminderDenied('permission_denied', AppLanguage.pick('系统提醒权限尚未授予；请检查应用签名和提醒权限。', 'Reminder permission is not granted; check the app signature and reminder permission.'));
       }
       if (!await notificationManager.isNotificationEnabled()) {
-        throw new PhoneReminderDenied('permission_denied', '请先在系统中允许通知，再设置提醒。');
+        throw new PhoneReminderDenied('permission_denied', AppLanguage.pick('请先在系统中允许通知，再设置提醒。', 'Allow notifications in system settings before setting a reminder.'));
       }
       const slot = await notificationManager.getSlot(notificationManager.SlotType.SERVICE_INFORMATION);
       if (slot && (slot.enabled === false || slot.notificationLevel === notificationManager.SlotLevel.LEVEL_NONE)) {
-        throw new PhoneReminderDenied('permission_denied', '服务通知通道已关闭，不能设置提醒。');
+        throw new PhoneReminderDenied('permission_denied', AppLanguage.pick('服务通知通道已关闭，不能设置提醒。', 'The service notification channel is off, so reminders cannot be set.'));
       }
       // Existing IDs survive an Ability/process restart. Never overwrite or cancel
       // another valid reminder, including those created outside this phone tool.
@@ -68,7 +69,7 @@ export class PhoneReminders {
       while (used.has(id)) id = id >= 2147483646 ? 1500000000 : id + 1;
       request.notificationId = id;
       PhoneReminders.nextNotificationId = id >= 2147483646 ? 1500000000 : id + 1;
-      const closeTitle = await context.resourceManager.getStringByName('phone_reminder_close');
+      const closeTitle = AppLanguage.pick('关闭', 'Close');
       request.actionButton = [{ title: closeTitle, type: reminderAgentManager.ActionButtonType.ACTION_BUTTON_TYPE_CLOSE }];
       // Recheck the original native permit after every asynchronous preparation,
       // immediately before the one real system side effect.
@@ -90,7 +91,7 @@ export class PhoneReminders {
   private static request(args: Map<string, Object>): reminderAgentManager.ReminderRequest {
     const kind: Object | undefined = args.get('kind');
     const message: Object | undefined = args.get('message');
-    if (message !== undefined && typeof message !== 'string') throw new PhoneReminderDenied('invalid_arguments', '提醒标签必须是文字。');
+    if (message !== undefined && typeof message !== 'string') throw new PhoneReminderDenied('invalid_arguments', AppLanguage.pick('提醒标签必须是文字。', 'The reminder label must be text.'));
     const content = typeof message === 'string' ? message : '';
     if (kind === 'alarm') {
       const hour = integer(args, 'hour', 0, 23);
@@ -98,11 +99,11 @@ export class PhoneReminders {
       const rawDays: Object | undefined = args.get('days');
       const days: number[] = [];
       if (rawDays !== undefined) {
-        if (!Array.isArray(rawDays)) throw new PhoneReminderDenied('invalid_arguments', '重复日期必须是星期列表。');
+        if (!Array.isArray(rawDays)) throw new PhoneReminderDenied('invalid_arguments', AppLanguage.pick('重复日期必须是星期列表。', 'Repeat days must be a list of weekdays.'));
         const values: Object[] = rawDays as Object[];
         for (const value of values) {
           if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 7) {
-            throw new PhoneReminderDenied('invalid_arguments', '重复日期须为 1–7（周一至周日）。');
+            throw new PhoneReminderDenied('invalid_arguments', AppLanguage.pick('重复日期须为 1–7（周一至周日）。', 'Repeat days must be 1 to 7 (Monday to Sunday).'));
           }
           if (!days.includes(value)) days.push(value);
         }
@@ -110,7 +111,7 @@ export class PhoneReminders {
       days.sort((a: number, b: number): number => a - b);
       const alarm: reminderAgentManager.ReminderRequestAlarm = {
         reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_ALARM,
-        hour, minute, daysOfWeek: days, title: 'DSH 闹钟', content,
+        hour, minute, daysOfWeek: days, title: AppLanguage.pick('DSH 闹钟', 'DSH alarm'), content,
         slotType: notificationManager.SlotType.SERVICE_INFORMATION
       };
       return alarm;
@@ -118,7 +119,7 @@ export class PhoneReminders {
     const seconds = integer(args, 'seconds', 1, 86400);
     const timer: reminderAgentManager.ReminderRequestTimer = {
       reminderType: reminderAgentManager.ReminderType.REMINDER_TYPE_TIMER,
-      triggerTimeInSeconds: seconds, title: 'DSH 计时器', content,
+      triggerTimeInSeconds: seconds, title: AppLanguage.pick('DSH 计时器', 'DSH timer'), content,
       slotType: notificationManager.SlotType.SERVICE_INFORMATION
     };
     return timer;

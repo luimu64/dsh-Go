@@ -8,6 +8,7 @@ const storage: LocalStorage = new LocalStorage();
 @Component
 struct CompanionCard {
   @LocalStorageProp('ready') ready: boolean = false;
+  @LocalStorageProp('language') language: string = 'zh';
   @LocalStorageProp('name') name: string = '';
   @LocalStorageProp('nameDefault') nameDefault: boolean = true;
   @LocalStorageProp('status') status: string = '';
@@ -23,9 +24,13 @@ struct CompanionCard {
     return $r('app.media.companion_widget_idle');
   }
 
-  private statusText(): ResourceStr {
-    if (this.statusDefault === 'asleep') return $r('app.string.companion_widget_asleep');
-    if (this.statusDefault === 'waiting') return $r('app.string.companion_widget_waiting');
+  private text(zh: string, en: string): string {
+    return this.language === 'en' ? en : zh;
+  }
+
+  private statusText(): string {
+    if (this.statusDefault === 'asleep') return this.text('睡着了', 'Asleep');
+    if (this.statusDefault === 'waiting') return this.text('在小屋里等你', 'Waiting for you in the room');
     return this.status;
   }
 
@@ -38,7 +43,7 @@ struct CompanionCard {
         .interpolation(ImageInterpolation.None)
       Column() {
         Row() {
-          Text(this.nameDefault ? $r('app.string.companion_widget_name') : this.name)
+          Text(this.nameDefault ? this.text('鲸鱼娘', 'Whale girl') : this.name)
             .fontSize(15)
             .fontWeight(FontWeight.Bold)
             .fontColor('#FFF2FBFF')
@@ -55,7 +60,7 @@ struct CompanionCard {
         }
         .width('100%')
         // Until the saved room is read, only her name and the waiting line show.
-        Text(this.ready ? this.statusText() : $r('app.string.companion_widget_waiting'))
+        Text(this.statusText())
           .fontSize(12)
           .fontColor('#FF9FD8F2')
           .maxLines(1)

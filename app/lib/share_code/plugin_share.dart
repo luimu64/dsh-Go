@@ -4,6 +4,8 @@
 
 import 'package:dsh_client/dsh_client.dart';
 
+import '../l10n/l10n.dart';
+
 import 'share_codec.dart';
 import 'share_link.dart';
 import 'share_models.dart';
@@ -13,8 +15,9 @@ import 'share_net.dart';
 /// can't travel in a link (a git URL that isn't https).
 SharedPlugin? sharedPluginFromMarket(MarketPlugin plugin, {MarketVersion? version}) {
   final v = version ?? plugin.latest;
-  final title = plugin.displayTitle();
-  final summary = plugin.displayDescription();
+  final language = AppLocale.current.languageCode;
+  final title = plugin.displayTitle(language);
+  final summary = plugin.displayDescription(language);
   switch (v.source) {
     case MarketNpmSource():
       if (!isPackageName(plugin.name) || !isExactSemver(v.version)) return null;
@@ -53,8 +56,8 @@ SharedPlugin? sharedPluginFromBundle(PluginBundle bundle) => SharedPlugin.fromIn
   name: bundle.name,
   source: bundle.source,
   version: bundle.version,
-  title: bundle.title(),
-  summary: bundle.summary(),
+  title: bundle.title(AppLocale.current.languageCode),
+  summary: bundle.summary(AppLocale.current.languageCode),
 );
 
 /// Adds the registry's integrity (and the publisher as author when none is

@@ -82,7 +82,7 @@ host.emitEvent('session/event', session, event)
 | `node scripts/sync-bridge.mjs` | 桥接 `runtime/bridge/dsh-go-bridge/lib/native/{limits,util,effects,manifest,capabilities}.js` 改了 |
 | `node scripts/sync-messages.mjs` | App 的 `view` / `plugview` ARB 改了 |
 | `node scripts/gen-parity.mjs` | 改了 `lib/view-check.js`（App 解析器改了之后）；审过差异再提交 |
-| `node scripts/sync-skill.mjs` | 以上任何一项，或 `skill/` 改了：重建 App 自带的 `dsh-go-plugin` 技能 |
+| `node scripts/sync-skill.mjs` | 以上任何一项，或 `skill/` 改了：重建 App 自带的 `dsh-go-plugin` 技能。`skill/SKILL.md` 是中文默认版，`skill/SKILL.en.md` 是英文版，两者一起改 |
 | `scripts/wire-check.sh` | 想用真实桥接报文验 schema：协议集成测试和示例端到端都走录制代理，逐条校验 |
 
 `npm test`（`node --test`）会检查以上产物是否过期。类型检查需要 `npm install`（只装 devDependency `typescript`）。

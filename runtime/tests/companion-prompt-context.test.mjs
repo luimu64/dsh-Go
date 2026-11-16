@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createCompanionPromptContext, validatePromptContext } from '../bridge/dsh-go-bridge/lib/companion/prompt-context.js';
-import { renderCompanionProfile, companionFullRules } from '../bridge/dsh-go-bridge/lib/companion/full-persona.js';
+import { renderCompanionProfile, companionFullRules, companionFullRulesFor } from '../bridge/dsh-go-bridge/lib/companion/full-persona.js';
 
 const START = Date.UTC(2026, 10, 8, 5, 20);
 const profile = { persona: 'Literal {{unknown}}', name: '小鲸', callMe: '阿明', moves: '' };
@@ -20,7 +20,7 @@ function fixture() {
   // lifecycle and Inbox behavior are covered with real pinned objects below.
   const service = { ...raw,
     prepare: (input, ...args) => raw.prepare(agent(input.sessionId), input, ...args),
-    info: id => raw.info(agent(id)), profile: id => raw.profile(agent(id)), render: id => raw.render(agent(id)),
+    info: id => raw.info(agent(id)), profile: id => raw.profile(agent(id)), language: id => raw.language(agent(id)), render: id => raw.render(agent(id)),
     claim: (id, ...args) => raw.claim(agent(id), ...args), discard: (id, message) => raw.discard(agent(id), message),
     commit: (id, ...args) => raw.commit(agent(id).session, ...args), end: id => raw.end(agent(id).session),
   };
@@ -277,4 +277,31 @@ test('recall-only disabling neither spends sidecar session capacity nor narrows 
   for (let n = 0; n < 128; n++) s.info({ id: `profile-${n}`, session: { id: `profile-${n}` } });
   const id = '长'.repeat(256), actual = { id, session: { id } };
   assert.doesNotThrow(() => s.disableMemory(actual));
+});
+
+test('an English profile selects English app-owned persona text; Chinese stays the default', () => {
+  const { service } = fixture();
+  const chinese = { persona: '', name: '小鲸', callMe: '', moves: '' };
+  service.prepare(input('a', 'zh', { profile: chinese, expectedProfileRevision: 0 }));
+  assert(service.profile('a').language === undefined);
+  assert.equal(service.language('a'), 'zh');
+  assert(renderCompanionProfile(service.profile('a')).startsWith('你是鲸鱼娘'));
+
+  const english = { ...chinese, language: 'en' };
+  service.prepare(input('a', 'en', { profile: english, expectedProfileRevision: 1 }));
+  const profile = service.profile('a');
+  assert.equal(profile.language, 'en');
+  assert.equal(service.language('a'), 'en');
+  const prompt = renderCompanionProfile(profile);
+  assert(prompt.startsWith('You are Whale Girl'));
+  assert(!prompt.includes('你是鲸鱼娘'));
+  assert(prompt.includes('Identity (use name for yourself'));
+  assert(companionFullRulesFor('en').includes('[emotion:happy]'));
+  assert(companionFullRulesFor('zh').includes('[表情:开心]'));
+});
+
+test('a profile language other than zh or en is rejected as invalid data', () => {
+  const { service } = fixture();
+  const profile = { persona: '', name: '', callMe: '', moves: '', language: 'fr' };
+  fail(() => service.prepare(input('bad', 'bad', { profile, expectedProfileRevision: 0 })), 'invalid-request');
 });

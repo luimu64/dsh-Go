@@ -18,23 +18,39 @@ enum IOSPhoneSelfRunnerError: Error {
   var message: String {
     switch self {
     case .unavailable:
-      return "此构建的手机原生组件不可用。请使用包含共享原生库的新构建；XCTest 增强还需在设置里明确启用并安装 PhoneRunner。"
+      return AppLanguage.words(
+        "The native phone components are unavailable in this build. Use a new build that includes the shared native library; the XCTest enhancement also has to be explicitly enabled in settings and PhoneRunner installed.",
+        "此构建的手机原生组件不可用。请使用包含共享原生库的新构建；XCTest 增强还需在设置里明确启用并安装 PhoneRunner。")
     case .cancelled:
-      return "这个手机操控调用已经结束，没有执行动作。"
+      return AppLanguage.words("This phone control call has already ended; no action was performed.", "这个手机操控调用已经结束，没有执行动作。")
     case .timedOut:
-      return "端上 XCTest 启动超时，没有执行动作。请保持 iPhone 解锁；如手机显示 Enable UI Automation，请直接在手机输入锁屏密码确认，然后重试。若仍失败，请检查配对文件、LocalDevVPN、开发者模式、已签名的 PhoneRunner 和开发者镜像。"
+      return AppLanguage.words(
+        "The on-device XCTest start timed out; no action was performed. Keep the iPhone unlocked; if the phone shows Enable UI Automation, enter the lock-screen passcode on the phone to confirm, then try again. If it still fails, check the pairing file, LocalDevVPN, developer mode, the signed PhoneRunner, and the developer image.",
+        "端上 XCTest 启动超时，没有执行动作。请保持 iPhone 解锁；如手机显示 Enable UI Automation，请直接在手机输入锁屏密码确认，然后重试。若仍失败，请检查配对文件、LocalDevVPN、开发者模式、已签名的 PhoneRunner 和开发者镜像。")
     case .stopping:
-      return "上一份端上 XCTest 会话还在停止，没有启动新的运行器。请等待停止完成，不要自动重复这一步。"
+      return AppLanguage.words(
+        "The previous on-device XCTest session is still stopping; no new runner was started. Wait for it to stop and do not repeat this step automatically.",
+        "上一份端上 XCTest 会话还在停止，没有启动新的运行器。请等待停止完成，不要自动重复这一步。")
     case .faulted:
-      return "无法确认旧 PhoneRunner 已退出，本次不会继续操控或切换后端。请先结束旧运行器，再完全退出并重新打开 DSH Go。"
+      return AppLanguage.words(
+        "It cannot be confirmed that the old PhoneRunner exited, so control will not continue or switch backends this time. End the old runner, then quit DSH Go completely and open it again.",
+        "无法确认旧 PhoneRunner 已退出，本次不会继续操控或切换后端。请先结束旧运行器，再完全退出并重新打开 DSH Go。")
     case .developerImageRequired:
-      return "本机开发者镜像（DDI）尚未就绪。请回到手机连接设置，由用户选择下载并挂载；这一步不会自动安装镜像或重试操控。"
+      return AppLanguage.words(
+        "The on-device developer image (DDI) is not ready yet. Return to the phone connection settings and let the user choose to download and mount it; this step will not install the image or retry control automatically.",
+        "本机开发者镜像（DDI）尚未就绪。请回到手机连接设置，由用户选择下载并挂载；这一步不会自动安装镜像或重试操控。")
     case .setup:
-      return "端上 XCTest 尚未就绪：配置不完整，或配对记录无法读取／校验。记录存在不代表可以使用；请解锁设备后检查配对记录、运行器包名和本机开发者服务端口。"
+      return AppLanguage.words(
+        "On-device XCTest is not ready: the configuration is incomplete, or the pairing record cannot be read/validated. A record being present does not mean it can be used; unlock the device and check the pairing record, the runner bundle ID, and the on-device developer service port.",
+        "端上 XCTest 尚未就绪：配置不完整，或配对记录无法读取／校验。记录存在不代表可以使用；请解锁设备后检查配对记录、运行器包名和本机开发者服务端口。")
     case .failed:
-      return "端上 XCTest 没有连接成功，没有执行动作。请保持 iPhone 解锁；如手机显示 Enable UI Automation，请直接在手机输入锁屏密码确认，然后重试。若仍失败，请检查配对、LocalDevVPN、开发者模式、匹配的开发者镜像和已签名安装的 PhoneRunner。"
+      return AppLanguage.words(
+        "On-device XCTest did not connect; no action was performed. Keep the iPhone unlocked; if the phone shows Enable UI Automation, enter the lock-screen passcode on the phone to confirm, then try again. If it still fails, check the pairing, LocalDevVPN, developer mode, a matching developer image, and the signed installed PhoneRunner.",
+        "端上 XCTest 没有连接成功，没有执行动作。请保持 iPhone 解锁；如手机显示 Enable UI Automation，请直接在手机输入锁屏密码确认，然后重试。若仍失败，请检查配对、LocalDevVPN、开发者模式、匹配的开发者镜像和已签名安装的 PhoneRunner。")
     case .invalidHandshake:
-      return "端上 XCTest 返回的就绪握手无效，没有执行动作。请重新启动运行器。"
+      return AppLanguage.words(
+        "The readiness handshake returned by on-device XCTest is invalid; no action was performed. Restart the runner.",
+        "端上 XCTest 返回的就绪握手无效，没有执行动作。请重新启动运行器。")
     }
   }
 }

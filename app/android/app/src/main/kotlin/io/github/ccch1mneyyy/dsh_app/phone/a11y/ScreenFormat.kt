@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 
 // The compact screen text the model reads:
@@ -116,7 +117,27 @@ object ScreenFormat {
     // l10n:keep model screen format
     const val POOR_TREE_NOTE = "提示：本页文字很少（游戏、自绘界面常见）。能看图的模型可以 screen 加 image；否则请用户协助。"
 
-    fun format(input: ScreenInput): FormattedScreen {
+    /**
+     * Presentation of one formatter pass: the caller's [PhoneUiText] resolves the model-facing
+     * words (header, roles, states, zones) in the app language. Identity — [Item.role] tokens,
+     * [Item.states], fingerprints, keys and every app/screen label — stays exactly as captured;
+     * only the final rendered text is translated.
+     */
+    private class Terms(private val ui: PhoneUiText) {
+        fun text(key: String, fallback: String, vararg args: Any): String = ui.get(key, fallback, *args)
+
+        /** A stable Chinese role token → its wording for this language. */
+        fun role(raw: String): String = if (raw.isEmpty()) raw else ui.role(raw)
+
+        /** Built-in states carry a key; an app's own state description stays verbatim. */
+        fun states(item: Item): String = item.states.mapIndexed { index, value ->
+            val key = item.stateKeys.getOrNull(index) ?: return@mapIndexed value
+            text("phone_screen_state_$key", value)
+        }.joinToString(" · ")
+    }
+
+    fun format(input: ScreenInput, ui: PhoneUiText = PhoneUiText.DEFAULT): FormattedScreen {
+        val terms = Terms(ui)
         val textNodes = input.windows.sumOf { w -> w.root?.let(::countText) ?: 0 }
         val lines = mutableListOf<Line>()
         val windows = input.windows.filter { it.root != null }
@@ -124,11 +145,13 @@ object ScreenFormat {
             val items = flatten(window.root!!, window, null).sortedWith(compareBy({ it.node.bounds.top }, { it.node.bounds.left }))
             if (index < windows.size - 1) {
                 if (items.isEmpty()) continue
-                // l10n:keep model screen format
-                lines += Line.Header(if (window.title.isNullOrBlank()) "弹窗" else "弹窗 · ${clip(clean(window.title) ?: "", 20)}")
-                emit(items, 2, lines, reserved = false, list = null, parent = null)
+                val title = window.title?.let(::clean)?.takeIf { it.isNotEmpty() }?.let { clip(it, 20) }
+                lines += Line.Header(
+                    if (title == null) terms.text("phone_screen_popup", "弹窗")
+                    else terms.text("phone_screen_popup_named", "弹窗 · %1\$s", title))
+                emit(items, 2, lines, reserved = false, list = null, parent = null, terms = terms)
             } else {
-                zones(items, input.screenHeight, lines)
+                zones(items, input.screenHeight, lines, terms)
             }
         }
 
@@ -137,11 +160,11 @@ object ScreenFormat {
         val poor = textNodes < POOR_TREE && windows.isNotEmpty()
         // 读不到内容(大概率被敏感视图策略挡了)不能说成"游戏、自绘界面",那会把模型带到
         // 另一个方向;这时 publish() 已经给了一条更准确的说明。
-        if (poor && !input.unreadable) notes += POOR_TREE_NOTE
+        if (poor && !input.unreadable) notes += terms.text("phone_screen_poor_tree", POOR_TREE_NOTE)
 
         // Page budget: keep the 底部 zone (navigation) and cut the middle with a hint.
         val headerLen = 40 + (input.appLabel?.length ?: 0) + notes.sumOf { it.length + 1 }
-        val lengths = lines.map { it.estimate(input.detail) }
+        val lengths = lines.map { it.estimate(input.detail, terms) }
         val total = headerLen + lengths.sum()
         var kept: List<Line> = lines
         var hidden = 0
@@ -173,25 +196,21 @@ object ScreenFormat {
         val markNew = prev != null && count > 0 &&
             ids.keys.count { it.kind != ElementKind.LIST && keyOf[it] !in prev }.toDouble() / count <= NEW_RATIO_LIMIT
 
-        // l10n:keep model screen format
-        val orientation = if (input.screenWidth > input.screenHeight) "横屏" else "竖屏"
-        // l10n:keep model screen format
+        val orientation = if (input.screenWidth > input.screenHeight) terms.text("phone_screen_landscape", "横屏")
+            else terms.text("phone_screen_portrait", "竖屏")
         val keyboard = when (input.keyboardShown) {
-            true -> "键盘弹出"
-            false -> "键盘收起"
-            // l10n:keep model screen format
-            null -> "键盘状态未知"
+            true -> terms.text("phone_screen_keyboard_shown", "键盘弹出")
+            false -> terms.text("phone_screen_keyboard_hidden", "键盘收起")
+            null -> terms.text("phone_screen_keyboard_unknown", "键盘状态未知")
         }
-        // l10n:keep model screen format
-        val app = clean(input.appLabel) ?: input.packageName ?: "未知应用"
-        // l10n:keep model screen format
-        header.append("屏幕 ${input.screenId} · $app · $orientation · $keyboard · 共 $count 项")
+        val app = clean(input.appLabel) ?: input.packageName ?: terms.text("phone_screen_unknown_app", "未知应用")
+        header.append(terms.text("phone_screen_header", "屏幕 %1\$s · %2\$s · %3\$s · %4\$s · 共 %5\$d 项",
+            input.screenId, app, orientation, keyboard, count))
         for (note in notes) header.append('\n').append(note)
-        // l10n:keep model screen format
-        if (count == 0) header.append('\n').append("（没有可读的元素）")
+        if (count == 0) header.append('\n').append(terms.text("phone_screen_empty", "（没有可读的元素）"))
         for (line in kept) {
             header.append('\n')
-            header.append(line.render(ids, input.detail) { item -> markNew && item.kind != ElementKind.LIST && keyOf[item] !in prev })
+            header.append(line.render(ids, input.detail, { item -> markNew && item.kind != ElementKind.LIST && keyOf[item] !in prev }, terms))
         }
 
         val elements = ids.entries.sortedBy { it.value }.map { (item, id) ->
@@ -257,6 +276,8 @@ object ScreenFormat {
         /** Masked, single-line, uncapped. Input: its name. */
         val label: String,
         val states: List<String>,
+        /** Identity of each entry of [states] for rendering; null = app-supplied, keep verbatim. */
+        val stateKeys: List<String?>,
         /** Input content (masked); null for empty / password / secret. */
         val content: String?,
         val subs: List<Item>,
@@ -337,7 +358,8 @@ object ScreenFormat {
         }
         // l10n:keep model screen format
         val states = if (node.selected) listOf("已选") else emptyList()
-        return Item(node, window, ElementKind.ITEM, role, label, states, null, emptyList(), null, false)
+        return Item(node, window, ElementKind.ITEM, role, label, states,
+            if (node.selected) listOf("selected") else emptyList(), null, emptyList(), null, false)
     }
 
     private fun input(node: UiNode, window: UiWindow): Item {
@@ -355,13 +377,14 @@ object ScreenFormat {
         }
         val content = if (node.password || secret || node.showingHint) null else clean(node.text)
         val states = mutableListOf<String>()
+        val stateKeys = mutableListOf<String?>()
         // l10n:keep model screen format
-        if (content == null && !node.password && !secret) states += "空"
+        if (content == null && !node.password && !secret) { states += "空"; stateKeys += "empty" }
         // l10n:keep model screen format
-        if (node.focused) states += "已聚焦"
+        if (node.focused) { states += "已聚焦"; stateKeys += "focused" }
         // l10n:keep model screen format
-        if (!node.enabled) states += "不可用"
-        return Item(node, window, ElementKind.INPUT, role, name, states, content, emptyList(), null, secret)
+        if (!node.enabled) { states += "不可用"; stateKeys += "disabled" }
+        return Item(node, window, ElementKind.INPUT, role, name, states, stateKeys, content, emptyList(), null, secret)
     }
 
     private fun list(node: UiNode, window: UiWindow): Item {
@@ -375,17 +398,24 @@ object ScreenFormat {
         val states = if (horizontal) {
             val right = node.scroll and Scroll.RIGHT != 0 || forward
             val left = node.scroll and Scroll.LEFT != 0 || backward
-            // l10n:keep model screen format
             listOfNotNull(when { left && right -> "可左右滑"; right -> "可右滑"; left -> "可左滑"; else -> null })
         } else {
             val down = node.scroll and Scroll.DOWN != 0 || forward
             val up = node.scroll and Scroll.UP != 0 || backward
-            // l10n:keep model screen format
             listOfNotNull(when { up && down -> "可上下滑"; down -> "可下滑"; up -> "可上滑"; else -> null })
+        }
+        val stateKeys = if (horizontal) {
+            val right = node.scroll and Scroll.RIGHT != 0 || forward
+            val left = node.scroll and Scroll.LEFT != 0 || backward
+            listOfNotNull(when { left && right -> "scroll_h_both"; right -> "scroll_right"; left -> "scroll_left"; else -> null })
+        } else {
+            val down = node.scroll and Scroll.DOWN != 0 || forward
+            val up = node.scroll and Scroll.UP != 0 || backward
+            listOfNotNull(when { up && down -> "scroll_v_both"; down -> "scroll_down"; up -> "scroll_up"; else -> null })
         }
         val label = clean(node.desc) ?: ""
         // l10n:keep model screen format
-        return Item(node, window, ElementKind.LIST, "列表", label, states, null, subs, null, false, horizontal)
+        return Item(node, window, ElementKind.LIST, "列表", label, states, stateKeys, null, subs, null, false, horizontal)
     }
 
     private fun action(node: UiNode, window: UiWindow, parentClass: String?): List<Item> {
@@ -425,30 +455,36 @@ object ScreenFormat {
         // l10n:keep model screen format
         if (label == null && role.isEmpty()) role = "按钮"
         val states = mutableListOf<String>()
+        val stateKeys = mutableListOf<String?>()
         val check = checkNode
         when {
             check == null -> {}
             // l10n:keep model screen format
-            role == "开关" -> states += if (check.checked) "开" else "关"
+            role == "开关" -> { states += if (check.checked) "开" else "关"; stateKeys += if (check.checked) "on" else "off" }
             // l10n:keep model screen format
-            role == "勾选框" || role == "单选" -> states += if (check.checked) "✓" else "空"
+            role == "勾选框" || role == "单选" -> if (check.checked) { states += "✓"; stateKeys += null }
+                else { states += "空"; stateKeys += "unchecked" } // l10n:keep model screen format
             // l10n:keep model screen format
-            check.checked -> states += "已勾选"
+            check.checked -> { states += "已勾选"; stateKeys += "checked" }
         }
         // l10n:keep model screen format
-        if (node.selected) states += "已选"
+        if (node.selected) { states += "已选"; stateKeys += "selected" }
         // l10n:keep model screen format
         if (role == "滑块" && node.rangeCurrent != null) {
             val max = node.rangeMax
             states += if (max != null && max > 0f && max <= 1000f && max != 100f) "${fmt(node.rangeCurrent)}/${fmt(max)}" else "${fmt(node.rangeCurrent)}"
+            stateKeys += null
         }
         clean(node.stateDesc)?.let { sd ->
             // l10n:keep model screen format
-            if (role != "开关" && role != "勾选框" && role != "单选" && sd.length <= 10 && sd != label && sd !in states) states += sd
+            if (role != "开关" && role != "勾选框" && role != "单选" && sd.length <= 10 && sd != label && sd !in states) {
+                states += sd
+                stateKeys += null // the app's own words: never translated
+            }
         }
         // l10n:keep model screen format
-        if (!node.enabled) states += "不可用"
-        val item = Item(node, window, ElementKind.ITEM, role, label ?: "", states, null, subs, check?.checked, false)
+        if (!node.enabled) { states += "不可用"; stateKeys += "disabled" }
+        val item = Item(node, window, ElementKind.ITEM, role, label ?: "", states, stateKeys, null, subs, check?.checked, false)
         return listOf(item)
     }
 
@@ -490,43 +526,45 @@ object ScreenFormat {
     private sealed class Line(val indent: Int, val reserved: Boolean) {
         abstract fun items(): List<Item>
         open fun elementCount() = items().size
-        abstract fun estimate(detail: Boolean): Int
-        abstract fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean): String
+        abstract fun estimate(detail: Boolean, terms: Terms): Int
+        abstract fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean, terms: Terms): String
 
         class Header(val text: String, reserved: Boolean = false) : Line(0, reserved) {
             override fun items() = emptyList<Item>()
-            override fun estimate(detail: Boolean) = text.length + 1
-            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean) = text
+            override fun estimate(detail: Boolean, terms: Terms) = text.length + 1
+            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean, terms: Terms) = text
         }
 
         class More(indent: Int) : Line(indent, false) {
             var count = 0
             override fun items() = emptyList<Item>()
-            override fun estimate(detail: Boolean) = 30
-            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean) =
-                // l10n:keep model screen format
-                " ".repeat(indent) + "…另有 $count 项，用 collect 或 scroll"
+            override fun estimate(detail: Boolean, terms: Terms) = 30
+            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean, terms: Terms) =
+                " ".repeat(indent) + terms.text("phone_screen_more", "…另有 %1\$d 项，用 collect 或 scroll", count)
         }
 
         class Row(indent: Int, reserved: Boolean, val row: List<Item>) : Line(indent, reserved) {
             override fun items() = row
-            override fun estimate(detail: Boolean) = indent + row.sumOf { body(it, 99, detail, false).length + 3 }
-            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean) =
-                " ".repeat(indent) + row.joinToString("   ") { body(it, ids[it]!!, detail, isNew(it)) }
+            override fun estimate(detail: Boolean, terms: Terms) = indent + row.sumOf { body(it, 99, detail, false, terms).length + 3 }
+            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean, terms: Terms) =
+                " ".repeat(indent) + row.joinToString("   ") { body(it, ids[it]!!, detail, isNew(it), terms) }
         }
 
         class ListHead(indent: Int, reserved: Boolean, val list: Item) : Line(indent, reserved) {
             override fun items() = listOf(list)
-            override fun estimate(detail: Boolean) = indent + body(list, 99, detail, false).length + 1
-            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean) =
-                " ".repeat(indent) + body(list, ids[list]!!, detail, false)
+            override fun estimate(detail: Boolean, terms: Terms) = indent + body(list, 99, detail, false, terms).length + 1
+            override fun render(ids: Map<Item, Int>, detail: Boolean, isNew: (Item) -> Boolean, terms: Terms) =
+                " ".repeat(indent) + body(list, ids[list]!!, detail, false, terms)
         }
     }
 
-    // l10n:keep model screen format
-    private enum class Zone(val title: String) { TOP("顶部"), MIDDLE("中部"), BOTTOM("底部") }
+    private enum class Zone(val key: String, val title: String) {
+        TOP("phone_screen_zone_top", "顶部"),
+        MIDDLE("phone_screen_zone_middle", "中部"),
+        BOTTOM("phone_screen_zone_bottom", "底部"),
+    }
 
-    private fun zones(items: List<Item>, screenHeight: Int, out: MutableList<Line>) {
+    private fun zones(items: List<Item>, screenHeight: Int, out: MutableList<Line>, terms: Terms) {
         val h = screenHeight.coerceAtLeast(1)
         fun zone(item: Item): Zone {
             val b = item.node.bounds
@@ -537,22 +575,23 @@ object ScreenFormat {
             }
         }
         val byZone = items.groupBy(::zone)
-        byZone[Zone.TOP]?.let { out += Line.Header(Zone.TOP.title); emit(it, 2, out, false, null, null) }
+        fun title(zone: Zone) = terms.text(zone.key, zone.title)
+        byZone[Zone.TOP]?.let { out += Line.Header(title(Zone.TOP)); emit(it, 2, out, false, null, null, terms) }
         byZone[Zone.MIDDLE]?.let { middle ->
             // A list in the middle stands as its own header (the example's `列表 [4] 可下滑`).
             var needHeader = true
             var run = mutableListOf<Item>()
-            fun flush() { if (run.isNotEmpty()) { if (needHeader) out += Line.Header(Zone.MIDDLE.title); needHeader = false; emit(run, 2, out, false, null, null); run = mutableListOf() } }
+            fun flush() { if (run.isNotEmpty()) { if (needHeader) out += Line.Header(title(Zone.MIDDLE)); needHeader = false; emit(run, 2, out, false, null, null, terms); run = mutableListOf() } }
             for (item in middle) {
-                if (item.kind == ElementKind.LIST) { flush(); emit(listOf(item), 0, out, false, null, null); needHeader = true }
+                if (item.kind == ElementKind.LIST) { flush(); emit(listOf(item), 0, out, false, null, null, terms); needHeader = true }
                 else run += item
             }
             flush()
         }
-        byZone[Zone.BOTTOM]?.let { out += Line.Header(Zone.BOTTOM.title, reserved = true); emit(it, 2, out, true, null, null) }
+        byZone[Zone.BOTTOM]?.let { out += Line.Header(title(Zone.BOTTOM), reserved = true); emit(it, 2, out, true, null, null, terms) }
     }
 
-    private fun emit(items: List<Item>, indent: Int, out: MutableList<Line>, reserved: Boolean, list: Item?, parent: Item?) {
+    private fun emit(items: List<Item>, indent: Int, out: MutableList<Line>, reserved: Boolean, list: Item?, parent: Item?, terms: Terms) {
         var i = 0
         while (i < items.size) {
             val item = items[i]
@@ -560,15 +599,15 @@ object ScreenFormat {
             item.parent = parent
             if (item.kind == ElementKind.LIST) {
                 out += Line.ListHead(indent, reserved, item)
-                emit(item.subs, indent + 2, out, reserved, item, null)
+                emit(item.subs, indent + 2, out, reserved, item, null, terms)
                 i++
                 continue
             }
             val row = mutableListOf(item)
-            var length = body(item, 99, false, false).length
+            var length = body(item, 99, false, false, terms).length
             while (i + 1 < items.size && mergeable(row.last(), items[i + 1])) {
                 val nextItem = items[i + 1]
-                val add = body(nextItem, 99, false, false).length + 3
+                val add = body(nextItem, 99, false, false, terms).length + 3
                 if (indent + length + add > ROW_CAP) break
                 nextItem.list = list
                 nextItem.parent = parent
@@ -577,7 +616,7 @@ object ScreenFormat {
                 i++
             }
             out += Line.Row(indent, reserved, row)
-            for (member in row) if (member.subs.isNotEmpty()) emit(member.subs, indent + 4, out, reserved, list, member)
+            for (member in row) if (member.subs.isNotEmpty()) emit(member.subs, indent + 4, out, reserved, list, member, terms)
             i++
         }
     }
@@ -588,28 +627,29 @@ object ScreenFormat {
             a.label.length <= MERGE_LABEL && b.label.length <= MERGE_LABEL &&
             a.node.bounds.rowOverlap(b.node.bounds) >= 0.5 && b.node.bounds.left >= a.node.bounds.left
 
-    private fun body(item: Item, id: Int, detail: Boolean, isNew: Boolean): String {
+    private fun body(item: Item, id: Int, detail: Boolean, isNew: Boolean, terms: Terms): String {
         val sb = StringBuilder()
+        val states = terms.states(item)
         if (item.kind == ElementKind.LIST) {
-            // l10n:keep model screen format
-            sb.append("列表 [").append(id).append(']')
+            sb.append(terms.text("phone_screen_list", "列表 [%1\$d]", id))
             if (item.label.isNotEmpty()) sb.append(' ').append(clip(item.label, LABEL_CAP))
-            if (item.states.isNotEmpty()) sb.append(if (item.label.isNotEmpty()) " · " else " ").append(item.states.joinToString(" · "))
+            if (states.isNotEmpty()) sb.append(if (item.label.isNotEmpty()) " · " else " ").append(states)
         } else {
             if (isNew) sb.append('+')
             if (item.sensitive != null) sb.append('⚠')
             sb.append('[').append(id).append(']')
-            if (item.role.isNotEmpty()) sb.append(' ').append(item.role)
+            val role = terms.role(item.role)
+            if (role.isNotEmpty()) sb.append(' ').append(role)
             val label = clip(item.label, LABEL_CAP)
             if (label.isNotEmpty()) sb.append(' ').append(label)
             if (item.kind == ElementKind.INPUT && item.content != null) {
                 sb.append(" \"").append(clip(item.content, LABEL_CAP)).append('"')
-                if (item.states.isNotEmpty()) sb.append(' ').append(item.states.joinToString(" · "))
-            } else if (item.states.isNotEmpty()) {
-                sb.append(if (label.isNotEmpty() || item.role.isNotEmpty()) " · " else " ").append(item.states.joinToString(" · "))
+                if (states.isNotEmpty()) sb.append(' ').append(states)
+            } else if (states.isNotEmpty()) {
+                sb.append(if (label.isNotEmpty() || role.isNotEmpty()) " · " else " ").append(states)
             }
-            // l10n:keep model screen format
-            if (label.isEmpty() && item.role.isNotEmpty() && item.kind == ElementKind.ITEM && item.states.isEmpty()) sb.append(" (无文字)")
+            if (label.isEmpty() && role.isNotEmpty() && item.kind == ElementKind.ITEM && states.isEmpty())
+                sb.append(' ').append(terms.text("phone_screen_no_text", "(无文字)"))
         }
         if (detail) sb.append(" @").append(item.node.bounds.centerX).append(',').append(item.node.bounds.centerY)
         return sb.toString()

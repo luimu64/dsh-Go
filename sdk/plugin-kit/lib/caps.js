@@ -47,7 +47,8 @@ export function appAtLeast(caps, min) {
 
 /**
  * Pick a string for the app's locale from `{ zh: '用量', en: 'Usage' }` with
- * the bridge's order: exact tag, language part, en, zh, first value.
+ * the bridge's order: exact tag, language part, its variants (the one sharing
+ * the locale's script or region, else the first by key), en, zh, first value.
  * A plain string is returned as is.
  * @param {{ locale?: string } | string | undefined} capsOrLocale
  * @param {string | Record<string, string>} text
@@ -57,9 +58,32 @@ export function localize(capsOrLocale, text) {
   if (typeof text !== 'object' || text === null) return ''
   const tag = (typeof capsOrLocale === 'string' ? capsOrLocale : capsOrLocale?.locale) ?? ''
   const keys = Object.keys(text)
-  const find = (want) => keys.find((k) => k.toLowerCase().replaceAll('_', '-') === want.toLowerCase().replaceAll('_', '-'))
-  const lang = tag.split(/[-_]/)[0]
-  const hit = (tag && find(tag)) || (lang && find(lang)) || find('en') || find('zh') || keys[0]
+  const norm = (id) => String(id).trim().toLowerCase().replaceAll('_', '-')
+  const wanted = norm(tag)
+  const lang = wanted.split('-')[0]
+  const find = (want) => keys.find((k) => norm(k) === want)
+  const variants = (language) => {
+    const matches = keys.filter((k) => norm(k) === language || norm(k).startsWith(`${language}-`)).sort((a, b) => (norm(a) < norm(b) ? -1 : norm(a) > norm(b) ? 1 : 0))
+    if (matches.length === 0) return undefined
+    const direct = matches.find((k) => norm(k) === language)
+    if (direct !== undefined) return direct
+    const subtags = new Set(wanted.split('-').slice(1))
+    if (language === 'zh') {
+      if (['tw', 'hk', 'mo'].some((r) => subtags.has(r))) subtags.add('hant')
+      if (['cn', 'sg', 'my'].some((r) => subtags.has(r))) subtags.add('hans')
+    }
+    let best = matches[0]
+    let bestScore = -1
+    for (const key of matches) {
+      const score = norm(key).split('-').slice(1).filter((part) => subtags.has(part)).reduce((sum, part) => sum + (part.length === 4 ? 2 : 1), 0)
+      if (score > bestScore) {
+        best = key
+        bestScore = score
+      }
+    }
+    return best
+  }
+  const hit = (wanted && find(wanted)) || (lang && variants(lang)) || variants('en') || variants('zh') || keys[0]
   return hit === undefined ? '' : String(text[hit])
 }
 

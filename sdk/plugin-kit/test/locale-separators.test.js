@@ -23,3 +23,17 @@ test('localize: aliases follow the existing first matching key rule', () => {
   const text = { zh_Hant_TW: 'first', 'zh-Hant-TW': 'last' }
   assert.equal(localize('zh-Hant-TW', text), 'first')
 })
+
+test('localize: variants follow script and region, then key order', () => {
+  const scripts = { 'zh-Hant': '繁體', 'zh-Hans': '简体' }
+  assert.equal(localize('zh-TW', scripts), '繁體')
+  assert.equal(localize('zh-HK', scripts), '繁體')
+  assert.equal(localize('zh-CN', scripts), '简体')
+  assert.equal(localize('zh-SG', scripts), '简体')
+  assert.equal(localize('zh', scripts), '简体')
+  const reversed = { 'zh-Hans': '简体', 'zh-Hant': '繁體' }
+  assert.equal(localize('zh', reversed), localize('zh', scripts), 'key order does not change the pick')
+  assert.equal(localize('en-US', { 'en-GB': 'Colour', 'en-US': 'Color' }), 'Color')
+  assert.equal(localize('en-AU', { 'en-GB': 'Colour', 'en-US': 'Color' }), 'Colour')
+  assert.equal(localize('fr', { 'en-GB': 'Colour' }), 'Colour', 'English variants are the fallback')
+})

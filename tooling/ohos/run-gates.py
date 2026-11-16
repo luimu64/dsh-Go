@@ -638,6 +638,13 @@ def main():
         return {'scope': 'Derived full-optional Linux test prefix after Android identity comparison',
                 'files': {name: sha(helper / name) for name in ('index.cjs', 'package.json', 'LICENSE')}}
     g.internal('ohos-test-helpers', native_helpers, needs=('android-targets',))
+    g.node_tests('native-app-language', [
+        rt + 'instruction-language.test.mjs',
+        rt + 'client-locale-native-override.test.mjs'
+    ], needs=('prepared-inputs', 'android-targets'),
+        scope='Actual patched OHOS and Android bundles: model-facing tool instructions and the native app locale override, both app languages')
+
+
     g.run('android-version-tree', lambda: g.py(rt + 'composition-android.py', '--baseline', p('android_baseline'), '--unpatched-prefix', p('android_pristine'), '--out', o / 'android-version-tree'), needs=('tools',), timeout=600)
     g.run('gate-runner-contract', lambda: g.py(tools + 'run-gates.test.py'), needs=('tools',), tests=[tools + 'run-gates.test.py'])
     def native_static(_):

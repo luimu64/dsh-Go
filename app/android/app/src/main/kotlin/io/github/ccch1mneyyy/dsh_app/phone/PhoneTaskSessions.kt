@@ -33,6 +33,8 @@ class PhoneTaskSessions(
     private val screenRecoveryReady: () -> Boolean = { false },
     // Connection preparation precedes any new screen lease and runs outside registry/Tasks locks.
     private val prepareBackground: (Task, PhoneTasks.Owner) -> String? = { _, _ -> null },
+    /** Presentation only; the Chinese defaults keep direct constructions and tests unchanged. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
 ) {
     internal class SkillScope(val owner: PhoneTasks.Owner, val draftEpoch: Long, val launchEpoch: Long) {
         var endOwner: PhoneTasks.Owner? = null
@@ -96,7 +98,7 @@ class PhoneTaskSessions(
     }
 
     private fun deadlineOutput() = ToolOutput(
-        "本次手机调用总期限已到，可能执行了也可能没有。不要自动重试同一个动作；待原操作结束后先查看屏幕。", // l10n:keep agent deadline result
+        ui.get("phone_deadline", "本次手机调用总期限已到，可能执行了也可能没有。不要自动重试同一个动作；待原操作结束后先查看屏幕。"),
         isError = true,
     )
     private val mainWorker = legacyCore.worker
@@ -190,23 +192,23 @@ class PhoneTaskSessions(
         val screenReady = attribution?.runLifecycle == 1 && screenRecoveryReady()
         return synchronized(lock) {
             if (attribution?.runLifecycle == 1) modernCallerSeen = true
-            // l10n:keep agent resource admission
-            if (selfCheck != null) return Admission(null, epoch, "本地自检正在占用手机，请稍后重试。", startedAt = startedAt)
+            if (selfCheck != null) return Admission(null, epoch,
+                ui.get("phone_self_check_busy", "本地自检正在占用手机，请稍后重试。"), startedAt = startedAt)
             // Runtime reset / an old task still winding down refuses this one call only.
             if (resetting || retiring.any { it.cancelling })
-                return Admission(null, epoch, "手机操控正在重置，这一条没有执行；稍后再试。", startedAt = startedAt) // l10n:keep agent reset result
+                return Admission(null, epoch, ui.get("phone_resetting", "手机操控正在重置，这一条没有执行；稍后再试。"), startedAt = startedAt)
             // B1 attribution alone does not prove the client can deliver an exact run end.
             val caller = attribution?.takeIf { it.runLifecycle == 1 }
             val key = Key(caller?.sessionId, caller?.runId)
             if (caller != null) {
-                if (key in endedRuns) return Admission(null, epoch, PhoneTasks.RUN_ENDED_MESSAGE, startedAt = startedAt)
-                if (entries[key]?.stopped == true) return Admission(null, epoch, PhoneTasks.STOPPED_MESSAGE, startedAt = startedAt)
+                if (key in endedRuns) return Admission(null, epoch, PhoneTasks.runEndedMessage(ui), startedAt = startedAt)
+                if (entries[key]?.stopped == true) return Admission(null, epoch, PhoneTasks.stoppedMessage(ui), startedAt = startedAt)
                 if (caller.sessionId in stoppedSessions && !recoverScreenStop(key, screenReady && readinessEpoch == epoch))
-                    return Admission(null, epoch, PhoneTasks.STOPPED_MESSAGE, startedAt = startedAt)
-                if (!reserve(key)) return Admission(null, epoch, CAPACITY_MESSAGE, startedAt = startedAt)
+                    return Admission(null, epoch, PhoneTasks.stoppedMessage(ui), startedAt = startedAt)
+                if (!reserve(key)) return Admission(null, epoch, ui.get("phone_capacity", CAPACITY_MESSAGE), startedAt = startedAt)
             }
             val task = entries.getOrPut(key) {
-                val tasks = PhoneTasks(clock = clock, idleMs = Long.MAX_VALUE, idSource = idSource)
+                val tasks = PhoneTasks(clock = clock, idleMs = Long.MAX_VALUE, idSource = idSource, ui = ui)
                 Task(caller!!.sessionId, caller.runId, tasks, create(tasks, caller.sessionId))
             }
             if (!blocked(task) && !task.closing) lastAdmitted[task.sessionId] = task
@@ -262,7 +264,7 @@ class PhoneTaskSessions(
         task.tasks.callStarted()
         try {
             if (replay != null && (task.sessionId != replay.request.session || task.runId != replay.run))
-                return ToolOutput("路线调用身份与原准备不匹配，未执行。", isError = true) // l10n:keep replay result
+                return ToolOutput(ui.get("phone_replay_identity_mismatch", "路线调用身份与原准备不匹配，未执行。"), isError = true)
             if (remainingMs(admission) <= 0) return deadlineOutput()
             journal?.refusal()?.let { return ToolOutput(it, isError = true) }
             if (replay == null) task.core.rejection(name)?.let { return it }
@@ -413,7 +415,7 @@ class PhoneTaskSessions(
 
     private fun live(a: Admission) = a.epoch == epoch && a.task?.let { entries[Key(it.sessionId, it.runId)] === it } == true
     private fun blocked(task: Task) = task.journalFailed || task.cancelling || task.retired != null || task.cleanupFailed || task.endRequested || task.sessionId != null && (task.stopped || task.sessionId in stoppedSessions)
-    private fun stopped() = ToolOutput(PhoneTasks.STOPPED_MESSAGE + "。", isError = true)
+    private fun stopped() = ToolOutput(PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui), isError = true)
 
     private fun appBlockers(task: Task, known: PhoneAppIdentity?, unknown: Boolean): List<Task> =
         appHolders.filter { holder -> holder !== task && (unknown ||
@@ -484,11 +486,12 @@ class PhoneTaskSessions(
         }
         synchronized(lock) {
             if (remainingMs(a) <= 0) return deadlineOutput().text
-            if (!current()) return PhoneTasks.STOPPED_MESSAGE
+            if (!current()) return PhoneTasks.stoppedMessage(ui)
             if (known != null && known !in task.heldApps && task.heldApps.size >= MAX_APPS_PER_SCOPE)
-                return "本任务已保留 16 个应用身份，请结束并清理本任务后再打开其他应用。" // l10n:keep agent resource result
+                return ui.get("phone_apps_per_task_limit", "本任务已保留 16 个应用身份，请结束并清理本任务后再打开其他应用。")
             val limit = backgroundCapacity()
-            if (needsBackgroundSlot(task, needed) && limit == 0) return BACKGROUND_UNAVAILABLE
+            if (needsBackgroundSlot(task, needed) && limit == 0)
+                return ui.get("phone_background_no_slot", BACKGROUND_UNAVAILABLE)
             if (mandatoryBlockers(task, needed, known, unknown).isEmpty() &&
                 (!needsBackgroundSlot(task, needed) || backgroundHolders.size < limit)) return acquire()
             // Whole request, not the first blocker: another holder can appear before wakeup.
@@ -503,16 +506,17 @@ class PhoneTaskSessions(
             synchronized(lock) {
                 while (true) {
                     if (remainingMs(a) <= 0) return deadlineOutput().text
-                    if (!current()) return PhoneTasks.STOPPED_MESSAGE
+                    if (!current()) return PhoneTasks.stoppedMessage(ui)
                     val limit = backgroundCapacity()
-                    if (needsBackgroundSlot(task, needed) && limit == 0) return BACKGROUND_UNAVAILABLE
+                    if (needsBackgroundSlot(task, needed) && limit == 0)
+                        return ui.get("phone_background_no_slot", BACKGROUND_UNAVAILABLE)
                     if (mandatoryBlockers(task, needed, known, unknown).isEmpty() &&
                         (!needsBackgroundSlot(task, needed) || backgroundHolders.size < limit)) return acquire()
                     // Zero means unavailable for new slots, never a zero-threshold waiting cycle.
                     if (closedWaitSetContains(task, limit))
-                        return "屏幕或应用资源形成等待环，本次没有操作。请结束或交还另一任务占用的资源后重试。" // l10n:keep agent resource result
+                        return ui.get("phone_resource_cycle", "屏幕或应用资源形成等待环，本次没有操作。请结束或交还另一任务占用的资源后重试。")
                     val left = until - clock()
-                    if (left <= 0) return "屏幕或应用资源正被另一个对话使用，已等待 30 秒，本次没有操作。请稍后再试或结束占用任务。" // l10n:keep agent resource result
+                    if (left <= 0) return ui.get("phone_resource_busy", "屏幕或应用资源正被另一个对话使用，已等待 30 秒，本次没有操作。请稍后再试或结束占用任务。")
                     lock.wait(minOf(left, remainingMs(a), 1_000).coerceAtLeast(1))
                 }
             }

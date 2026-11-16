@@ -25,7 +25,7 @@
  		"darwin-x64",
 --- a/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-office-to-pdf/lib/index.js
-@@ -2,11 +2,11 @@
+@@ -2,11 +2,12 @@
  import { lstat, mkdtemp, open, rm, writeFile } from "node:fs/promises";
  import { tmpdir } from "node:os";
  import { extname, isAbsolute, join } from "node:path";
@@ -35,6 +35,7 @@
  import { Remote, RemoteError, TypertRemoteService } from "@deepseek-ai/dsh-typert-protocol";
  import { constants } from "node:fs";
 +const createConverter = async (options) => (await import("@deepseek-ai/libreoffice-kit")).createConverter(options);
++const dshGoDescriptionLanguage = (env = process.env) => String(env.DSH_APP_LANGUAGE ?? "").toLowerCase().startsWith("en") ? "en" : "zh";
  //#region lib/types/errors.js
  /** Classified conversion failure; engine details stay in the cause. */
  var OfficeToPdfError = class extends Error {
@@ -49,17 +50,18 @@
  		}
  		async convertBytes(bytes, extension, signal) {
  			signal.throwIfAborted();
-+			if (process.platform === "openharmony") throw new OfficeToPdfError("unavailable", "鸿蒙本机不支持 Office 转换；可打开原文档、已有 PDF，或连接电脑转换。");
++			if (process.platform === "openharmony") throw new OfficeToPdfError("unavailable", dshGoDescriptionLanguage() === "en" ? "This device does not support Office conversion; open the original document or an existing PDF, or convert it on a computer." : "鸿蒙本机不支持 Office 转换；可打开原文档、已有 PDF，或连接电脑转换。");
  			let slot = this.slots.find((candidate) => !candidate.busy);
  			if (slot === void 0) {
  				slot = { busy: false };
 --- a/node_modules/@deepseek-ai/dsh-skill-office/lib/index.js
 +++ b/node_modules/@deepseek-ai/dsh-skill-office/lib/index.js
-@@ -39,6 +39,7 @@
+@@ -39,6 +39,8 @@
  	};
  }
++const dshGoDescriptionLanguage = (env = process.env) => String(env.DSH_APP_LANGUAGE ?? "").toLowerCase().startsWith("en") ? "en" : "zh";
  function officeRuntime(config) {
-+	if (process.platform === "openharmony") return "\n\n鸿蒙本机不提供 LibreOffice 转换、重算或渲染运行时；请连接电脑执行这些步骤，已有文档与 PDF 仍可打开或保存。";
++	if (process.platform === "openharmony") return "\n\n" + (dshGoDescriptionLanguage() === "en" ? "This device does not provide the LibreOffice conversion, recalculation or rendering runtime; run these steps on a computer. Existing documents and PDFs can still be opened or saved." : "鸿蒙本机不提供 LibreOffice 转换、重算或渲染运行时；请连接电脑执行这些步骤，已有文档与 PDF 仍可打开或保存。");
  	if (config.cli === false) return "\n\nLibreOffice Kit is disabled in this deployment.";
  	if (config.node === void 0 && (isSea() || process.versions.electron !== void 0)) throw new Error("skill-office: packaged applications must supply a standalone Node executable");
  	const node = config.node ?? process.execPath;

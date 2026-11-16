@@ -5,6 +5,7 @@ import {
   MethodCall, MethodChannel, MethodResult
 } from '@ohos/flutter_ohos';
 import { PastePrompt } from './PastePrompt';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 class PastePending {
   reading: boolean = false;
@@ -112,9 +113,9 @@ export default class PastePlugin implements FlutterPlugin, AbilityAware {
     pending.settled = true;
     let shown: boolean = false;
     try {
-      if (status === 'denied') shown = pending.prompt.feedback($r('app.string.dsh_paste_denied'));
-      else if (status === 'empty') shown = pending.prompt.feedback($r('app.string.dsh_paste_empty'));
-      else if (status === 'readFailed' || status === 'unavailable') shown = pending.prompt.feedback($r('app.string.dsh_paste_failed'));
+      if (status === 'denied') shown = pending.prompt.feedback(AppLanguage.pick('系统未授予粘贴权限，请重新点击粘贴按钮。', 'Paste was not authorized. Tap the Paste button again.'));
+      else if (status === 'empty') shown = pending.prompt.feedback(AppLanguage.pick('剪贴板中没有可粘贴的文本。', 'The clipboard has no text to paste.'));
+      else if (status === 'readFailed' || status === 'unavailable') shown = pending.prompt.feedback(AppLanguage.pick('无法读取剪贴板，请重试或手动输入。', 'Could not read the clipboard. Try again or enter the text manually.'));
     } catch (_) { /* The typed result still reports failure if the window is gone. */ }
     this.reply(pending.result, status, text, shown);
     this.cleanup(pending);

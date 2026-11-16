@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS. PDFKit signatures follow hms-contracts.md D; scaling still needs device evidence.
 import type { pdfService } from '@kit.PDFKit';
 import { PdfKit, loadPdfKit } from './HmsKits';
@@ -37,11 +38,11 @@ export class HmsPdfPages {
   }
 
   private current(): void {
-    if (this.retired || HmsPdfPages.owner !== this) throw new PdfChannelError('cancelled', 'PDF 窗口已关闭。');
+    if (this.retired || HmsPdfPages.owner !== this) throw new PdfChannelError('cancelled', AppLanguage.pick('PDF 窗口已关闭。', 'The PDF window is closed.'));
   }
 
   private enqueue<T>(operation: () => Promise<T>, cleanup: boolean = false): Promise<T> {
-    if (!cleanup && HmsPdfPages.pending >= 32) return Promise.reject(new PdfChannelError('busy', 'PDF 正在处理其他页面，请稍后重试。'));
+    if (!cleanup && HmsPdfPages.pending >= 32) return Promise.reject(new PdfChannelError('busy', AppLanguage.pick('PDF 正在处理其他页面，请稍后重试。', 'The PDF is processing other pages; try again later.')));
     HmsPdfPages.pending++; this.ownPending++; this.submission++;
     const result = HmsPdfPages.tail.then(operation);
     HmsPdfPages.tail = result.then((): void => {}, (): void => {});
@@ -50,7 +51,7 @@ export class HmsPdfPages {
 
   private validatePath(path: string): void {
     if (typeof path !== 'string' || path.length === 0 || path.length > 4096 || !path.startsWith('/') || /[\x00-\x1f\x7f]/.test(path)) {
-      throw new PdfChannelError('invalid', 'PDF 必须先下载或复制到本机工作区或应用缓存。');
+      throw new PdfChannelError('invalid', AppLanguage.pick('PDF 必须先下载或复制到本机工作区或应用缓存。', 'The PDF must first be downloaded or copied to the on-device workspace or app cache.'));
     }
   }
 
@@ -85,23 +86,23 @@ export class HmsPdfPages {
       const result = this.document.loadDocument(this.input.snapshotPath);
       if (result !== kit.success) {
         throw new PdfChannelError(result === kit.password ? 'pdf_password' : 'pdf_unavailable',
-          result === kit.password ? '此 PDF 需要密码，请用系统应用打开。' : '无法预览此 PDF，请用系统应用打开。');
+          result === kit.password ? AppLanguage.pick('此 PDF 需要密码，请用系统应用打开。', 'This PDF needs a password; open it with a system app.') : AppLanguage.pick('无法预览此 PDF，请用系统应用打开。', 'This PDF cannot be previewed; open it with a system app.'));
       }
       const count = this.document.getPageCount();
-      if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new PdfChannelError('pdf_size', '内嵌预览支持 1 到 1000 页，请用系统应用打开此文件。');
+      if (!Number.isSafeInteger(count) || count < 1 || count > 1000) throw new PdfChannelError('pdf_size', AppLanguage.pick('内嵌预览支持 1 到 1000 页，请用系统应用打开此文件。', 'Embedded preview supports 1 to 1000 pages; open this file with a system app.'));
       this.pageCount = count; this.original = path; return this.document;
     } catch (error) {
       try { await this.closeDocument(); } catch (_) { /* physical remains held until cleanup succeeds */ }
       this.current();
       if (error instanceof PdfChannelError) throw error as Error;
-      throw new PdfChannelError('pdf_unavailable', '系统 PDF 预览服务暂时不可用，请用系统应用打开。');
+      throw new PdfChannelError('pdf_unavailable', AppLanguage.pick('系统 PDF 预览服务暂时不可用，请用系统应用打开。', 'The system PDF preview service is temporarily unavailable; open it with a system app.'));
     }
   }
 
   private dimensions(page: pdfService.PdfPage): PageSize {
     const width = page.getWidth(); const height = page.getHeight();
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0 || width > 1000000 || height > 1000000) {
-      throw new PdfChannelError('pdf_dimensions', 'PDF 页面尺寸无效。');
+      throw new PdfChannelError('pdf_dimensions', AppLanguage.pick('PDF 页面尺寸无效。', 'The PDF page size is invalid.'));
     }
     return { width, height };
   }
@@ -125,9 +126,9 @@ export class HmsPdfPages {
 
   render(path: string, index: number, requestedWidth: number): Promise<Uint8Array> {
     return this.enqueue(async (): Promise<Uint8Array> => {
-      if (!Number.isSafeInteger(index) || index < 0 || !Number.isSafeInteger(requestedWidth)) throw new PdfChannelError('invalid', 'PDF 页码或渲染宽度无效。');
+      if (!Number.isSafeInteger(index) || index < 0 || !Number.isSafeInteger(requestedWidth)) throw new PdfChannelError('invalid', AppLanguage.pick('PDF 页码或渲染宽度无效。', 'The PDF page number or render width is invalid.'));
       const doc = await this.open(path); this.current();
-      if (index >= this.pageCount) throw new PdfChannelError('invalid', 'PDF 页码超出范围。');
+      if (index >= this.pageCount) throw new PdfChannelError('invalid', AppLanguage.pick('PDF 页码超出范围。', 'The PDF page number is out of range.'));
       this.page = doc.getPage(index);
       try {
         const size = this.dimensions(this.page);
@@ -139,15 +140,15 @@ export class HmsPdfPages {
         options.isGray = false; options.drawAnnotations = true; options.isTransparent = false;
         this.pixels = this.page.getAreaPixelMapWithOptions(matrix, width, height, options);
         const actual = await this.pixels.getImageInfo(); this.current();
-        if (actual.size.width !== width || actual.size.height !== height) throw new PdfChannelError('pdf_dimensions', '系统返回的 PDF 位图尺寸不符，请用系统应用打开。');
+        if (actual.size.width !== width || actual.size.height !== height) throw new PdfChannelError('pdf_dimensions', AppLanguage.pick('系统返回的 PDF 位图尺寸不符，请用系统应用打开。', 'The system returned a PDF bitmap with the wrong size; open it with a system app.'));
         this.packer = image.createImagePacker();
         const png = await this.packer.packToData(this.pixels, { format: 'image/png', quality: 100 }); this.current();
-        if (png.byteLength < 24 || png.byteLength > 48 * 1024 * 1024) throw new PdfChannelError('pdf_size', 'PDF 页面图像大小超出内嵌预览范围。');
+        if (png.byteLength < 24 || png.byteLength > 48 * 1024 * 1024) throw new PdfChannelError('pdf_size', AppLanguage.pick('PDF 页面图像大小超出内嵌预览范围。', 'The PDF page image size is outside the embedded preview range.'));
         const bytes = new Uint8Array(png); const view = new DataView(png);
         const signature = [137, 80, 78, 71, 13, 10, 26, 10];
-        for (let i = 0; i < signature.length; i++) if (bytes[i] !== signature[i]) throw new PdfChannelError('pdf_format', '系统未返回 PNG 页面图像。');
+        for (let i = 0; i < signature.length; i++) if (bytes[i] !== signature[i]) throw new PdfChannelError('pdf_format', AppLanguage.pick('系统未返回 PNG 页面图像。', 'The system did not return a PNG page image.'));
         if (bytes[12] !== 73 || bytes[13] !== 72 || bytes[14] !== 68 || bytes[15] !== 82 ||
-          view.getUint32(16, false) !== width || view.getUint32(20, false) !== height) throw new PdfChannelError('pdf_dimensions', 'PDF 页面编码尺寸不符。');
+          view.getUint32(16, false) !== width || view.getUint32(20, false) !== height) throw new PdfChannelError('pdf_dimensions', AppLanguage.pick('PDF 页面编码尺寸不符。', 'The encoded PDF page size does not match.'));
         return bytes;
       } finally { await this.releasePage(); }
     });

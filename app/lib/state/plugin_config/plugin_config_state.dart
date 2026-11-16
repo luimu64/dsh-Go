@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/l10n.dart';
+import '../../plugins/plugin_text.dart';
 import '../connection_state.dart';
 import '../engine_settings_state.dart';
 import '../plugins_state.dart' show installedPluginsProvider, pluginHostProvider;
@@ -78,7 +79,12 @@ final pluginConfigApiProvider = Provider<PluginConfigApi?>((ref) {
   final engine = EngineSettingsPluginConfigApi(ref, changes.stream);
   final client = ref.watch(activeConnectionProvider.select((c) => c.value?.client));
   if (client == null || !client.canReachDshGo) return engine;
-  final bridge = BridgePluginConfigApi(client, engine, scope: () => ref.read(pluginConfigScopeProvider));
+  final bridge = BridgePluginConfigApi(
+    client,
+    engine,
+    scope: () => ref.read(pluginConfigScopeProvider),
+    locale: () => ref.read(pluginTextLocaleProvider),
+  );
   final restarts = client.hostEvents.listen((event) {
     if (event is HostReadyEvent) bridge.forget();
   });

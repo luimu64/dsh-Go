@@ -2731,6 +2731,11 @@ class L10nZh extends L10n {
   }
 
   @override
+  String botsYearDate(int year, String month, int day) {
+    return '$year/$month/$day';
+  }
+
+  @override
   String get botsCopyGroupNumber => '复制群号';
 
   @override
@@ -20786,6 +20791,48 @@ class L10nZh extends L10n {
 
   @override
   String get tavernReportNoFindings => '没有要留意的';
+
+  @override
+  String get tavernReportWorldInfoBooks => '世界书';
+
+  @override
+  String get tavernReportEntriesStored => '世界书条目';
+
+  @override
+  String get tavernReportEntriesEnabled => '启用的条目';
+
+  @override
+  String get tavernReportEntriesDisabled => '关闭的条目';
+
+  @override
+  String get tavernReportRegexScripts => '正则脚本';
+
+  @override
+  String get tavernReportRegexIncompatible => '不兼容的正则';
+
+  @override
+  String get tavernReportScripts => '脚本';
+
+  @override
+  String get tavernReportHelperScripts => '酒馆助手脚本';
+
+  @override
+  String get tavernReportHtmlFragments => 'HTML 片段';
+
+  @override
+  String get tavernReportAssets => '资源';
+
+  @override
+  String get tavernReportEmbeddedFiles => '内嵌文件';
+
+  @override
+  String get tavernReportPrompts => '提示词';
+
+  @override
+  String get tavernReportMacros => '宏';
+
+  @override
+  String get tavernReportDecoratorLines => '装饰器';
 
   @override
   String get tavernPresetForChat => '这段对话用的预设';

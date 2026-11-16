@@ -260,10 +260,14 @@ class AutomaticDiagnostics extends ChangeNotifier {
         rethrow;
       }
       if (!current() || signatures.isEmpty) return;
-      final prompt =
-          '请仅根据以下结构化 dsh-Go 故障事实进行分析，给出证据、不确定性和最小手动恢复步骤。'
-          '不要调用工具、执行命令、改权限、读取其他文件、创建计划或向 GitHub 外发；未授权进一步采集。\n'
-          '${jsonEncode(diagnosticsAnalysisFacts(snapshot))}';
+      final instruction = AppLocale.isEnglish
+          ? 'Analyse only the structured dsh-Go failure facts below; give evidence, uncertainty and '
+                'the smallest manual recovery steps. Do not call tools, run commands, change '
+                'permissions, read other files, create plans or send anything to GitHub; no further '
+                'collection is authorized.'
+          : '请仅根据以下结构化 dsh-Go 故障事实进行分析，给出证据、不确定性和最小手动恢复步骤。'  // l10n:keep zh half of the bilingual pair
+                '不要调用工具、执行命令、改权限、读取其他文件、创建计划或向 GitHub 外发；未授权进一步采集。';  // l10n:keep zh half of the bilingual pair
+      final prompt = '$instruction\n${jsonEncode(diagnosticsAnalysisFacts(snapshot))}';
       await send(prompt, current, (id, cancel) async {
         if (!current()) return;
         reportSessionId = id;

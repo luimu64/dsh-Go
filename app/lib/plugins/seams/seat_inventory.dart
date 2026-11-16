@@ -41,6 +41,8 @@ class SeatInventory {
     ClientInventory inventory, {
     Map<String, SettingsNamespaceView>? namespaces,
     bool webReachable = false,
+    // The app's UI language: occupant labels are resolved before they are
+    // kept, so a language change has to rebuild the inventory.
     String locale = 'zh',
     List<NativePanel> nativePanels = const [],
   }) {

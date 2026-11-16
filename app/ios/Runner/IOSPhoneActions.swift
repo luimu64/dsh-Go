@@ -63,7 +63,8 @@ final class IOSPhoneApproval: UIViewController, UIScrollViewDelegate {
   private var decodedPreview: UIImage?
   private var contentVisible = false
   private var lifecycleAllowsContent = true
-  init(heading: String = "允许这一次手机动作？", detail: String, allow: String = "允许一次", deny: String = "拒绝",
+  init(heading: String = AppLanguage.words("Allow this phone action?", "允许这一次手机动作？"), detail: String,
+    allow: String = AppLanguage.words("Allow once", "允许一次"), deny: String = AppLanguage.words("Decline", "拒绝"),
        preview: Data? = nil, notifications: NotificationCenter = .default,
        mayReveal: (@MainActor () -> Bool)? = nil, answer: @escaping (Bool) -> Void) {
     self.heading = heading; self.detail = detail; self.allowTitle = allow; self.denyTitle = deny; self.answer = answer
@@ -126,7 +127,7 @@ final class IOSPhoneApproval: UIViewController, UIScrollViewDelegate {
       zoom.addSubview(picture); zoom.contentSize = picture.bounds.size
       zoom.minimumZoomScale = 1; zoom.maximumZoomScale = 8; zoom.delegate = self
       zoom.heightAnchor.constraint(equalToConstant: 220).isActive = true
-      zoom.accessibilityLabel = "上次观察的标号截图，可缩放核对；不是实时画面"
+      zoom.accessibilityLabel = AppLanguage.words("Numbered screenshot from the last observation; zoom to check it, not a live view", "上次观察的标号截图，可缩放核对；不是实时画面")
       decodedPreview = image
       previewImageView = picture; rows.append(zoom)
     }
@@ -222,7 +223,7 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
     confirmationID = nil
     confirmationAnswered = true
     calendarStore = nil
-    finish(.failure("原任务已取消或引擎已更换，旧确认不能再执行。"))
+    finish(.failure(AppLanguage.words("The original task was cancelled or the engine changed; this old confirmation can no longer run.", "原任务已取消或引擎已更换，旧确认不能再执行。")))
   }
   private func finish(_ value: IOSPhoneOutcome) {
     let callback = answer
@@ -234,7 +235,7 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
   }
   private func present(_ controller: UIViewController) async -> IOSPhoneOutcome {
     guard let host = presenter(), host.viewIfLoaded?.window != nil, host.presentedViewController == nil else {
-      return .failure("确认界面当前不可用，请回到 DSH Go 后由用户重新发起。")
+      return .failure(AppLanguage.words("The confirmation screen is unavailable right now; come back to DSH Go and have the user start again.", "确认界面当前不可用，请回到 DSH Go 后由用户重新发起。"))
     }
     return await withCheckedContinuation { continuation in
       modal = controller
@@ -248,23 +249,23 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
   func run(_ request: IOSPhoneRequest, current: @escaping () -> Bool,
            authorize: @escaping () async -> Bool, validate: @escaping () async -> Bool) async -> IOSPhoneOutcome {
     guard foreground, current(), request.expiresAt > Date().timeIntervalSince1970 * 1000 else {
-      return .failure("请先解锁并打开 DSH Go；后台或已过期的动作不执行。")
+      return .failure(AppLanguage.words("Unlock the phone and open DSH Go first; background or expired actions are not performed.", "请先解锁并打开 DSH Go；后台或已过期的动作不执行。"))
     }
     requestId = request.id
     let confirmation = UUID(); confirmationID = confirmation; confirmationAnswered = false
     defer { if confirmationID == confirmation { confirmationID = nil; requestId = nil; calendarStore = nil } }
     let detail: String
-    do { detail = try describe(request.action) } catch { return .failure("手机动作参数无效或 iOS 不支持。") }
+    do { detail = try describe(request.action) } catch { return .failure(AppLanguage.words("The phone action arguments are invalid or iOS does not support it.", "手机动作参数无效或 iOS 不支持。")) }
     let controller = IOSPhoneApproval(detail: detail) { [weak self] allowed in
       guard let self, self.requestId == request.id, self.confirmationID == confirmation,
         !self.confirmationAnswered else { return }
       self.confirmationAnswered = true
-      self.finish(allowed ? .success("allowed-once") : .failure("用户拒绝了这一步；不要自动重试同一个动作。"))
+      self.finish(allowed ? .success("allowed-once") : .failure(AppLanguage.words("The user declined this step; do not retry the same action automatically.", "用户拒绝了这一步；不要自动重试同一个动作。")))
     }
     let expiry = Task { [weak self] in
       try? await Task.sleep(nanoseconds: 30_000_000_000)
       guard !Task.isCancelled, let self, self.requestId == request.id, self.modal === controller else { return }
-      self.finish(.failure("用户未在确认时间内选择；未执行动作。"))
+      self.finish(.failure(AppLanguage.words("The user did not choose within the confirmation time; no action was performed.", "用户未在确认时间内选择；未执行动作。")))
     }
     let choice = await present(controller)
     expiry.cancel()
@@ -272,13 +273,14 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
     // The Node-side invocation must still own this exact request AFTER the real tap.
     guard requestId == request.id, confirmationID == confirmation, current(), foreground, await authorize(),
       requestId == request.id, confirmationID == confirmation, current(), foreground else {
-      return .failure("确认对应的原任务已经结束，未执行动作。")
+      return .failure(AppLanguage.words("The original task for this confirmation has ended; no action was performed.", "确认对应的原任务已经结束，未执行动作。"))
     }
     return await perform(request.action, id: request.id, validate: validate)
   }
   /// The same real sheet, for a tool that decides what happens after the answer itself.
   func confirm(
-    _ request: IOSPhoneRequest, title: String, detail: String, allow: String = "允许一次", deny: String = "拒绝",
+    _ request: IOSPhoneRequest, title: String, detail: String,
+    allow: String = AppLanguage.words("Allow once", "允许一次"), deny: String = AppLanguage.words("Decline", "拒绝"),
     waitsForever: Bool = false, preview: Data? = nil
   ) async -> Bool {
     guard foreground else { return false }
@@ -344,26 +346,44 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
   }
   private func describe(_ a: IOSPhoneRequest.Action) throws -> String {
     switch a.kind {
-    case "open": return "打开网址（只请求系统打开，不代表已完成网页中的操作）：\n\(try safeURL(a.url).absoluteString)"
-    case "clipboard-get": return "读取当前剪贴板文字并发送给本次模型会话。剪贴板可能含私人信息；系统还可能询问粘贴权限。"
+    case "open": return AppLanguage.words(
+      "Open URL (only asks the system to open it; this does not mean the page operation is done):\n\(try safeURL(a.url).absoluteString)",
+      "打开网址（只请求系统打开，不代表已完成网页中的操作）：\n\(try safeURL(a.url).absoluteString)")
+    case "clipboard-get": return AppLanguage.words(
+      "Read the current clipboard text and send it to this model conversation. The clipboard may contain private information; the system may also ask for paste permission.",
+      "读取当前剪贴板文字并发送给本次模型会话。剪贴板可能含私人信息；系统还可能询问粘贴权限。")
     case "clipboard-set":
       guard let value = a.text, value.utf8.count <= 8192, !value.contains("\0") else { throw CocoaError(.coderInvalidValue) }
-      return "用以下全文替换剪贴板：\n\(value)"
-    case "notify": return "发布本 App 的本地通知：\n标题：\(try required(a.title, max: 256))\n正文：\(try required(a.text))\n点通知只打开 App，不批准其他操作。"
-    case "dial": return "打开系统拨号确认：\(try phoneNumber(a.number))\n系统可能再要求确认呼叫，不自动确认。"
+      return AppLanguage.words("Replace the clipboard with the following full text:\n\(value)", "用以下全文替换剪贴板：\n\(value)")
+    case "notify": return AppLanguage.words(
+      "Post a local notification from this app:\nTitle: \(try required(a.title, max: 256))\nBody: \(try required(a.text))\nTapping the notification only opens the app; it does not approve anything else.",
+      "发布本 App 的本地通知：\n标题：\(try required(a.title, max: 256))\n正文：\(try required(a.text))\n点通知只打开 App，不批准其他操作。")
+    case "dial": return AppLanguage.words(
+      "Open the system dial confirmation: \(try phoneNumber(a.number))\nThe system may ask again to confirm the call; it is not confirmed automatically.",
+      "打开系统拨号确认：\(try phoneNumber(a.number))\n系统可能再要求确认呼叫，不自动确认。")
     case "sms-draft":
-      let recipient = try a.number.map { try phoneNumber($0) } ?? "由用户选择"
-      return "打开短信草稿，最终由用户点发送：\n收件人：\(recipient)\n全文：\(try required(a.text))"
-    case "share": return "打开系统分享面板，由用户选择目标并完成分享：\n\(try required(a.text))"
-    case "settings": return "打开 DSH Go 本 App 的系统设置页；不会更改任何设置。"
+      let recipient = try a.number.map { try phoneNumber($0) } ?? AppLanguage.words("chosen by the user", "由用户选择")
+      return AppLanguage.words(
+        "Open an SMS draft; the user taps send in the end:\nRecipient: \(recipient)\nFull text: \(try required(a.text))",
+        "打开短信草稿，最终由用户点发送：\n收件人：\(recipient)\n全文：\(try required(a.text))")
+    case "share": return AppLanguage.words(
+      "Open the system share sheet; the user chooses the target and completes the share:\n\(try required(a.text))",
+      "打开系统分享面板，由用户选择目标并完成分享：\n\(try required(a.text))")
+    case "settings": return AppLanguage.words(
+      "Open this app's system settings page in DSH Go; no settings will be changed.",
+      "打开 DSH Go 本 App 的系统设置页；不会更改任何设置。")
     case "navigate":
       guard ["drive", "walk", "transit"].contains(a.mode ?? "") else { throw CocoaError(.coderInvalidValue) }
-      return "在 Apple Maps 打开路线请求，由用户核对目的地并开始导航：\n目的地：\(try required(a.destination, max: 1024))\n方式：\(a.mode!)"
+      return AppLanguage.words(
+        "Open a directions request in Apple Maps; the user checks the destination and starts navigation:\nDestination: \(try required(a.destination, max: 1024))\nMode: \(a.mode!)",
+        "在 Apple Maps 打开路线请求，由用户核对目的地并开始导航：\n目的地：\(try required(a.destination, max: 1024))\n方式：\(a.mode!)")
     case "calendar":
       let (begin, end, allDay) = try calendarDates(a)
       if let location = a.location { _ = try required(location, max: 1024) }
       if let description = a.description { _ = try required(description) }
-      return "打开系统日程编辑器，由用户检查并保存：\n标题：\(try required(a.title, max: 256))\n开始：\(begin)\n结束：\(end)\n全天：\(allDay)\n地点：\(a.location ?? "")\n备注：\(a.description ?? "")"
+      return AppLanguage.words(
+        "Open the system calendar editor for the user to review and save:\nTitle: \(try required(a.title, max: 256))\nStart: \(begin)\nEnd: \(end)\nAll day: \(allDay)\nLocation: \(a.location ?? "")\nNotes: \(a.description ?? "")",
+        "打开系统日程编辑器，由用户检查并保存：\n标题：\(try required(a.title, max: 256))\n开始：\(begin)\n结束：\(end)\n全天：\(allDay)\n地点：\(a.location ?? "")\n备注：\(a.description ?? "")")
     default: throw CocoaError(.coderInvalidValue)
     }
   }
@@ -371,7 +391,9 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
     let accepted = await withCheckedContinuation { continuation in
       UIApplication.shared.open(url, options: [:]) { continuation.resume(returning: $0) }
     }
-    return accepted ? .success("系统已接受打开请求；不表示已完成目标 App 中的操作。") : .failure("系统无法打开该目标。")
+    return accepted
+      ? .success(AppLanguage.words("The system accepted the open request; this does not mean the operation in the target app is done.", "系统已接受打开请求；不表示已完成目标 App 中的操作。"))
+      : .failure(AppLanguage.words("The system cannot open that target.", "系统无法打开该目标。"))
   }
   private func perform(_ a: IOSPhoneRequest.Action, id: String, validate: () async -> Bool) async -> IOSPhoneOutcome {
     do {
@@ -381,21 +403,21 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
       case "dial":
         let value = try phoneNumber(a.number).replacingOccurrences(of: "[ ()-]", with: "", options: .regularExpression)
         return await open(URL(string: "tel:" + value)!)
-      case "clipboard-set": UIPasteboard.general.string = a.text!; return .success("已写入剪贴板。")
+      case "clipboard-set": UIPasteboard.general.string = a.text!; return .success(AppLanguage.words("Written to the clipboard.", "已写入剪贴板。"))
       case "clipboard-get":
         let value = UIPasteboard.general.string ?? ""
-        guard value.utf8.count <= 8192 else { return .failure("剪贴板超过 8192 UTF-8 字节，本次未发送给模型。") }
+        guard value.utf8.count <= 8192 else { return .failure(AppLanguage.words("The clipboard exceeds 8192 UTF-8 bytes; it was not sent to the model.", "剪贴板超过 8192 UTF-8 字节，本次未发送给模型。")) }
         return .success(value)
       case "notify":
         let center = UNUserNotificationCenter.current()
-        guard try await center.requestAuthorization(options: [.alert, .sound, .badge]) else { return .failure("用户未授予通知权限。") }
+        guard try await center.requestAuthorization(options: [.alert, .sound, .badge]) else { return .failure(AppLanguage.words("The user did not grant notification permission.", "用户未授予通知权限。")) }
         guard requestId == id, foreground, await validate(), requestId == id, foreground else {
-          return .failure("原任务已取消、已过期或 App 已进入后台。")
+          return .failure(AppLanguage.words("The original task was cancelled, expired, or the app went to the background.", "原任务已取消、已过期或 App 已进入后台。"))
         }
         let content = UNMutableNotificationContent(); content.title = a.title!; content.body = a.text!
         // No category/action identifiers: a notification tap is navigation, never authority.
         try await center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
-        return .success("已提交本地通知；是否显示由系统通知设置决定。")
+        return .success(AppLanguage.words("Local notification submitted; whether it is shown depends on the system notification settings.", "已提交本地通知；是否显示由系统通知设置决定。"))
       case "navigate":
         var components = URLComponents(string: "https://maps.apple.com/")!
         let flag = ["drive": "d", "walk": "w", "transit": "r"][a.mode!]!
@@ -406,11 +428,13 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
         controller.popoverPresentationController?.sourceView = presenter()?.view
         controller.completionWithItemsHandler = { [weak self, weak controller] _, completed, _, _ in
           guard let self, let controller, self.modal === controller, self.requestId == id else { return }
-          self.finish(completed ? .success("用户已完成系统分享操作。") : .failure("用户取消了分享。"))
+          self.finish(completed
+            ? .success(AppLanguage.words("The user completed the system share.", "用户已完成系统分享操作。"))
+            : .failure(AppLanguage.words("The user cancelled the share.", "用户取消了分享。")))
         }
         return await present(controller)
       case "sms-draft":
-        guard MFMessageComposeViewController.canSendText() else { return .failure("此设备当前不能发送短信。") }
+        guard MFMessageComposeViewController.canSendText() else { return .failure(AppLanguage.words("This device cannot send SMS right now.", "此设备当前不能发送短信。")) }
         let controller = MFMessageComposeViewController()
         controller.messageComposeDelegate = self; controller.body = a.text!
         controller.recipients = a.number.map { [$0] }
@@ -423,10 +447,10 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
           let granted = await withCheckedContinuation { continuation in
             store.requestAccess(to: .event) { allowed, _ in continuation.resume(returning: allowed) }
           }
-          guard granted else { return .failure("用户未授予旧版 iOS 所需的日历权限。") }
+          guard granted else { return .failure(AppLanguage.words("The user did not grant the calendar permission older iOS requires.", "用户未授予旧版 iOS 所需的日历权限。")) }
         }
         guard requestId == id, foreground, await validate(), requestId == id, foreground else {
-          return .failure("原任务已取消、已过期或 App 已进入后台。")
+          return .failure(AppLanguage.words("The original task was cancelled, expired, or the app went to the background.", "原任务已取消、已过期或 App 已进入后台。"))
         }
         let (begin, end, allDay) = try calendarDates(a)
         let event = EKEvent(eventStore: store)
@@ -435,16 +459,20 @@ final class IOSPhoneActions: NSObject, EKEventEditViewDelegate, MFMessageCompose
         let controller = EKEventEditViewController()
         controller.eventStore = store; controller.event = event; controller.editViewDelegate = self
         return await present(controller)
-      default: return .failure("iOS 不支持该手机动作。")
+      default: return .failure(AppLanguage.words("iOS does not support this phone action.", "iOS 不支持该手机动作。"))
       }
-    } catch { return .failure("系统未完成手机动作；请用户检查，不要自动重试。") }
+    } catch { return .failure(AppLanguage.words("The system did not complete the phone action; ask the user to check, and do not retry automatically.", "系统未完成手机动作；请用户检查，不要自动重试。")) }
   }
   func eventEditViewController(_ controller: EKEventEditViewController, didCompleteWith action: EKEventEditViewAction) {
     guard modal === controller else { return }
-    finish(action == .saved ? .success("用户已在系统编辑器保存日程。") : .failure("用户取消了日程编辑。"))
+    finish(action == .saved
+      ? .success(AppLanguage.words("The user saved the event in the system editor.", "用户已在系统编辑器保存日程。"))
+      : .failure(AppLanguage.words("The user cancelled editing the event.", "用户取消了日程编辑。")))
   }
   func messageComposeViewController(_ controller: MFMessageComposeViewController, didFinishWith result: MessageComposeResult) {
     guard modal === controller else { return }
-    finish(result == .sent ? .success("系统报告短信已发送；不保证已送达。") : .failure("短信草稿已取消或发送失败。"))
+    finish(result == .sent
+      ? .success(AppLanguage.words("The system reports the SMS was sent; delivery is not guaranteed.", "系统报告短信已发送；不保证已送达。"))
+      : .failure(AppLanguage.words("The SMS draft was cancelled or sending failed.", "短信草稿已取消或发送失败。")))
   }
 }

@@ -21,6 +21,47 @@ const MESSAGES=Object.freeze({
  'host-unavailable':'主机配置服务暂不可用，请稍后重试。',
  'recovery-failed':'配置应用失败，恢复状态也未能确认，请重新读取并检查主机状态。',
 });
+const MESSAGES_EN=Object.freeze({
+ 'invalid-operation':'This configuration operation is invalid, or the field cannot be changed through this interface.',
+ 'entry-unavailable':'This plugin configuration is unavailable, or is outside this interface.',
+ conflict:'The configuration changed. Refresh and try again.',
+ overridden:'A host or command-line overlay controls this configuration, so it cannot be changed in the plugin form.',
+ 'apply-failed':'The new configuration could not be applied; the previous one was restored.',
+ 'invalid-config':'The submitted configuration does not meet the field requirements. Check the operation.',
+ 'host-unavailable':'The host configuration service is unavailable. Try again later.',
+ 'recovery-failed':'Applying the configuration failed and the restored state could not be confirmed. Read it again and check the host.',
+});
+const REPEAT='此接口不支持该请求方法。';
+const REPEAT_EN='This endpoint does not support that request method.';
+const LOCALE=/^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8})*$/;
+
+/** `en*` texts; every other or missing tag keeps the Chinese default. */
+function englishLocale(tag){return typeof tag==='string'&&tag.trim().toLowerCase().startsWith('en');}
+
+/**
+ * The request's language from its explicit `locale` query, else `Accept-Language`.
+ * Each call reads only the request, so clients on one shared host never share it.
+ */
+export function pluginConfigLocale(req){
+ const url=typeof req?.url==='string'?req.url:'';
+ let asked='';
+ try{asked=new URL(url,'http://dsh-go.invalid').searchParams.get('locale')??'';}catch{}
+ if(!LOCALE.test(asked)){
+  asked='';
+  for(const part of String(req?.headers?.['accept-language']??'').split(',')){
+   const tag=part.split(';')[0].trim();
+   if(LOCALE.test(tag)){asked=tag;break;}
+  }
+ }
+ return englishLocale(asked)?'en':'zh';
+}
+
+/** Display message for a public error code, Chinese unless the request asks for English. */
+export function pluginConfigMessage(code,locale){
+ const table=locale==='en'?MESSAGES_EN:MESSAGES;
+ return table[code]??MESSAGES[code];
+}
+
 const FAULTS=new WeakSet();
 function fault(status,code,path){const error=Object.assign(new Error(code),{status,code,...path?{path}:{}});FAULTS.add(error);return error;}
 function publicPath(path){return Array.isArray(path)&&path.length>0&&path.length<=32&&path.every(k=>typeof k==='string'&&k.length<=256&&!BAD.has(k))?[...path]:undefined;}
@@ -33,7 +74,7 @@ function validationPath(error,ops){
 }
 export function pluginConfigUnavailable(req){
  let path;try{path=new URL(req.url??'/', 'http://dsh-go.invalid').pathname;}catch{return;}
- if(path===BASE||path.startsWith(BASE+'/'))return {v:1,error:{code:'host-unavailable',message:MESSAGES['host-unavailable']}};
+ if(path===BASE||path.startsWith(BASE+'/'))return {v:1,error:{code:'host-unavailable',message:pluginConfigMessage('host-unavailable',pluginConfigLocale(req))}};
 }
 function labelOf(title,entry){
  try{
@@ -298,8 +339,10 @@ export function createPluginConfig(ctx,{readBody,send}){
  }
  return {statusChanged,async handle(req,res,path){
   if(path!==BASE&&!path.startsWith(BASE+'/'))return false;
+  // Read per request: one host can serve phones set to different languages.
+  const locale=pluginConfigLocale(req),repeat=locale==='en'?REPEAT_EN:REPEAT;
   try{
-   if(path===BASE){if(req.method!=='GET')send(res,405,{v:1,error:{code:'invalid-operation',message:'此接口不支持该请求方法。'}});else send(res,200,{v:1,entries:(await rows()).map(x=>x.summary)});return true;}
+   if(path===BASE){if(req.method!=='GET')send(res,405,{v:1,error:{code:'invalid-operation',message:repeat}});else send(res,200,{v:1,entries:(await rows()).map(x=>x.summary)});return true;}
    let id;try{id=decodeURIComponent(path.slice(BASE.length+1));}catch{throw fault(400,'invalid-operation');}
    if(!id||id.length>512)throw fault(404,'entry-unavailable');
    if(req.method==='GET')send(res,200,(await snapshot(id)).body);
@@ -310,8 +353,8 @@ export function createPluginConfig(ctx,{readBody,send}){
     if(String(req.headers['content-type']).split(';')[0].trim().toLowerCase()!=='application/json'){req.resume();throw fault(400,'invalid-operation');}
     let input;try{input=JSON.parse((await readBody(req,512*1024)).toString('utf8'));}catch{throw fault(400,'invalid-operation');}
     send(res,200,await update(id,input));
-   }else send(res,405,{v:1,error:{code:'invalid-operation',message:'此接口不支持该请求方法。'}});
-  }catch(error){const known=FAULTS.has(error),code=known?error.code:'host-unavailable',path=known?publicPath(error.path):undefined;send(res,known?error.status:503,{v:1,error:{code,message:MESSAGES[code],...path?{path}:{}}});}
+   }else send(res,405,{v:1,error:{code:'invalid-operation',message:repeat}});
+  }catch(error){const known=FAULTS.has(error),code=known?error.code:'host-unavailable',path=known?publicPath(error.path):undefined;send(res,known?error.status:503,{v:1,error:{code,message:pluginConfigMessage(code,locale),...path?{path}:{}}});}
   return true;
  }};
 }

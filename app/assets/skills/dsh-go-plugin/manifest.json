@@ -24,5 +24,10 @@
     "kit-schema-manifest.schema.json": "kit/schema/manifest.schema.json",
     "kit-schema-stream.schema.json": "kit/schema/stream.schema.json",
     "kit-schema-view.schema.json": "kit/schema/view.schema.json"
+  },
+  "locales": {
+    "en": {
+      "en-SKILL.md": "SKILL.md"
+    }
   }
 }

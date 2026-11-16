@@ -1,8 +1,8 @@
 // Switching the app's language reaches plugin texts at once: the locale the
-// app sends follows the setting itself (not AppLocale, which switches only
-// when the app's root rebuilds), and the contributions and the stream are
-// asked again in it. A stream made again while the app is away (a late host,
-// a system language change) still closes after the background grace.
+// app sends follows the setting itself (and the root's switch), and the
+// contributions and the stream are asked again in it. A stream made again
+// while the app is away (a late host, a system language change) still closes
+// after the background grace.
 
 import 'package:dsh_app/l10n/l10n.dart';
 import 'package:dsh_app/plugins/native/native_state.dart';
@@ -122,8 +122,9 @@ void main() {
     expect(bridge.streams, ['zh-CN']);
 
     await container.read(appLanguageProvider.notifier).set(AppLanguage.en);
-    // The root hasn't rebuilt: AppLocale still says Chinese.
-    expect(AppLocale.isEnglish, isFalse);
+    // The setting switches the app's language for content at once; the root's
+    // rebuild only repaints the tree.
+    expect(AppLocale.isEnglish, isTrue);
     expect(container.read(nativeLocaleProvider), 'en');
     expect(container.read(nativeCapsProvider).locale, 'en');
     await container.read(nativeRawContributionsProvider.future);

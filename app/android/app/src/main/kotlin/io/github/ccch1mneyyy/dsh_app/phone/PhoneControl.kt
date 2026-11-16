@@ -61,13 +61,16 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     private val taskIds = java.util.concurrent.atomic.AtomicLong()
     private val cleanupIo = Executors.newSingleThreadExecutor { r -> Thread(r, "dsh-phone-cleanup").apply { isDaemon = true } }
 
-    private val taskJournal = PhoneTaskJournal(
-        read = { app.getSharedPreferences("phone_task_journal", Context.MODE_PRIVATE).getString("records", null) },
-        commit = { value -> app.getSharedPreferences("phone_task_journal", Context.MODE_PRIVATE)
-            .edit().putString("records", value).commit() },
-    )
+    // Lazy: its refusals resolve through [localizedUi], declared below.
+    private val taskJournal by lazy {
+        PhoneTaskJournal(
+            read = { app.getSharedPreferences("phone_task_journal", Context.MODE_PRIVATE).getString("records", null) },
+            commit = { value -> app.getSharedPreferences("phone_task_journal", Context.MODE_PRIVATE)
+                .edit().putString("records", value).commit() },
+            ui = localizedUi,
+        )
+    }
 
-    val tasks = PhoneTasks(clock = SystemClock::elapsedRealtime, idSource = taskIds::incrementAndGet)
     val log = ActionLog()
     val system = SystemActions(app)
     private val localizedUi = PhoneUiText { key, args ->
@@ -151,16 +154,22 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             "phone_role_tab" -> R.string.phone_role_tab
             "phone_role_image" -> R.string.phone_role_image
             "phone_role_text" -> R.string.phone_role_text
-            else -> null
+            "phone_role_heading" -> R.string.phone_role_heading
+            else -> PhoneStrings.stringId(key)
         }
         id?.let { AppStrings.get(app, it, *args.toTypedArray()) }
     }
 
     override fun uiText(): PhoneUiText = localizedUi
 
+    /** Declared after [localizedUi]: the turn's stop and refusal text follows the app language. */
+    val tasks = PhoneTasks(clock = SystemClock::elapsedRealtime, idSource = taskIds::incrementAndGet,
+        ui = PhoneUiText { key, args -> localizedUi.resolve(key, args) })
+
     val skillTrace = PhoneTaskTrace()
-    internal val skillDrafts = PhoneSkillDrafts()
-    internal val skillReplaySelections = io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplaySelections(SystemClock::elapsedRealtime)
+    internal val skillDrafts = PhoneSkillDrafts(ui = localizedUi)
+    internal val skillReplaySelections = io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillReplaySelections(
+        ui = localizedUi, clock = SystemClock::elapsedRealtime)
     private val skillReplayOutcomes = PhoneSkillOutcomes(
         read = { prefs.getString("skillReplayOutcomesV1", null) },
         commit = { prefs.edit().putString("skillReplayOutcomesV1", it).commit() },
@@ -175,7 +184,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             else origin.runtime.checkPhoneSkillSave(binding, publication, done)
         })
     private val displaySelection = PhoneDisplaySelection()
-    private val legacyObservations = PhoneTaskObservations(tasks)
+    private val legacyObservations = PhoneTaskObservations(tasks, ui = localizedUi)
     val core = PhoneCore(this, tasks, log, skillTrace = skillTrace,
         onExecution = { owner -> selectExecution(tasks, owner) })
     val notificationGate = NotificationGate(app) { text, ifCurrent -> setStatusLine(text, ifCurrent) }
@@ -192,6 +201,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
         backgroundCapacity = { background.parallelism().effectiveLimit },
         screenRecoveryReady = { isEnabled() && !isLocked() },
         prepareBackground = { task, owner -> background.prepareForTask(owner) { task.tasks.isCurrent(owner) } },
+        ui = localizedUi,
         startSkillScope = skillLifecycle::startManaged,
         completeSkillScope = skillLifecycle::completeDrained,
         cancelScope = { record, state ->
@@ -201,8 +211,12 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             if (state.stopped) record.activeWorker?.interruptCurrent(record.tasks)
             prompts.stopTask(record.tasks)
         })
-    private val server = McpServer(PhoneToolCatalog.listJson(), { name, args, _ -> sessions.run(sessions.admit(null), name, args) }, SERVER_VERSION,
-        diagnostics = { args, caller -> RuntimeController.get(app).diagnosticsTool.call(args, caller) })
+    // The catalog's language comes from the app's own choice (设置 → 语言), read on every
+    // tools/list so a switch while the bridge lives reaches the model without a restart.
+    private val server = McpServer({ PhoneToolCatalog.listJson(AppStrings.resolvedLanguage(app)) },
+        { name, args, _ -> sessions.run(sessions.admit(null), name, args) }, SERVER_VERSION,
+        diagnostics = { args, caller -> RuntimeController.get(app).diagnosticsTool.call(args, caller) },
+        ui = localizedUi)
     private val bridge = PhoneBridge(server, { line -> logger(line) }, { call ->
         if (call.name == DiagnosticsTool.NAME) PhoneCallWork({ call.run() })
         else if (call.name == PhoneCore.REPLAY) replayWork(call) else {
@@ -222,7 +236,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
                 if (task != null) { background.sealTask(task.tasks.snapshot().id); sessions.settleEnd(task) }
             }
         } catch (_: PhoneTaskSessions.CapacityExceeded) {
-            PhoneBridge.EndWork(McpServer.error(end.id, -32000, PhoneTaskSessions.CAPACITY_MESSAGE)) {}
+            PhoneBridge.EndWork(McpServer.error(end.id, -32000,
+                localizedUi.get("phone_capacity", PhoneTaskSessions.CAPACITY_MESSAGE))) {}
         }
     })
 
@@ -235,7 +250,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             PhoneSkillReplaySelections.output(value)
         } })
         fun rejected() = reply(mapOf("v" to 1, "state" to "rejected", "stepDispatch" to "not_dispatched",
-            "completedSteps" to 0, "cancelRequested" to false, "reason" to "没有匹配的本机当前路线准备，未执行。")) // l10n:keep replay result
+            "completedSteps" to 0, "cancelRequested" to false,
+            "reason" to localizedUi.get("phone_replay_no_preparation", "没有匹配的本机当前路线准备，未执行。")))
         if (call.args.keys != setOf("operation", "invocation")) return rejected()
         val operation = call.args["operation"] as? String ?: return rejected()
         if (operation !in setOf("start", "status", "cancel")) return rejected()
@@ -284,7 +300,7 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
 
     private fun createSessionCore(task: PhoneTasks, sessionId: String?): PhoneCore {
         val gate = prompts.scoped(task, sessionId)
-        val observations = PhoneTaskObservations(task)
+        val observations = PhoneTaskObservations(task, ui = localizedUi)
         val env = object : PhoneEnv by this@PhoneControl {
             override fun gate(): UserGate = gate
             override fun onTaskStarted(owner: PhoneTasks.Owner) {} // Registry owns managed trace start.
@@ -297,7 +313,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
             override fun beforeHandoff(screen: PhoneScreen, owner: PhoneTasks.Owner): String? {
                 if (screen != PhoneScreen.BACKGROUND) return null
                 background.endTask(owner.taskId)
-                return "后台屏已释放。请用户在主屏完成操作，继续前先重新读取主屏。" // l10n:keep agent handoff result
+                return localizedUi.get("phone_handoff_background_released",
+                    "后台屏已释放。请用户在主屏完成操作，继续前先重新读取主屏。")
             }
         }
         task.addListener { state -> onSessionTask(task, state) }
@@ -989,8 +1006,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     override fun beforeHandoff(screen: PhoneScreen, owner: PhoneTasks.Owner): String? {
         if (screen != PhoneScreen.BACKGROUND) return null
         background.endTask(owner.taskId)
-        // l10n:keep agent stop reason
-        return "后台屏已释放。请用户在主屏完成操作，继续前先重新读取主屏（s 开头的屏幕号）。"
+        return localizedUi.get("phone_handoff_background_released_screen",
+            "后台屏已释放。请用户在主屏完成操作，继续前先重新读取主屏（s 开头的屏幕号）。")
     }
 
     override fun a11yState(): A11yState = when {
@@ -1000,9 +1017,10 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     }
 
     override fun backgroundUnavailable(): String {
-        val reason = (backgroundStatus()["reason"] as? String)?.let { "（$it）" } ?: ""
-        // l10n:keep agent stop reason
-        return "不打扰模式（后台屏）用不了$reason。只能在主屏操作；要用后台屏请用户到 设置 → 手机操控 → 不打扰模式 开通。"
+        val reason = (backgroundStatus()["reason"] as? String)
+            ?.let { localizedUi.get("phone_background_reason_detail", "（%1\$s）", it) } ?: ""
+        return localizedUi.get("phone_background_unusable",
+            "不打扰模式（后台屏）用不了%1\$s。只能在主屏操作；要用后台屏请用户到 设置 → 手机操控 → 不打扰模式 开通。", reason)
     }
 
     override fun system(): SystemApi = system

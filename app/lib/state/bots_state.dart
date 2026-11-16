@@ -269,7 +269,13 @@ class DsBotController extends Notifier<DsBotStatus> {
     _stateBusyGeneration = generation;
     try {
       final team = state.team;
-      final answer = await api.state(since: full ? null : team?.revision, modelsKey: full ? null : team?.modelsKey);
+      // The Host localizes Bot names, rooms and notices; send the language the
+      // app is showing now rather than letting the API's Chinese default win.
+      final answer = await api.state(
+        since: full ? null : team?.revision,
+        modelsKey: full ? null : team?.modelsKey,
+        locale: AppLocale.isEnglish ? 'en' : 'zh-CN',
+      );
       if (!_current(generation)) return;
       state = state.copyWith(
         availability: DsBotAvailability.ready,

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createMcpToolDefinition } from '@deepseek-ai/dsh-mcp-client';
 import { createPhoneBridge } from './bridge.mjs';
 import { iosToolDescription } from './descriptions.mjs';
+import { followAppLanguage } from './language.mjs';
 
 export const name = 'dsh-go-ios-phone';
 export const inject = ['tools'];
@@ -45,13 +46,20 @@ export async function apply(ctx, config) {
   const endpoint = join(config.directory, 'endpoint.json');
   const temporary = `${endpoint}.${randomUUID()}.tmp`;
   try {
+    const described = [];
     for (const tool of catalog) {
-      disposers.push(ctx.tools.register(createMcpToolDefinition(ctx, {
+      const definition = createMcpToolDefinition(ctx, {
         name: `mcp__phone__${tool.name}`, rawName: tool.name,
         description: iosToolDescription(tool.name), inputSchema: tool.inputSchema,
         call: (args, execution) => bridge.call(tool.name, args, execution),
-      })));
+      });
+      described.push({ name: tool.name, definition });
+      disposers.push(ctx.tools.register(definition));
     }
+    // The catalog and schemas stay fixed; a Settings → Language change rewrites
+    // descriptions on the registered objects, so an admitted step and any call
+    // already running keep their identity instead of being unregistered.
+    disposers.push(followAppLanguage(described, iosToolDescription));
     for (const tool of browserCatalog) {
       disposers.push(ctx.tools.register(createMcpToolDefinition(ctx, {
         name: `mcp__browser__${tool.name}`, rawName: tool.name,

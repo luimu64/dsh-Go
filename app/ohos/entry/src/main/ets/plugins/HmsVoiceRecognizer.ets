@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS：普通听写使用 CoreSpeechKit，与外部 PCM 字幕共用 ASR 引擎准入。
 // 使用 short / zh-CN / offline；境外行为与 isFinal/isLast 的真机时序仍未核实。
 import type { speechRecognizer } from '@kit.CoreSpeechKit';
@@ -40,7 +41,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
   }
 
   private static async getEngine(): Promise<speechRecognizer.SpeechRecognitionEngine> {
-    if (HmsVoiceRecognizer.poisoned) throw new VoiceFailure('recognizer', '语音服务尚未释放，请重新打开应用。', 5);
+    if (HmsVoiceRecognizer.poisoned) throw new VoiceFailure('recognizer', AppLanguage.pick('语音服务尚未释放，请重新打开应用。', 'The voice service has not been released; reopen the app.'), 5);
     if (HmsVoiceRecognizer.engine) return HmsVoiceRecognizer.engine;
     if (!HmsVoiceRecognizer.creating) {
       HmsVoiceRecognizer.creating = HmsVoiceRecognizer.create().finally((): void => {
@@ -54,7 +55,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
     const params: speechRecognizer.CreateEngineParams = {
       language: 'zh-CN', online: 1, extraParams: { locate: 'CN', recognizerMode: 'short' }
     };
-    if (!HmsAsrLease.claim(HmsVoiceRecognizer.asrToken)) throw new VoiceFailure('busy', '语音识别服务正在用于字幕。', 8);
+    if (!HmsAsrLease.claim(HmsVoiceRecognizer.asrToken)) throw new VoiceFailure('busy', AppLanguage.pick('语音识别服务正在用于字幕。', 'The speech recognition service is in use for captions.'), 8);
     let engine: speechRecognizer.SpeechRecognitionEngine;
     try {
       const kit: SpeechKit = await loadSpeechKit();
@@ -102,13 +103,13 @@ export class HmsVoiceRecognizer implements VoiceResource {
       if (error instanceof VoiceFailure) throw error as Error;
       const code = voiceCode((error as BusinessError).code);
       throw new VoiceFailure(code === 9 ? 'permission' : (code === 8 ? 'busy' : 'recognizer'),
-        code === 9 ? '请先允许使用麦克风。' : '语音识别服务暂时不可用，请稍后重试。', code);
+        code === 9 ? AppLanguage.pick('请先允许使用麦克风。', 'Allow microphone access first.') : AppLanguage.pick('语音识别服务暂时不可用，请稍后重试。', 'The speech recognition service is temporarily unavailable. Try again later.'), code);
     });
     return this.opening;
   }
 
   private async open(): Promise<void> {
-    if (HmsVoiceRecognizer.active) throw new VoiceFailure('busy', '语音识别服务仍在处理上一会话。', 8);
+    if (HmsVoiceRecognizer.active) throw new VoiceFailure('busy', AppLanguage.pick('语音识别服务仍在处理上一会话。', 'The speech recognition service is still handling the previous session.'), 8);
     HmsVoiceRecognizer.active = this;
     const engine = await HmsVoiceRecognizer.getEngine();
     if (this.cancelled || !this.current()) throw retiredVoice();
@@ -171,7 +172,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
     if (this.released || this.cancelled || this.finishing) return null;
     if (!this.current()) { await this.cancel(); return null; }
     const engine = HmsVoiceRecognizer.engine;
-    if (!engine) throw new VoiceFailure('recognizer', '语音识别服务不可用。', 5);
+    if (!engine) throw new VoiceFailure('recognizer', AppLanguage.pick('语音识别服务不可用。', 'The speech recognition service is unavailable.'), 5);
     this.finishing = true; engine.finish(this.nativeId); return null;
   }
 
@@ -190,7 +191,7 @@ export class HmsVoiceRecognizer implements VoiceResource {
     if (engine && HmsVoiceRecognizer.active === this) {
       if (this.started) { try { engine.cancel(this.nativeId); } catch (_) {} }
       try { engine.shutdown(); }
-      catch (_) { throw new VoiceFailure('recognizer', '语音服务尚未释放，请重试取消或重新打开应用。', 5); }
+      catch (_) { throw new VoiceFailure('recognizer', AppLanguage.pick('语音服务尚未释放，请重试取消或重新打开应用。', 'The voice service has not been released; cancel again or reopen the app.'), 5); }
       HmsVoiceRecognizer.engine = undefined;
       HmsAsrLease.release(HmsVoiceRecognizer.asrToken);
       HmsVoiceRecognizer.poisoned = false;

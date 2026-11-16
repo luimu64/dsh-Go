@@ -4,6 +4,7 @@ import common from '@ohos.app.ability.common';
 import { FormExtensionAbility, formBindingData, formInfo, formProvider } from '@kit.FormKit';
 import { WidgetValues, widgetView } from '../companion/CompanionWidgetData';
 import { CompanionWidgetStore } from '../companion/CompanionWidgetStore';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export default class CompanionFormAbility extends FormExtensionAbility {
   private tickets: Map<string, number> = new Map<string, number>();
@@ -11,6 +12,7 @@ export default class CompanionFormAbility extends FormExtensionAbility {
   private stopped: boolean = false;
 
   onAddForm(want: Want): formBindingData.FormBindingData {
+    AppLanguage.init(this.context);
     const identity: Object | undefined = want.parameters?.[formInfo.FormParam.IDENTITY_KEY];
     if (typeof identity === 'string' && identity.length > 0) this.refresh(identity);
     // Documented asynchronous-add path: no disk state is invented here.
@@ -24,6 +26,7 @@ export default class CompanionFormAbility extends FormExtensionAbility {
 
   private refresh(formId: string): void {
     if (this.stopped || formId.length === 0) return;
+    AppLanguage.init(this.context);
     const ticket: number = ++this.serial;
     this.tickets.set(formId, ticket);
     const context: common.ApplicationContext = this.context.getApplicationContext();

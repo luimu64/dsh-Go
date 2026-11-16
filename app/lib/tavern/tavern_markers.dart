@@ -4,7 +4,9 @@
 // sprite or her Live2D figure's feeling) ahead of what the words suggest,
 // and is never shown as text.
 
+// l10n:keep The marker is matched in either language, never shown.
 final _marker = RegExp(
+  // l10n:keep The marker is matched in either language, never shown.
   r'[ \t]*[\[【]\s*(?:表情|情绪|expression|emotion)\s*[:：]\s*([^\]】\n]{1,32}?)\s*[\]】]',
   caseSensitive: false,
 );

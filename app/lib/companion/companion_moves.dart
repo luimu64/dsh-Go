@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show StringCharacters;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'companion_language.dart';
 import 'companion_reply.dart';
 
 /// What the stage found in the model when it loaded.
@@ -182,14 +183,19 @@ class CompanionMoves {
   Map<String, String> get actionLabels => {for (final m in offeredMotions) m.label: m.raw};
 
   /// Told to the AI after her built-in marks; null when nothing is offered.
-  String? rules() {
-    final faces = [for (final m in offeredExpressions) '[表情:${m.label}]'];
-    final moves = [for (final m in offeredMotions) '[动作:${m.label}]'];
+  /// [language] follows the app's prompt language; the labels themselves are
+  /// the person's names for the model's own moves and are never translated.
+  String? rules({String? language}) {
+    final english = companionIsEnglish(language);
+    final faces = [for (final m in offeredExpressions) english ? '[emotion:${m.label}]' : '[表情:${m.label}]'];
+    final moves = [for (final m in offeredMotions) english ? '[action:${m.label}]' : '[动作:${m.label}]'];
     if (faces.isEmpty && moves.isEmpty) return null;
     return [
-      '这个角色还有自己的表情和动作，同样写成标记，界面会执行：',
-      if (faces.isNotEmpty) '- 表情：${faces.join(' ')}',
-      if (moves.isNotEmpty) '- 动作：${moves.join(' ')}',
+      english
+          ? 'This character also has expressions and motions of their own. Write them as marks too; the interface plays them:'
+          : '这个角色还有自己的表情和动作，同样写成标记，界面会执行：',
+      if (faces.isNotEmpty) english ? '- Expression: ${faces.join(' ')}' : '- 表情：${faces.join(' ')}',
+      if (moves.isNotEmpty) english ? '- Action: ${moves.join(' ')}' : '- 动作：${moves.join(' ')}',
     ].join('\n');
   }
 
