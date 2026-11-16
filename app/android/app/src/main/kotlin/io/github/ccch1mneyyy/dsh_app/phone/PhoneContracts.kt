@@ -145,6 +145,9 @@ data class Availability(val ok: Boolean, val reason: String? = null, val userRea
 interface PhoneDriver {
     val screen: PhoneScreen
 
+    /** Model-facing words for this driver's own default refusals; a real driver overrides it. */
+    fun uiText(): PhoneUiText = PhoneUiText.DEFAULT
+
     fun availability(): Availability
 
     fun observe(detail: Boolean, image: Boolean): ScreenSnapshot
@@ -183,11 +186,11 @@ interface PhoneDriver {
     fun target(screenId: String, elementId: Int): TargetInfo?
 
     /** Captures only the original committed observation's editor. */
-    fun prepareFocusInput(screenId: String): Either<String, FocusInput> =
-        Either.Left("当前屏幕不能核实原焦点输入连接；请 handoff，不要改用全文替换或重复输入。") // l10n:keep agent focus result
+    fun prepareFocusInput(screenId: String): Either<String, FocusInput> = Either.Left(uiText().get(
+        "phone_focus_refused_default", "当前屏幕不能核实原焦点输入连接；请 handoff，不要改用全文替换或重复输入。"))
     /** Native reviewed-route operation; default drivers cannot execute it. */
-    fun prepareSkillReplayStep(step: SkillReplayStep): Either<String, SkillReplayPlan> =
-        Either.Left("当前屏幕不支持已核手机路线，未执行。") // l10n:keep agent replay result
+    fun prepareSkillReplayStep(step: SkillReplayStep): Either<String, SkillReplayPlan> = Either.Left(uiText().get(
+        "phone_replay_refused_default", "当前屏幕不支持已核手机路线，未执行。"))
 
     /** Pure memory, tied to this exact published observation; independent of image acceptance. */
     fun visualScope(screenId: String): VisualScope? = null

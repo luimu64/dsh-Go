@@ -386,7 +386,9 @@ class PhoneTaskObservationsTest {
         // This inventories the interface, not the generated delegation class: Kotlin's
         // `by driver` emits methods even when the owner wrapper forgot an override.
         // Adding an entry requires a classification AND a real wrapper behavior test.
-        val readOnlyCapabilities = setOf("getScreen()", "availability()")
+        // `uiText()` only resolves wording; it touches no device state and cannot carry an
+        // ownership claim, so it belongs with the other read-only capabilities.
+        val readOnlyCapabilities = setOf("getScreen()", "availability()", "uiText()")
         val ownerBoundEntries = setOf(
             "observe(boolean,boolean)",
             "observe(boolean,boolean,boolean)",

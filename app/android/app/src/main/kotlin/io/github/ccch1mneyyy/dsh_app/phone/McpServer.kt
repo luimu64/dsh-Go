@@ -46,6 +46,8 @@ class McpServer(
     private val call: (name: String, args: Map<String, Any?>, caller: PhoneCaller?) -> ToolOutput,
     private val serverVersion: String = "1",
     private val diagnostics: ((Map<String, Any?>, PhoneCaller?) -> ToolOutput)? = null,
+    /** The unexpected-error wrapper follows the app language; the JSON-RPC codes never change. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
 ) {
     /** A catalog that does not change for the life of the bridge. */
     constructor(
@@ -155,8 +157,10 @@ class McpServer(
             if (name == DiagnosticsTool.NAME && diagnostics != null) diagnostics.invoke(args, caller)
             else (handler ?: call)(name, args, caller)
         } catch (e: Throwable) {
-            // l10n:keep agent tool error
-            ToolOutput("手机操控出错：${e.javaClass.simpleName}${e.message?.let { "：$it" } ?: ""}", isError = true)
+            // The class name and the thrown message are the host's own words: never looked up.
+            val detail = e.message?.let { ui.get("phone_tool_error_detail", "：%1\$s", it) } ?: ""
+            ToolOutput(ui.get("phone_tool_error_wrapper", "手机操控出错：%1\$s%2\$s",
+                e.javaClass.simpleName, detail), isError = true)
         }
         val line = result(id, toolResult(out))
         // Only the exact, fully encoded original response can bind its displayed focus evidence.

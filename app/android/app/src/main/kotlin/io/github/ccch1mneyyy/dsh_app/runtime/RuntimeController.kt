@@ -889,6 +889,8 @@ class RuntimeController private constructor(private val app: Context) : DshProce
             lkgBundles = lkg?.snapshot?.bundles ?: emptyList(),
             lkgVersions = lkg?.snapshot?.versions ?: emptyMap(),
             failureLog = if (mainFailure == null) emptyList() else log,
+            // The rescue agent reads the same language the App shows; the Chinese text stays the default.
+            english = appLanguage == "en",
         )
     }
 

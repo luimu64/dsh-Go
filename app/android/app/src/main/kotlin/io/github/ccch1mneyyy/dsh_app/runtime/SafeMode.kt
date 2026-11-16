@@ -252,6 +252,12 @@ object SafeMode {
         /** Output around the failure, tokens already masked. */
         val failureLog: List<String>,
         val timeZone: TimeZone = TimeZone.getDefault(),
+        /**
+         * The briefing is written in English. The rescue agent reads the same app language the
+         * user does ([io.github.ccch1mneyyy.dsh_app.i18n.AppStrings]); false keeps the Chinese text
+         * that pure JVM callers and tests have always seen.
+         */
+        val english: Boolean = false,
     )
 
     /** Writes the overlay, the agent briefing, the failure data and the repair tool under [GUEST_DIR]. */
@@ -269,7 +275,9 @@ object SafeMode {
         writeAtomic(
             File(dir, "last-failure.log"),
             // l10n:keep agent repair briefing
-            if (briefing.failureLog.isEmpty()) "（没有记录到失败时的输出）\n" else briefing.failureLog.joinToString("\n", postfix = "\n"),
+            if (briefing.failureLog.isEmpty()) {
+                if (briefing.english) EMPTY_FAILURE_LOG_EN else "（没有记录到失败时的输出）\n"
+            } else briefing.failureLog.joinToString("\n", postfix = "\n"),
         )
         val f = briefing.failure
         val failureFile = File(dir, "failure.json")
@@ -286,7 +294,11 @@ object SafeMode {
         tool.setExecutable(true, false)
     }
 
-    fun renderBriefing(b: Briefing): String = buildString {
+    /** The rescue briefing in the app language; the Chinese text stays the default. */
+    fun renderBriefing(b: Briefing): String =
+        if (b.english) renderBriefingEnglish(b) else renderBriefingChinese(b)
+
+    private fun renderBriefingChinese(b: Briefing): String = buildString {
         val f = b.failure
         // l10n:keep agent repair briefing
         appendLine("<!-- dsh-app:safe-mode — DSH App 每次进入安全模式时重写本文件，改了也会被覆盖 -->")
@@ -441,7 +453,119 @@ object SafeMode {
         appendLine("- 诊断文件和日志里可能有密钥，不要整段贴给用户。")
     }
 
-    private fun kindText(f: RunFailure): String = when (f.kind) {
+    /**
+     * The same briefing in English, for the rescue agent when the App language is English. Every
+     * heading, path, command, reason and warning matches [renderBriefingChinese] one for one; only
+     * the prose differs, so the repair steps stay valid in both languages.
+     */
+    private fun renderBriefingEnglish(b: Briefing): String = buildString {
+        val f = b.failure
+        appendLine("<!-- dsh-app:safe-mode: DSH App rewrites this file on every safe-mode start; edits are overwritten -->")
+        appendLine("# You are running in safe mode")
+        appendLine()
+        appendLine(
+            "The user's normal configuration (profile `web`) is broken. The App started you with a clean profile `$PROFILE`: " +
+                "only components that ship with DSH, no third-party plugins, and plugin management and live reload are off. " +
+                "The original conversations, sign-ins and API keys stay in the original directory and were not copied into the rescue environment; " +
+                "the rescue assistant may need to configure a model again. " +
+                "Your task is to help the user repair `web` so that it starts normally again.",
+        )
+        appendLine()
+        appendLine("## What happened")
+        if (f == null) {
+            appendLine("- The user entered safe mode manually and the App has no recent crash on record. Ask the user what went wrong first, then investigate with the steps below.")
+        } else {
+            appendLine("- Time: ${formatTime(f.at, b.timeZone)}; type: ${kindText(f, english = true)}; exit code: ${f.exitCode}")
+            f.summary?.let { appendLine("- Summary: `$it`") }
+            if (f.kind != FailureKind.LAUNCH_FAILED && f.requiredRows.isNotEmpty()) {
+                appendLine(
+                    "- Required configuration rows that could not start: ${f.requiredRows.joinToString(", ") { "`$it`" }}. They are official rows that were edited into something broken, " +
+                        "but they are not necessarily the culprit; use `$TOOL blame` to find out who changed them.",
+                )
+            }
+            val suspects = if (f.kind == FailureKind.LAUNCH_FAILED) emptyList() else f.suspects.map { "`$it` (appears in the crash output)" } +
+                f.recent.filter { it !in f.suspects }.map { "`$it` (newly enabled or upgraded since the last healthy run)" }
+            appendLine("- Suspect plugins: " + if (suspects.isEmpty()) "could not be determined automatically" else suspects.joinToString(", "))
+            appendLine("- Output around the failure (tokens masked): `$GUEST_DIR/last-failure.log`")
+            appendLine("- DSH startup diagnostics: " + (f.diagnostics?.let { "`$it` (may contain secrets; do not paste it to the user in full)" } ?: "none"))
+        }
+        when (b.reason) {
+            SafePolicy.REASON_AUTO -> appendLine("- How it entered: the main configuration failed to start twice in a row, so the App switched to safe mode automatically.")
+            SafePolicy.REASON_PROBATION -> appendLine("- How it entered: the user tried \"Back to normal mode\", but normal mode crashed again within 2 minutes, so the App returned to safe mode automatically.")
+            SafePolicy.REASON_MANUAL -> if (f != null) appendLine("- How it entered: the user entered it manually.")
+        }
+        if (b.moved.isNotEmpty()) {
+            appendLine(
+                "- The App renamed these global files out of the way (the original configuration must still be checked for them, and a `.env` in the working directory can also affect safe mode): ${b.moved.joinToString("; ")}. " +
+                    "Confirm with the user before changing anything back after the repair.",
+            )
+        }
+        appendLine()
+        appendLine("## Original and rescue data")
+        appendLine("- Safe mode uses the official PTC preset by default, and the official Minimal preset is also available; Standard and Creator depend on the plugin management service, which is off, so they are unavailable in safe mode. Normal mode's preset is unchanged.")
+        appendLine("- The rescue DSH_HOME is `$HOME`; the original data is in `$ORIGINAL_HOME`, and the repair tool and trial always target the original directory. Original conversations do not appear in the rescue session list.")
+        appendLine("- The App diagnostics snapshot for rescue mode is at `$HOME/dsh-app/diagnostics.md`; generate diagnostics in the App settings first.")
+        appendLine("- No model or message is needed: an existing rescue session can open the terminal from its title details. With an empty store the first time, switch to \"Web mode\" first so the official page creates an empty rescue session, then use DSH's native floating handle \"Back to native interface\" to keep that session, and open the terminal from its title details. Run `$TOOL export \"\$PWD/dsh-recovery.tar\"`, then long-press the archive on that conversation's Files page to save it to the phone. The output file must be one that does not exist yet and lies outside the original data directory.")
+        appendLine("- The export keeps the original sessions, attachments and workspace metadata, including damaged records; it does not repair data and is not a full plugin or workspace backup. Symbolic links are saved as links only; their targets are not read. The archive contains private conversations and images, so store it carefully; use the diagnostics export entry in the App settings for a diagnostics bundle.")
+        appendLine()
+        appendLine("## Where the main configuration is")
+        appendLine("- `/root/.dsh/profiles/web/package.json`: `dependencies` are the installed packages, and `dsh.profile.bundles` are the enabled bundles (layered in order).")
+        appendLine("- `/root/.dsh/profiles/web/cordis.patch.yml`: the settings layer for web (what the web settings page changes lives here).")
+        appendLine("- `/root/.dsh/profiles/web/.plugin-manager/logs/`: plugin install logs; `/root/.dsh/logs/`: DSH startup diagnostics.")
+        appendLine("- The configuration under the original data root is affected by `/root/.dsh/cordis.patch.yml` and `/root/.dsh/.env`; the rescue data root is isolated from them. The working directory's `/root/.env` still needs a separate check.")
+        if (b.lkgAt == null) {
+            appendLine("- The App has not recorded a plugin configuration from a healthy run yet.")
+        } else {
+            appendLine(
+                "- Bundles enabled during the last healthy run (${formatTime(b.lkgAt, b.timeZone)}): " +
+                    b.lkgBundles.joinToString(", ") { name -> "`$name`" + (b.lkgVersions[name]?.let { "@$it" } ?: "") } + ".",
+            )
+        }
+        appendLine()
+        appendLine("## How to investigate")
+        appendLine("1. `$TOOL list`: web's plugins, whether each is enabled, whether it is third-party, and whether anything changed since the last healthy run.")
+        appendLine(
+            "2. `$TOOL blame`: lists configuration rows added or changed by third-party plugins, the settings layer or global patches; " +
+                "when the startup failure says `some row (required)`, run `$TOOL blame <row>`; the package after `patched by` is usually the culprit.",
+        )
+        appendLine(
+            "3. For a runtime crash, read the stack: `/root/.dsh/profiles/web/node_modules/<package>/` in a path is the package that broke; " +
+                "it may only be a dependency of some plugin, so use `grep -l '\"<package>\"' /root/.dsh/profiles/web/node_modules/*/package.json` to find what depends on it.",
+        )
+        appendLine()
+        appendLine("## How to repair (do the reversible steps first)")
+        appendLine("1. Disable a suspect plugin: `$TOOL disable <package>`. It only edits the enabled list, deletes no files and needs no network; `$TOOL enable <package>` undoes it.")
+        appendLine(
+            "2. If a setting was edited into something broken: back it up first with `cp /root/.dsh/profiles/web/cordis.patch.yml /root/.dsh/profiles/web/cordis.patch.yml.bak-\$(date +%Y%m%d%H%M)`, then edit the original file.",
+        )
+        appendLine("3. Only after the user confirms the plugin is no longer wanted, uninstall it: `DSH_HOME=$ORIGINAL_HOME dsh plugin --profile web remove <package>`.")
+        appendLine(
+            "4. If it truly cannot be repaired, ask the user first, then `mv /root/.dsh/profiles/web /root/.dsh/profiles/web.broken-\$(date +%Y%m%d%H%M)`: " +
+                "the next normal start rebuilds a clean web, plugins and settings must be installed again, and conversations are unaffected.",
+        )
+        appendLine("Tell the user what you changed after every step.")
+        appendLine()
+        appendLine("## How to verify")
+        appendLine(
+            "- `$TOOL trial`: try starting web on another port, and say it is fixed only after you see PASS. It uses a few hundred MB of extra memory and may take one or two minutes; " +
+                "if `free -m` shows less than 1 GB available, ask the user before running it.",
+        )
+        appendLine("- Finally, ask the user to tap \"Back to normal mode\" in the App. If normal mode crashes again within 2 minutes, the App returns to safe mode automatically and you can keep investigating.")
+        appendLine()
+        appendLine("## Do not")
+        appendLine("- Do not install plugins into `$PROFILE`, and do not modify the rescue tool, this briefing, `/opt/dsh` or `/opt/node`: they are rebuilt or overwritten. New conversations inside the rescue HOME are kept, separate from the original conversations.")
+        appendLine("- Do not kill the process in `/tmp/dsh-web.pid` (that is you), and do not run `pkill node`.")
+        appendLine("- Do not delete `/root/.dsh/sessions`, `/root/.dsh/storages` or `/root/.dsh/.credentials.yaml`.")
+        appendLine("- Diagnostics files and logs may contain secrets; do not paste them to the user in full.")
+    }
+
+    /** Written to `last-failure.log` when nothing around the failure was captured. */
+    private const val EMPTY_FAILURE_LOG_EN = "(no output was recorded around the failure)\n"
+
+    private fun kindText(f: RunFailure, english: Boolean = false): String =
+        if (english) kindTextEnglish(f) else kindTextChinese(f)
+
+    private fun kindTextChinese(f: RunFailure): String = when (f.kind) {
         // l10n:keep agent repair briefing
         FailureKind.LAUNCH_FAILED -> "本机运行环境未能执行 DSH（还未打印登录地址）"
         // l10n:keep agent repair briefing
@@ -454,6 +578,16 @@ object SafeMode {
         FailureKind.KILLED -> "被系统结束（没有 DSH 的致命错误信息，可能是内存不足或省电策略）"
         // l10n:keep agent repair briefing
         FailureKind.NO_SPACE -> "存储空间不足"
+    }
+
+    /** The failure kinds in English; same evidence and wording as [kindTextChinese]. */
+    private fun kindTextEnglish(f: RunFailure): String = when (f.kind) {
+        FailureKind.LAUNCH_FAILED -> "the local runtime could not execute DSH (no sign-in address was printed)"
+        FailureKind.STARTUP_FAILED -> "startup failed (it exited before printing a sign-in address)"
+        FailureKind.CRASHED_EARLY -> "crashed soon after starting (exited ${f.upSeconds ?: 0} seconds after printing the sign-in address)"
+        FailureKind.CRASHED_LATE -> "crashed while running (exited ${f.upSeconds ?: 0} seconds after printing the sign-in address)"
+        FailureKind.KILLED -> "ended by the system (no fatal DSH error; possibly out of memory or a battery optimization)"
+        FailureKind.NO_SPACE -> "not enough storage"
     }
 
     fun formatTime(at: Long, zone: TimeZone = TimeZone.getDefault()): String =

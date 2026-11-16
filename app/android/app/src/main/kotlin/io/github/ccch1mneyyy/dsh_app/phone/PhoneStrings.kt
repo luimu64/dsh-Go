@@ -40,6 +40,12 @@ internal object PhoneStrings {
         "phone_screen_no_text" -> R.string.phone_screen_no_text
         "phone_screen_list" -> R.string.phone_screen_list
         "phone_screen_poor_tree" -> R.string.phone_screen_poor_tree
+        "phone_screen_total" -> R.string.phone_screen_total
+        "phone_screen_header_plain" -> R.string.phone_screen_header_plain
+        "phone_screen_bg_header" -> R.string.phone_screen_bg_header
+        "phone_screen_bg_poor_tree" -> R.string.phone_screen_bg_poor_tree
+        "phone_screen_bg_overflow_detail" -> R.string.phone_screen_bg_overflow_detail
+        "phone_screen_bg_tree_incomplete" -> R.string.phone_screen_bg_tree_incomplete
 
         // ---- roles and states ----
         "phone_role_button" -> R.string.phone_role_button
@@ -94,6 +100,16 @@ internal object PhoneStrings {
         "phone_note_screenshot_time" -> R.string.phone_note_screenshot_time
         "phone_note_screenshot_failed" -> R.string.phone_note_screenshot_failed
         "phone_note_screenshot_failed_state" -> R.string.phone_note_screenshot_failed_state
+        "phone_ocr_local_only" -> R.string.phone_ocr_local_only
+        "phone_ocr_failed" -> R.string.phone_ocr_failed
+        "phone_ocr_disabled" -> R.string.phone_ocr_disabled
+        "phone_ocr_not_installed" -> R.string.phone_ocr_not_installed
+        "phone_ocr_privacy" -> R.string.phone_ocr_privacy
+        "phone_ocr_unavailable" -> R.string.phone_ocr_unavailable
+        "phone_ocr_truncated" -> R.string.phone_ocr_truncated
+        "phone_ocr_header" -> R.string.phone_ocr_header
+        "phone_ocr_risk" -> R.string.phone_ocr_risk
+        "phone_ocr_read_only" -> R.string.phone_ocr_read_only
         "phone_result_unconfirmed" -> R.string.phone_result_unconfirmed
         "phone_screen_unreadable" -> R.string.phone_screen_unreadable
 
@@ -116,6 +132,11 @@ internal object PhoneStrings {
         "phone_tool_busy" -> R.string.phone_tool_busy
         "phone_tool_timeout" -> R.string.phone_tool_timeout
         "phone_tool_error" -> R.string.phone_tool_error
+        "phone_tool_error_wrapper" -> R.string.phone_tool_error_wrapper
+        "phone_tool_error_detail" -> R.string.phone_tool_error_detail
+        "phone_focus_refused_default" -> R.string.phone_focus_refused_default
+        "phone_replay_refused_default" -> R.string.phone_replay_refused_default
+        "phone_collect_page_partial" -> R.string.phone_collect_page_partial
         "phone_replay_source_gone" -> R.string.phone_replay_source_gone
         "phone_replay_unsupported" -> R.string.phone_replay_unsupported
         "phone_replay_no_background" -> R.string.phone_replay_no_background
@@ -484,6 +505,9 @@ internal object PhoneStrings {
         "phone_note_bg_app_name" -> R.string.phone_note_bg_app_name
         "phone_note_bg_left_display" -> R.string.phone_note_bg_left_display
         "phone_note_bg_closed" -> R.string.phone_note_bg_closed
+        "phone_note_bg_visual_changed" -> R.string.phone_note_bg_visual_changed
+        "phone_note_bg_visual_unchanged" -> R.string.phone_note_bg_visual_unchanged
+        "phone_note_bg_visual_unavailable" -> R.string.phone_note_bg_visual_unavailable
         "phone_screen_bg_empty" -> R.string.phone_screen_bg_empty
         "phone_screen_bg_empty_tail" -> R.string.phone_screen_bg_empty_tail
         "phone_screen_bg_idle" -> R.string.phone_screen_bg_idle

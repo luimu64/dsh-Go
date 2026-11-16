@@ -215,7 +215,8 @@ class PhoneControl private constructor(private val app: Context) : PhoneEnv, Con
     // tools/list so a switch while the bridge lives reaches the model without a restart.
     private val server = McpServer({ PhoneToolCatalog.listJson(AppStrings.resolvedLanguage(app)) },
         { name, args, _ -> sessions.run(sessions.admit(null), name, args) }, SERVER_VERSION,
-        diagnostics = { args, caller -> RuntimeController.get(app).diagnosticsTool.call(args, caller) })
+        diagnostics = { args, caller -> RuntimeController.get(app).diagnosticsTool.call(args, caller) },
+        ui = localizedUi)
     private val bridge = PhoneBridge(server, { line -> logger(line) }, { call ->
         if (call.name == DiagnosticsTool.NAME) PhoneCallWork({ call.run() })
         else if (call.name == PhoneCore.REPLAY) replayWork(call) else {

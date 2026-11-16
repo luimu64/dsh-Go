@@ -55,6 +55,9 @@ class BackgroundDisplay internal constructor(
 
     override val screen: PhoneScreen = PhoneScreen.BACKGROUND
 
+    /** The default route/focus refusals below speak the same language as the replies. */
+    override fun uiText(): PhoneUiText = ui
+
     // The app the model last saw on top (what it opened, or what a later read showed). Actions are
     // addressed to it; every read follows the screen as it actually is.
     @Volatile private var currentTarget: PhoneAppIdentity? = null
@@ -180,7 +183,7 @@ class BackgroundDisplay internal constructor(
         val epochCurrent = ocrEpoch == null || localOcr?.enabledEpoch() == ocrEpoch
         if (!epochCurrent && local != null) local = LocalOcrVisual.Output(
             LocalOcrBoundary.message(LocalOcrResult.Unavailable(
-                if (localOcr?.enabled == false) LocalOcrResult.Reason.DISABLED else LocalOcrResult.Reason.CANCELLED)),
+                if (localOcr?.enabled == false) LocalOcrResult.Reason.DISABLED else LocalOcrResult.Reason.CANCELLED), ui),
             local.sensitiveText, false)
         // Public images retain their original eligibility. The OCR-only token is committed
         // together with its exact observation, never after the resource publication gate.
@@ -198,7 +201,7 @@ class BackgroundDisplay internal constructor(
                               started: Long): LocalOcrVisual.Output? {
         if (response.get(Proto.POOR) != true) return null
         fun diagnostic(reason: LocalOcrResult.Reason) = LocalOcrVisual.Output(
-            LocalOcrBoundary.message(LocalOcrResult.Unavailable(reason)), false, false)
+            LocalOcrBoundary.message(LocalOcrResult.Unavailable(reason), ui), false, false)
         if (!localReadAllowed(target)) return diagnostic(LocalOcrResult.Reason.PRIVACY_UNVERIFIED)
         val host = localOcr ?: return diagnostic(LocalOcrResult.Reason.NOT_INSTALLED)
         if (expectedEpoch == null || host.enabledEpoch() != expectedEpoch)
@@ -225,7 +228,7 @@ class BackgroundDisplay internal constructor(
         // An already returned result can contain a same-frame privacy fact. Preserve that
         // fact even if OFF/deadline now suppresses its text and points; no further SDK work.
         val output = LocalOcrVisual.format(result, receipt.width, receipt.height,
-            VisualBounds(0, 0, receipt.width, receipt.height), ImageGeometry(0, 0, 1f, 1f, receipt.width, receipt.height))
+            VisualBounds(0, 0, receipt.width, receipt.height), ImageGeometry(0, 0, 1f, 1f, receipt.width, receipt.height), ui)
         if (cancelled()) return diagnostic(if (!host.enabled) LocalOcrResult.Reason.DISABLED else LocalOcrResult.Reason.CANCELLED)
             .copy(sensitiveText = output.sensitiveText)
         if (SystemClock.uptimeMillis() >= deadline) return diagnostic(LocalOcrResult.Reason.DEADLINE)
@@ -578,7 +581,7 @@ class BackgroundDisplay internal constructor(
         } catch (_: Exception) { clearSnapshot(); null } // The gesture acknowledgement already exists.
         if (snap == null) coordinateImage.invalidateScope()
         return ActionResult(true, ui.get("phone_act_bg_coord_done", "后台坐标手势已结束（不表示业务成功）") +
-            backgroundVisualNote(result.change), snap)
+            backgroundVisualNote(ui, result.change), snap)
     }
 
     override fun foregroundPackage(): String? = currentTarget?.packageName
@@ -644,7 +647,7 @@ class BackgroundDisplay internal constructor(
         // Legacy text remains readable; missing/unknown attachment never grants new coordinates.
         val reason = if (localOcr?.enabled == false) LocalOcrResult.Reason.DISABLED
             else LocalOcrResult.Reason.PRIVACY_UNVERIFIED
-        val diagnostic = LocalOcrVisual.Output(LocalOcrBoundary.message(LocalOcrResult.Unavailable(reason)), false, false)
+        val diagnostic = LocalOcrVisual.Output(LocalOcrBoundary.message(LocalOcrResult.Unavailable(reason), ui), false, false)
         val legacyShown = shownApp(response) ?: return null
         return if (response.containsKey(Proto.COUNT) || response.getBoolean(Proto.SECURE))
             snapshot(response, legacyShown, true, publishImage = false, localText = diagnostic, coordinatesAllowed = false) else null
@@ -652,7 +655,7 @@ class BackgroundDisplay internal constructor(
 
     private fun toResult(response: Bundle, target: PhoneAppIdentity, okMessage: String, textAction: Boolean = false, after: AfterRead? = null): ActionResult {
         val ok = response.getBoolean(Proto.OK)
-        val message = if (ok) okMessage + backgroundVisualNote(response.get(Proto.VISUAL_CHANGE)) else Reasons.of(
+        val message = if (ok) okMessage + backgroundVisualNote(ui, response.get(Proto.VISUAL_CHANGE)) else Reasons.of(
             response.getString(Proto.ERROR), response.getString(Proto.ERROR_DETAIL),
             // ACTION_SET_TEXT may have returned true before a later refresh/submit failed.
             // This acknowledgement is not text readback or business-success evidence.
@@ -722,7 +725,8 @@ class BackgroundDisplay internal constructor(
         var text = BackgroundTree.render(id, appLabel, portrait, keyboardUp, elements, background = true, poorTree = poor,
             overflow = if (detailed) response.getInt(Proto.ELEMENT_OVERFLOW, 0) else 0,
             detailed = detailed,
-            treeComplete = if (response.containsKey(Proto.TREE_COMPLETE)) response.getBoolean(Proto.TREE_COMPLETE) else null) + switched
+            treeComplete = if (response.containsKey(Proto.TREE_COMPLETE)) response.getBoolean(Proto.TREE_COMPLETE) else null,
+            ui = ui) + switched
         if (response.getBoolean(Proto.IMAGE_OMITTED)) {
             text += "\n" + ui.get("phone_note_bg_image_omitted",
                 "（本页含敏感输入或控件树未完整读取，已省略截图；可继续使用已脱敏的文字信息）")

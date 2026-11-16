@@ -43,10 +43,10 @@ internal class Shot(
     val hiddenOverlayWindowIds: Set<Int> = emptySet(),
 ) {
     /** Geometry and raw dimensions travel together even when no JPEG was requested. */
-    fun visualText(): LocalOcrVisual.Output? {
+    fun visualText(ui: PhoneUiText = PhoneUiText.DEFAULT): LocalOcrVisual.Output? {
         val imageGeometry = geometry ?: return null
         val rawViewport = viewport ?: return null
-        return LocalOcrVisual.format(localText, rawWidth, rawHeight, rawViewport, imageGeometry)
+        return LocalOcrVisual.format(localText, rawWidth, rawHeight, rawViewport, imageGeometry, ui)
     }
 }
 

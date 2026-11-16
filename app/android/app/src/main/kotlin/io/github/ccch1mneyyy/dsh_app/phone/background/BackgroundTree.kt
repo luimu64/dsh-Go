@@ -1,5 +1,6 @@
 package io.github.ccch1mneyyy.dsh_app.phone.background
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.SafetyRules
 import io.github.ccch1mneyyy.dsh_app.phone.SensitiveWords
 
@@ -137,51 +138,45 @@ object BackgroundTree {
         overflow: Int = 0,
         detailed: Boolean = false,
         treeComplete: Boolean? = null,
+        ui: PhoneUiText = PhoneUiText.DEFAULT,
     ): String {
         val header = buildString {
-            // l10n:keep model screen format and matchers
-            append("屏幕 ").append(screenId)
-            // l10n:keep model screen format and matchers
-            if (background) append(" · 后台屏")
+            // The screen id, the app label and the role/state words stay exactly as captured.
+            append(ui.get(if (background) "phone_screen_bg_header" else "phone_screen_header_plain",
+                if (background) "屏幕 %1\$s · 后台屏" else "屏幕 %1\$s", screenId))
             appLabel?.let { append(" · ").append(it) }
-            // l10n:keep model screen format and matchers
-            append(" · ").append(if (portrait) "竖屏" else "横屏")
-            // l10n:keep model screen format and matchers
-            append(" · ").append(if (keyboardUp) "键盘弹出" else "键盘收起")
-            // l10n:keep model screen format and matchers
-            append(" · 共 ").append(elements.size).append(" 项")
+            append(" · ").append(if (portrait) ui.get("phone_screen_portrait", "竖屏")
+                else ui.get("phone_screen_landscape", "横屏"))
+            append(" · ").append(if (keyboardUp) ui.get("phone_screen_keyboard_shown", "键盘弹出")
+                else ui.get("phone_screen_keyboard_hidden", "键盘收起"))
+            append(" · ").append(ui.get("phone_screen_total", "共 %1\$d 项", elements.size))
         }
         val lines = ArrayList<String>()
         lines.add(header)
-        // l10n:keep model screen format and matchers
-        if (poorTree) lines.add("（本页文字信息不足，可能是游戏、画布或小程序）")
+        if (poorTree) lines.add(ui.get("phone_screen_bg_poor_tree", "（本页文字信息不足，可能是游戏、画布或小程序）"))
         var lastRegion: Region? = null
         for (e in elements) {
             if (e.region != lastRegion) {
-                lines.add(regionLabel(e.region))
+                lines.add(regionLabel(e.region, ui))
                 lastRegion = e.region
             }
             lines.add(renderLine(e))
         }
-        // l10n:keep model screen format and matchers
         if (overflow > 0) {
-            // l10n:keep model screen format
-            if (detailed) lines.add("（本次已读取的元素中另有 $overflow 项未列出；未列出的元素没有可用编号）")
-            else lines.add("  …另有 $overflow 项，用 collect 或 scroll")
+            if (detailed) lines.add(ui.get("phone_screen_bg_overflow_detail",
+                "（本次已读取的元素中另有 %1\$d 项未列出；未列出的元素没有可用编号）", overflow))
+            else lines.add("  " + ui.get("phone_screen_more", "…另有 %1\$d 项，用 collect 或 scroll", overflow))
         }
         // This is the bounded accessibility scan, never a claim about all app/web content.
-        // l10n:keep model screen format
-        if (detailed && treeComplete == false) lines.add("（控件树扫描未完整结束；未读取的节点数量未知）")
+        if (detailed && treeComplete == false) lines.add(ui.get("phone_screen_bg_tree_incomplete",
+            "（控件树扫描未完整结束；未读取的节点数量未知）"))
         return lines.joinToString("\n")
     }
 
-    private fun regionLabel(region: Region): String = when (region) {
-        // l10n:keep model screen format and matchers
-        Region.TOP -> "顶部"
-        // l10n:keep model screen format and matchers
-        Region.MIDDLE -> "中部"
-        // l10n:keep model screen format and matchers
-        Region.BOTTOM -> "底部"
+    private fun regionLabel(region: Region, ui: PhoneUiText): String = when (region) {
+        Region.TOP -> ui.get("phone_screen_zone_top", "顶部")
+        Region.MIDDLE -> ui.get("phone_screen_zone_middle", "中部")
+        Region.BOTTOM -> ui.get("phone_screen_zone_bottom", "底部")
     }
 
     private fun renderLine(e: Element): String {

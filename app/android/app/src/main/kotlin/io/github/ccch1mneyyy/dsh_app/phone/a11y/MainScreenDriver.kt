@@ -83,6 +83,8 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
     /** Screen text and driver notes in the app language; role tokens and fingerprints stay as captured. */
     private val ui = io.github.ccch1mneyyy.dsh_app.phone.PhoneStrings.of(service)
 
+    override fun uiText(): io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText = ui
+
     /** Focus/read-back results in the app language (companion keeps the Chinese defaults for tests). */
     private val focusUnavailable get() = ui.get("phone_focus_unavailable", FOCUS_TEXT_UNAVAILABLE)
     private val focusChanged get() = ui.get("phone_focus_changed", FOCUS_TEXT_CHANGED)
@@ -231,7 +233,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                         }
                         val current = snap.screen.poorTree && epoch != null && epoch == localOcr.enabledEpoch() &&
                             verifyOcrContext(cap, snap, generation, start + OBSERVE_MS)
-                        val decoded = if (snap.screen.poorTree) shot.visualText() else null
+                        val decoded = if (snap.screen.poorTree) shot.visualText(ui) else null
                         if (current && SystemClock.uptimeMillis() < start + OBSERVE_MS &&
                             epoch == localOcr.enabledEpoch() && ocrAllowed(cap, snap, generation)) formatted = decoded
                         val privateText = decoded?.sensitiveText == true
@@ -260,7 +262,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                     }
                 }
             }
-            if (snap.screen.poorTree) text.append("\n").append(formatted?.text ?: LocalOcrBoundary.message(localText))
+            if (snap.screen.poorTree) text.append("\n").append(formatted?.text ?: LocalOcrBoundary.message(localText, ui))
             if (secure) clearFocusCandidate()
             ScreenSnapshot(snap.id, text.toString(), snap.appLabel, snap.packageName, secure || snap.hidden, snap.screen.poorTree, bytes, mime,
                 readPackages = snap.readPackages, focus = snap.focus.takeUnless { secure },
@@ -850,7 +852,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                         break
                     }
                     source?.let(readPackages::add)
-                    val page = items.readPage(list.itemTexts, wanted, cap.truncated || cap.partial)
+                    val page = items.readPage(list.itemTexts, wanted, cap.truncated || cap.partial, ui)
                     if (list.itemTexts.isNotEmpty()) read++
                     if (page.stopReason != null) { stop = page.stopReason; break }
                     if (list.itemTexts.isEmpty()) {
@@ -1224,14 +1226,14 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                 else unconfirmedActionNote(comparable, changed, keyboard, ui)
             val canReuse = comparable && observation.sameContext(old) && observation.keyboardShown == old.keyboardShown
             val text = if (snap.focus != null) snap.screen.text else ScreenDigest.text(previous?.id, previous?.screen, snap.id, snap.screen, canReuse = canReuse, observationChanged = changed, ui = ui)
-            var ocrText = if (snap.screen.poorTree) "\n" + LocalOcrBoundary.message(shooter.localTextWithoutFrame()) else ""
+            var ocrText = if (snap.screen.poorTree) "\n" + LocalOcrBoundary.message(shooter.localTextWithoutFrame(), ui) else ""
             var nextImage: ImageObservation? = null
             var screenshotSecure = false
             val epoch = localOcr.enabledEpoch()
             val remaining = actionDeadline - SystemClock.uptimeMillis()
             val readLocal = snap.screen.poorTree && epoch != null && ocrAllowed(cap, snap, gen)
             if (snap.screen.poorTree && epoch != null && !readLocal) {
-                ocrText = "\n" + LocalOcrBoundary.message(LocalOcrResult.Unavailable(LocalOcrResult.Reason.PRIVACY_UNVERIFIED))
+                ocrText = "\n" + LocalOcrBoundary.message(LocalOcrResult.Unavailable(LocalOcrResult.Reason.PRIVACY_UNVERIFIED), ui)
             }
             val compareFrame = previousImage != null && !unavailable(cap) && !snap.ownApp &&
                 !snap.protectedPage && old != null && observation.sameContext(old)
@@ -1254,7 +1256,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
                     val stillCurrent = !screenshotSecure && readLocal && verifyOcrContext(cap, snap, gen, actionDeadline)
                     if (stillCurrent && epoch != null && epoch == localOcr.enabledEpoch() &&
                         snap.screen.poorTree && shot.geometry != null && shot.viewport != null) {
-                        val result = shot.visualText()!!
+                        val result = shot.visualText(ui)!!
                         if (SystemClock.uptimeMillis() < actionDeadline && epoch == localOcr.enabledEpoch() &&
                             ocrAllowed(cap, snap, gen)) {
                             ocrText = "\n" + result.text
@@ -1269,7 +1271,7 @@ internal class MainScreenDriver(private val service: PhoneA11yService, private v
             } catch (e: InterruptedException) { throw e } catch (_: Exception) {
                 // Preserve the input attempt's original result; verification cannot turn it into success.
                 ocrText = if (snap.screen.poorTree) "\n" + LocalOcrBoundary.message(
-                    LocalOcrResult.Failed(LocalOcrResult.Failure.ENGINE)) else ""
+                    LocalOcrResult.Failed(LocalOcrResult.Failure.ENGINE), ui) else ""
                 nextImage = null
             }
             val visualNote = if (previousImage == null) "" else {
