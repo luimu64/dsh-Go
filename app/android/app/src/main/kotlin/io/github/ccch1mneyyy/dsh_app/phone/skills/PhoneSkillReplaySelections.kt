@@ -1,12 +1,16 @@
 package io.github.ccch1mneyyy.dsh_app.phone.skills
 
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneCaller
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillBundleReader
 import java.util.UUID
 
 /** Bounded private selections and first managed-run claims; no scheduler or execution grant.
  * Runtime/PM/Tasks checks are outside this monitor and repeated at actual execution. */
-internal class PhoneSkillReplaySelections(private val clock: () -> Long) {
+internal class PhoneSkillReplaySelections(
+    /** Route reasons reach the model; the Chinese literals stay the pure-JVM default. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
+    private val clock: () -> Long) {
     data class Request(val name: String, val revision: String, val session: String,
         val packageName: String, val uid: Int) {
         companion object {
@@ -182,7 +186,7 @@ internal class PhoneSkillReplaySelections(private val clock: () -> Long) {
             selection.terminal = true
             selection.state = "unknown"
             selection.dispatch = "unknown"
-            selection.reason = "调用期限结束，原物理步骤可能仍在排空；不要重新执行。"
+            selection.reason = ui.get("phone_skill_replay_expired", "调用期限结束，原物理步骤可能仍在排空；不要重新执行。")
             selection.outcome = PhoneSkillOutcomes.Outcome.UNKNOWN
             selection.accounting?.outcome = PhoneSkillOutcomes.Outcome.UNKNOWN
         }
@@ -217,12 +221,18 @@ internal class PhoneSkillReplaySelections(private val clock: () -> Long) {
             PhoneSkillOutcomes.Outcome.CANCEL -> "stopped"
             PhoneSkillOutcomes.Outcome.NOT_STARTED -> "handed_back"
         }
-        selection.reason = if (expired) "调用期限在终态冻结前结束，不能提交路线完成结论；请重新观察，不要自动重试。" else when (value) {
-            PhoneSkillOutcomes.Outcome.SUCCESS -> "全部步骤取得有限后置状态证明；不等于外部业务成功。"
-            PhoneSkillOutcomes.Outcome.FAILURE -> "步骤后读明确不满足预期，已停止；不自动重复。"
-            PhoneSkillOutcomes.Outcome.UNKNOWN -> "已开始步骤的结果未完整核对，交回模型；不自动重复。"
-            PhoneSkillOutcomes.Outcome.CANCEL -> "已停止开始后续步骤；不撤销已经发生的效果。"
-            PhoneSkillOutcomes.Outcome.NOT_STARTED -> "路线未取得继续资格，没有开始动作；请重新观察并交回用户或模型。"
+        selection.reason = if (expired) ui.get("phone_skill_replay_expired_final",
+            "调用期限在终态冻结前结束，不能提交路线完成结论；请重新观察，不要自动重试。") else when (value) {
+            PhoneSkillOutcomes.Outcome.SUCCESS -> ui.get("phone_skill_replay_succeeded",
+                "全部步骤取得有限后置状态证明；不等于外部业务成功。")
+            PhoneSkillOutcomes.Outcome.FAILURE -> ui.get("phone_skill_replay_failed",
+                "步骤后读明确不满足预期，已停止；不自动重复。")
+            PhoneSkillOutcomes.Outcome.UNKNOWN -> ui.get("phone_skill_replay_unknown",
+                "已开始步骤的结果未完整核对，交回模型；不自动重复。")
+            PhoneSkillOutcomes.Outcome.CANCEL -> ui.get("phone_skill_replay_cancelled",
+                "已停止开始后续步骤；不撤销已经发生的效果。")
+            PhoneSkillOutcomes.Outcome.NOT_STARTED -> ui.get("phone_skill_replay_not_started",
+                "路线未取得继续资格，没有开始动作；请重新观察并交回用户或模型。")
         }
         value
     }
@@ -232,8 +242,10 @@ internal class PhoneSkillReplaySelections(private val clock: () -> Long) {
             "revision" to selection.request.revision, "state" to selection.state,
             "stepDispatch" to selection.dispatch, "completedSteps" to selection.completed,
             "cancelRequested" to selection.cancelled).also { selection.reason?.let { reason ->
-                it["reason"] = reason + if (selection.accounting?.let { debt -> debt.outcome != null && !debt.settled } == true) " 计数落盘待确认，不会重执行动作。"
-                    else if (selection.accounting?.suggestDisable == true) " 连续失败已达三次，建议停用或重录；未自动停用。" else ""
+                it["reason"] = reason + if (selection.accounting?.let { debt -> debt.outcome != null && !debt.settled } == true)
+                    " " + ui.get("phone_skill_replay_counting_pending", "计数落盘待确认，不会重执行动作。")
+                    else if (selection.accounting?.suggestDisable == true)
+                        " " + ui.get("phone_skill_replay_suggest_disable", "连续失败已达三次，建议停用或重录；未自动停用。") else ""
             } }
     }
     companion object {

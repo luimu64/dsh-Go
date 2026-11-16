@@ -8,7 +8,11 @@ import java.text.Normalizer
 import java.util.UUID
 
 /** One local editor. Manager -> write is the only nested lock order; never calls Runtime or performs IO. */
-internal class PhoneSkillDrafts(private val newId: () -> String = { UUID.randomUUID().toString().replace("-", "") }) {
+internal class PhoneSkillDrafts(
+    /** Route markdown reaches the model; the Chinese literals stay the pure-JVM default. */
+    private val ui: io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText = io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText.DEFAULT,
+    private val newId: () -> String = { UUID.randomUUID().toString().replace("-", "") },
+) {
     class Client internal constructor(internal val issuer: Any) { internal var active = true }
     private val issuer = Any()
     @Synchronized fun attachClient(): Client = Client(issuer)
@@ -79,7 +83,7 @@ internal class PhoneSkillDrafts(private val newId: () -> String = { UUID.randomU
         // No editor is exposed or old write cancelled until the complete group is validated.
         val descriptors = PhoneSkillReplayApps.descriptors
         val route = if (descriptors.isEmpty()) PhoneSkillNavigationRoute.Result.NotEligible
-            else PhoneSkillNavigationRoute.build(source, document, newId(), prospective.revision + 1, descriptors)
+            else PhoneSkillNavigationRoute.build(source, document, newId(), prospective.revision + 1, descriptors, ui = ui)
         when (route) {
             PhoneSkillNavigationRoute.Result.NotEligible -> Unit
             is PhoneSkillNavigationRoute.Result.Invalid -> return Rejected(

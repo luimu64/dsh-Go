@@ -1,7 +1,9 @@
 package io.github.ccch1mneyyy.dsh_app.phone
 
 /** Only ids actually returned to this task lifetime may be used by its model. No image is retained. */
-class PhoneTaskObservations(private val tasks: PhoneTasks) {
+class PhoneTaskObservations(private val tasks: PhoneTasks,
+    /** Ownership refusals reach the model; the Chinese literals stay the pure-JVM default. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT) {
     private data class Seen(val driver: PhoneDriver, val id: String, val owner: PhoneTasks.Owner)
     private val seen = mutableMapOf<PhoneScreen, Seen>()
 
@@ -89,7 +91,8 @@ class PhoneTaskObservations(private val tasks: PhoneTasks) {
         }
         override fun prepareFocusInput(screenId: String): Either<String, FocusInput> {
             current()
-            if (!owns(screenId)) return Either.Left("这个屏幕编号不属于本任务的当前观察，请重新 screen。") // l10n:keep agent focus result
+            if (!owns(screenId)) return Either.Left(ui.get("phone_task_screen_not_current",
+                "这个屏幕编号不属于本任务的当前观察，请重新 screen。"))
             // Capturing nodes or an input connection must never run under Tasks or ledger locks.
             val prepared = driver.prepareFocusInput(screenId)
             if (prepared is Either.Left) { current(); syncCurrentScope(); return prepared }
@@ -99,11 +102,13 @@ class PhoneTaskObservations(private val tasks: PhoneTasks) {
                 syncCurrentScope()
                 current()
                 if (!owns(screenId))
-                    return Either.Left("准备输入期间观察已经改变，没有输入；请重新 screen。") // l10n:keep agent focus result
+                    return Either.Left(ui.get("phone_task_observation_moved",
+                        "准备输入期间观察已经改变，没有输入；请重新 screen。"))
                 val bound = object : FocusInput by original {
                     override fun perform(text: String, allowed: () -> Boolean): ActionResult {
                         current()
-                        if (!owns(screenId)) return ActionResult(false, "原焦点观察已经改变，没有输入；请重新 screen。") // l10n:keep agent focus result
+                        if (!owns(screenId)) return ActionResult(false, ui.get("phone_task_focus_moved",
+                            "原焦点观察已经改变，没有输入；请重新 screen。"))
                         return try {
                             result(original.perform(text) { taskAllowed() && owns(screenId) && allowed() })
                         } finally { syncCurrentScope() }
@@ -117,14 +122,14 @@ class PhoneTaskObservations(private val tasks: PhoneTasks) {
         }
         override fun prepareSkillReplayStep(step: SkillReplayStep): Either<String, SkillReplayPlan> {
             current()
-            if (!taskAllowed()) return Either.Left("当前任务已暂停，未准备路线动作。") // l10n:keep
+            if (!taskAllowed()) return Either.Left(ui.get("phone_task_paused_route", "当前任务已暂停，未准备路线动作。"))
             val prepared = driver.prepareSkillReplayStep(step)
             if (prepared is Either.Left) { current(); syncCurrentScope(); return prepared }
             val original = (prepared as Either.Right).value
             var handedOff = false
             try {
                 current()
-                if (!taskAllowed()) return Either.Left("当前任务已暂停，未准备路线动作。") // l10n:keep
+                if (!taskAllowed()) return Either.Left(ui.get("phone_task_paused_route", "当前任务已暂停，未准备路线动作。"))
                 val bound = object : SkillReplayPlan by original {
                     override val dispatchUncertain: Boolean get() = original.dispatchUncertain
                     override fun perform(allowed: () -> Boolean): ActionResult {
@@ -152,8 +157,8 @@ class PhoneTaskObservations(private val tasks: PhoneTasks) {
                              actionSourcesAllowed: (Set<String>) -> Boolean): ActionResult {
             current()
             if (action !is PhoneAction.Key && !owns(action.screenId)) {
-                // l10n:keep agent observation ownership result
-                return ActionResult(false, "这个屏幕编号不属于本任务的当前观察。请本任务重新 screen，不要使用另一对话的编号。")
+                return ActionResult(false, ui.get("phone_task_screen_foreign",
+                    "这个屏幕编号不属于本任务的当前观察。请本任务重新 screen，不要使用另一对话的编号。"))
             }
             return try {
                 result(driver.perform(action, { taskAllowed() && allowed() }, { claim ->
@@ -177,7 +182,9 @@ class PhoneTaskObservations(private val tasks: PhoneTasks) {
                              allowed: () -> Boolean, canRead: (String?) -> Boolean,
                              scrollSourcesAllowed: (Set<String>) -> Boolean): CollectResult {
             current()
-            if (!owns(screenId)) return CollectResult(emptyList(), 0, "屏幕编号不属于本任务，请重新 screen", null, rejection = CollectRejection.INVALID_TARGET) // l10n:keep agent observation ownership result
+            if (!owns(screenId)) return CollectResult(emptyList(), 0,
+                ui.get("phone_task_collect_screen_foreign", "屏幕编号不属于本任务，请重新 screen"), null,
+                rejection = CollectRejection.INVALID_TARGET)
             return try {
                 val result = driver.collect(screenId, listElementId, maxPages, until,
                     { taskAllowed() && allowed() }, { pkg -> taskAllowed() && canRead(pkg) },

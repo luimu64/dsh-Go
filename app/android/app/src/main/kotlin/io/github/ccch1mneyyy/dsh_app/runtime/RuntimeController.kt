@@ -16,6 +16,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillRoute
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 import java.util.concurrent.Executors
 
 /**
@@ -63,6 +66,10 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         private set
     @Volatile private var baseUrl: String? = null
     @Volatile private var token: String? = null
+    /** The engine's model-facing text language; a live switch only rewrites text. */
+    @Volatile private var appLanguage = if (AppStrings.isEnglish(app)) "en" else "zh"
+    @Volatile private var pushedAppLanguage: String? = null
+    @Volatile private var localeAttemptAt = 0L
     @Volatile private var error: String? = null
     @Volatile private var pendingEnv: Map<String, String> = emptyMap()
     @Volatile private var pendingPhoneStorage = false
@@ -532,6 +539,10 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                 val env = LinkedHashMap<String, String>()
                 env["TZ"] = java.util.TimeZone.getDefault().id
                 env.putAll(pendingEnv)
+                // Phone tool descriptions are model-facing; keep them in the app's
+                // chosen language, not the system's. A later Settings change is
+                // pushed into the running engine; this value only seeds the start.
+                env["DSH_APP_LANGUAGE"] = if (AppStrings.isEnglish(app)) "en" else "zh-CN"
                 workspaceRecovery.applyEnvironment(env)
                 PerformancePolicy.applyEngineEnvironment(app, env, manifest.launchArgv, manifest.launchEnv)
                 if (safe) {
@@ -1038,6 +1049,11 @@ class RuntimeController private constructor(private val app: Context) : DshProce
         log("[dsh-app] DSH is listening at $baseUrl${if (runSafe) " (safe mode)" else ""}", "system")
         timeline.ready()?.let { log(it, "system") }
         setPhase(Phase.RUNNING)
+        // A language chosen while this run was still starting is pushed now; the
+        // launch environment stays the source of truth for the next start.
+        appLanguage = if (AppStrings.isEnglish(app)) "en" else "zh"
+        pushedAppLanguage = null
+        pushAppLanguage()
         PhoneControl.get(app).onEngineReady()
         val gen = runGen
         main.postDelayed({
@@ -1045,6 +1061,74 @@ class RuntimeController private constructor(private val app: Context) : DshProce
                 if (gen == runGen && phase == Phase.RUNNING && process != null) onHealthy()
             }
         }, SafePolicy.HEALTHY_MS)
+    }
+
+    /**
+     * Settings → Language asked the running engine to change model-facing text.
+     * Only the wording changes; the process, its jobs and tool identities stay.
+     * Called through the dsh/runtime channel; a stopped engine needs nothing
+     * because the next start reads the same preference.
+     */
+    fun setAppLanguage(language: String) {
+        appLanguage = if (language.lowercase().startsWith("en")) "en" else "zh"
+        pushedAppLanguage = null
+        localeAttemptAt = 0L
+        pushAppLanguage()
+    }
+
+    private fun pushAppLanguage() {
+        val origin = baseUrl ?: return
+        val secret = token ?: return
+        if (phase != Phase.RUNNING || resetting) return
+        val language = appLanguage
+        if (pushedAppLanguage == language) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - localeAttemptAt < 10_000) return
+        localeAttemptAt = now
+        worker.execute {
+            if (postAppLanguage(origin, secret, language)) pushedAppLanguage = language
+        }
+    }
+
+    /** Loopback only; the token comes from DshProcess, never from a caller. */
+    private fun postAppLanguage(origin: String, secret: String, language: String): Boolean {
+        return try {
+            val cookie = loginCookie(origin, secret) ?: return false
+            val connection = URL("$origin/dsh-go/v1/app-language").openConnection() as HttpURLConnection
+            try {
+                connection.requestMethod = "POST"
+                connection.instanceFollowRedirects = false
+                connection.connectTimeout = 1000
+                connection.readTimeout = 3000
+                connection.doOutput = true
+                connection.setRequestProperty("Cookie", cookie)
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write("{\"language\":\"$language\"}".toByteArray()) }
+                val code = connection.responseCode
+                (if (code in 200..299) connection.inputStream else connection.errorStream)?.use { it.readBytes() }
+                code == 200
+            } finally {
+                connection.disconnect()
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun loginCookie(origin: String, secret: String): String? {
+        val connection = URL("$origin/?token=" + URLEncoder.encode(secret, "UTF-8")).openConnection() as HttpURLConnection
+        return try {
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 1000
+            connection.readTimeout = 3000
+            if (connection.responseCode != 303) return null
+            val header = connection.headerFields.entries
+                .firstOrNull { it.key?.equals("Set-Cookie", ignoreCase = true) == true }
+                ?.value?.firstOrNull() ?: return null
+            Regex("""dsh-auth-[A-Za-z0-9_-]+=[A-Za-z0-9_.-]+""").find(header)?.value
+        } finally {
+            connection.disconnect()
+        }
     }
 
     @Synchronized override fun onExit(source: DshProcess, code: Int, expected: Boolean) {

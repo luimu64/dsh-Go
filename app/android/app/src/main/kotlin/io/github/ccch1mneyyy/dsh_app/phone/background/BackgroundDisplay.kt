@@ -12,6 +12,7 @@ import io.github.ccch1mneyyy.dsh_app.phone.PhoneDriver
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneRegistry
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneScreen
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneTasks
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.phone.ScreenSnapshot
 import io.github.ccch1mneyyy.dsh_app.phone.TargetInfo
 import io.github.ccch1mneyyy.dsh_app.phone.VisualScope
@@ -38,6 +39,8 @@ class BackgroundDisplay internal constructor(
     private val onResourceReady: (PrivilegedChannel) -> Unit = {},
     private val localOcr: MlKitLocalOcr? = null,
     private val localOcrAllowed: (PhoneAppIdentity) -> Boolean = { false },
+    /** Model-facing replies follow the app language; the Chinese literals stay the JVM default. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
 ) : PhoneDriver {
 
     private val resourceIo = BackgroundDisplayIo<PrivilegedChannel>()
@@ -69,18 +72,18 @@ class BackgroundDisplay internal constructor(
 
     override fun availability(): Availability {
         if (Build.VERSION.SDK_INT < BackgroundPolicy.MIN_SDK)
-            // l10n:keep agent screen protocol
-            return Availability(false, "不打扰模式需要 Android 14 或更高版本")
+            return Availability(false, ui.get("phone_background_needs_android14",
+                "不打扰模式需要 Android 14 或更高版本"))
         val channel = resourceIo.peer() ?: channelProvider()
         if (channel == null || !channel.alive())
-            // l10n:keep agent screen protocol
-            return Availability(false, "不打扰模式的特权通道未就绪")
+            return Availability(false, ui.get("phone_background_channel_not_ready",
+                "不打扰模式的特权通道未就绪"))
         return Availability(true)
     }
 
     private fun channel(): PrivilegedChannel =
-        // l10n:keep agent screen protocol
-        resourceIo.peer() ?: channelProvider() ?: throw IllegalStateException("背景屏通道未就绪")
+        resourceIo.peer() ?: channelProvider() ?: throw IllegalStateException(
+            ui.get("phone_background_channel_closed", "背景屏通道未就绪"))
 
     override fun open(target: PhoneAppIdentity): ActionResult = open(target) { true }
 
@@ -92,7 +95,7 @@ class BackgroundDisplay internal constructor(
                 currentTarget = target
                 openedTarget = target
             }
-            check(mayUse()) { Reasons.of("deviceUnavailable") }
+            check(mayUse()) { Reasons.of("deviceUnavailable", ui) }
             val active = channel()
             val request = Bundle().apply {
                 putString(Proto.OP, Proto.OP_LAUNCH)
@@ -111,7 +114,7 @@ class BackgroundDisplay internal constructor(
                     probe.getInt(Proto.BACKGROUND_COORDINATES) == 1
                 afterVisualSupported = BackgroundAfterVisual.supported(probe.get(Proto.AFTER_LOCAL_VISUAL))
                 navigationSupported = BackgroundNavigationProtocol.supported(probe.get(Proto.REPLAY_NAVIGATION))
-                check(mayUse() && !resourceIo.previewClosed()) { Reasons.of("deviceUnavailable") }
+                check(mayUse() && !resourceIo.previewClosed()) { Reasons.of("deviceUnavailable", ui) }
                 // The first request creates the screen and pins this peer before any transport write.
                 OwnerScopeProtocol.first(resourceIo, active, request) { commit ->
                     admitUse {
@@ -123,10 +126,10 @@ class BackgroundDisplay internal constructor(
                 check(admitUse {
                     if (!allowed()) throw NotAdmitted()
                     resourceIo.checkDispatch()
-                }) { Reasons.of("deviceUnavailable") }
+                }) { Reasons.of("deviceUnavailable", ui) }
             }
             onResourceReady(active)
-            val result = toResult(response, target, "已在后台屏打开") // l10n:keep agent screen protocol
+            val result = toResult(response, target, ui.get("phone_act_bg_opened", "已在后台屏打开"))
             result.copy(backgroundOpenConfirmed = result.ok && TargetIdentity.backgroundOpenConfirmed(target,
                 response.get(Proto.OK), response.get(Proto.BACKGROUND_OPEN_EVIDENCE), response.get(Proto.DISPLAY_ID),
                 response.get(Proto.TARGET_IDENTITY_VERSION), response.get(Proto.PKG), response.get(Proto.TARGET_UID)))
@@ -253,7 +256,7 @@ class BackgroundDisplay internal constructor(
     internal fun requireObservation(ok: Boolean, code: String?, detail: String?) {
         if (ok) return
         clearSnapshot()
-        throw IllegalStateException(Reasons.of(code, detail))
+        throw IllegalStateException(Reasons.of(code, detail, ui = ui))
     }
 
     /** The app a reply names as on top; null when the screen shows none. */
@@ -263,7 +266,7 @@ class BackgroundDisplay internal constructor(
         // Another package without any uid (task info and package lookup both failed) cannot be read.
         return TargetIdentity.shown(pkg, response.get(Proto.TARGET_UID))
             ?: currentTarget?.takeIf { it.packageName == pkg }
-            ?: throw IllegalStateException(Reasons.of("treeUnavailable"))
+            ?: throw IllegalStateException(Reasons.of("treeUnavailable", ui))
     }
 
     override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?): CollectResult =
@@ -275,13 +278,14 @@ class BackgroundDisplay internal constructor(
     override fun collect(screenId: String, listElementId: Int, maxPages: Int, until: String?,
                          allowed: () -> Boolean, canRead: (String?) -> Boolean): CollectResult {
         if (!allowed()) return CollectResult(emptyList(), 0, PhoneTasks.STOPPED_MESSAGE, null)
-        check(screenId == lastScreenId) { Reasons.of("staleSnapshot") }
+        check(screenId == lastScreenId) { Reasons.of("staleSnapshot", ui) }
         val source = currentTarget?.packageName
-        if (!canRead(source)) return CollectResult(emptyList(), 0, "本页内容不允许读取", null) // l10n:keep agent screen result
+        if (!canRead(source)) return CollectResult(emptyList(), 0,
+            ui.get("phone_collect_source_denied", "本页内容不允许读取"), null)
         if (maxPages.coerceIn(1, 30) == 1) {
             val selected = lastElements.getOrNull(listElementId - 1)
-                ?: throw IllegalStateException(Reasons.of("elementMissing"))
-            check(selected.isScrollable) { Reasons.of("inputRejected") }
+                ?: throw IllegalStateException(Reasons.of("elementMissing", ui))
+            check(selected.isScrollable) { Reasons.of("inputRejected", ui) }
             val labels = lastElements.drop(listElementId)
                 .takeWhile { it.indent > selected.indent }
                 .map { it.label }.filter { it.isNotEmpty() }.distinct()
@@ -300,7 +304,7 @@ class BackgroundDisplay internal constructor(
             // Each page is read under the rules of the app it shows: a scroll may have brought up
             // another app, and what was allowed for the first one says nothing about that one.
             val shown = snap.packageName
-            if (!canRead(shown)) { stop = "本页内容不允许读取"; break } // l10n:keep agent screen result
+            if (!canRead(shown)) { stop = ui.get("phone_collect_source_denied", "本页内容不允许读取"); break }
             shown?.let(readPackages::add)
             val before = seen.size
             for (e in lastElements) if (e.label.isNotEmpty()) seen.add(e.label)
@@ -345,16 +349,18 @@ class BackgroundDisplay internal constructor(
         val peer = resourceIo.peer()
         if (step.relation != relation || target == null || peer == null || !navigationSupported ||
             target.packageName != step.app.packageName || target.uid != step.app.uid || !existingReplayTarget(target))
-            return io.github.ccch1mneyyy.dsh_app.phone.Either.Left("原后台屏或公共导航能力不可用，未执行；不会另开应用或切到主屏。") // l10n:keep
+            return io.github.ccch1mneyyy.dsh_app.phone.Either.Left(ui.get("phone_route_bg_unavailable",
+                "原后台屏或公共导航能力不可用，未执行；不会另开应用或切到主屏。"))
         val request = navigationRequest(step, null)
         val parsed = checkNotNull(BackgroundNavigationProtocol.request(request.keySet(), request::get))
         val response = dispatch({ navigationCurrent(target, peer) }) {
             OwnerScopeProtocol.execute(peer, ownerToken, request, it)
         } ?: return io.github.ccch1mneyyy.dsh_app.phone.Either.Left(PhoneTasks.STOPPED_MESSAGE)
         val facts = navigationFacts(response, target, parsed)
-            ?: return io.github.ccch1mneyyy.dsh_app.phone.Either.Left("后台公共导航前读未获完整核验，未执行。") // l10n:keep
+            ?: return io.github.ccch1mneyyy.dsh_app.phone.Either.Left(ui.get("phone_route_bg_unverified",
+                "后台公共导航前读未获完整核验，未执行。"))
         return resourceIo.commitObservation {
-            check(currentTarget == target && resourceIo.peer() === peer) { Reasons.of("foregroundChanged") }
+            check(currentTarget == target && resourceIo.peer() === peer) { Reasons.of("foregroundChanged", ui) }
             io.github.ccch1mneyyy.dsh_app.phone.Either.Right(BackgroundNavigationPlan(step, target, peer, facts))
         }
     }
@@ -387,7 +393,8 @@ class BackgroundDisplay internal constructor(
 
     /** Private evidence only: no lastElements/sid/coordinate/focus publication or model ledger. */
     private fun navigationScreen(facts: BackgroundNavigationProtocol.Facts, target: PhoneAppIdentity): ScreenSnapshot =
-        ScreenSnapshot("private-bg-${java.util.UUID.randomUUID()}", "后台公共导航：${facts.selected}", // l10n:keep
+        ScreenSnapshot("private-bg-${java.util.UUID.randomUUID()}",
+            ui.get("phone_screen_bg_route", "后台公共导航：%1\$s", facts.selected),
             null, target.packageName, readPackages = setOf(target.packageName))
 
     private inner class BackgroundNavigationPlan(private val step: io.github.ccch1mneyyy.dsh_app.phone.SkillReplayStep,
@@ -408,7 +415,8 @@ class BackgroundDisplay internal constructor(
         override fun close() { synchronized(this) { closed = true } }
         override fun perform(allowed: () -> Boolean): ActionResult {
             synchronized(this) {
-                if (used || closed) return ActionResult(false, "原后台路线步骤已使用或失效，没有再次操作。") // l10n:keep
+                if (used || closed) return ActionResult(false,
+                    ui.get("phone_route_step_used", "原后台路线步骤已使用或失效，没有再次操作。"))
                 used = true
             }
             val request = navigationRequest(step, inspected)
@@ -424,17 +432,19 @@ class BackgroundDisplay internal constructor(
                 }
             } ?: return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
             val facts = navigationFacts(response, originalTarget, parsed)
-                ?: return ActionResult(false, "后台路线回执不完整，结果未知；不要重复动作。") // l10n:keep
+                ?: return ActionResult(false, ui.get("phone_route_bg_receipt",
+                    "后台路线回执不完整，结果未知；不要重复动作。"))
             attempted = facts.attempted
             dispatchUncertain = false // Only the complete matching typed receipt settles this fact.
             if (!allowed()) return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
             return resourceIo.commitObservation {
-                check(currentTarget == originalTarget && resourceIo.peer() === peer) { Reasons.of("foregroundChanged") }
+                check(currentTarget == originalTarget && resourceIo.peer() === peer) { Reasons.of("foregroundChanged", ui) }
                 synchronized(this) {
                     check(!closed) { "Original navigation plan was closed" }
                     post = if (facts.post == "satisfied") io.github.ccch1mneyyy.dsh_app.phone.SkillReplayPost.SATISFIED
                     else io.github.ccch1mneyyy.dsh_app.phone.SkillReplayPost.DIFFERENT
-                ActionResult(true, "后台公共导航取得同请求后置核验；不证明应用外部业务成功。", // l10n:keep
+                ActionResult(true, ui.get("phone_route_bg_verified",
+                    "后台公共导航取得同请求后置核验；不证明应用外部业务成功。"),
                     navigationScreen(facts, originalTarget), navigationWitness =
                     io.github.ccch1mneyyy.dsh_app.phone.skills.PhoneSkillNavigationWitness(
                         step.app.uid, step.app.version, step.app.updated, step.app.signers))
@@ -448,15 +458,15 @@ class BackgroundDisplay internal constructor(
     override fun perform(action: PhoneAction, allowed: () -> Boolean): ActionResult {
         val started = if (afterVisualSupported) SystemClock.uptimeMillis() else 0L
         val epoch = localOcr?.enabledEpoch()
-        // l10n:keep agent screen protocol
-        val target = currentTarget ?: return ActionResult(false, "后台屏还没有打开应用")
+        val target = currentTarget ?: return ActionResult(false,
+            ui.get("phone_act_bg_no_app", "后台屏还没有打开应用"))
         if (action is PhoneAction.Key && action.key != PhoneAction.GlobalKey.BACK) {
-            // l10n:keep agent screen protocol
-            return ActionResult(false, "后台屏不支持该系统键，未执行；请用返回或打开指定应用")
+            return ActionResult(false, ui.get("phone_act_bg_key",
+                "后台屏不支持该系统键，未执行；请用返回或打开指定应用"))
         }
         // Explicit element ids are checked by PhoneCore before perform; collect owns its internal scrolls.
         if (action is PhoneAction.Scroll && action.elementId == null && action.screenId != lastScreenId) {
-            return ActionResult(false, Reasons.of("staleSnapshot"), staleSnapshot = true)
+            return ActionResult(false, Reasons.of("staleSnapshot", ui), staleSnapshot = true)
         }
         val after = AfterRead(started, epoch, target, afterVisualSupported && epoch != null && localReadAllowed(target))
         val request = Bundle().apply {
@@ -497,12 +507,12 @@ class BackgroundDisplay internal constructor(
             }
             is PhoneAction.TapXY -> return performCoordinates(action, target, allowed, after)
         }
-        // l10n:keep agent screen protocol
         val response = try {
             dispatch(allowed) { OwnerScopeProtocol.execute(channel(), ownerToken, request, it) }
         } catch (error: Exception) { clearSnapshot(); throw error }
             ?: return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
-        return toResult(response, target, "已在后台屏执行", textAction = action is PhoneAction.Type, after = after)
+        return toResult(response, target, ui.get("phone_act_bg_ran", "已在后台屏执行"),
+            textAction = action is PhoneAction.Type, after = after)
     }
 
     /**
@@ -522,17 +532,17 @@ class BackgroundDisplay internal constructor(
     private class NotAdmitted : RuntimeException()
 
     private fun performCoordinates(action: PhoneAction.TapXY, target: PhoneAppIdentity, allowed: () -> Boolean, after: AfterRead): ActionResult {
-        // l10n:keep agent coordinate protocol
-        if (!coordinateSupported) return ActionResult(false, "当前后台通道不支持截图坐标，请更新并重新连接；未执行，也不会转到主屏。")
+        if (!coordinateSupported) return ActionResult(false, ui.get("phone_act_bg_coord_unsupported",
+            "当前后台通道不支持截图坐标，请更新并重新连接；未执行，也不会转到主屏。"))
         if (!allowed()) return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
-        if (!coordinateEpochCurrent()) return ActionResult(false, Reasons.of("staleSnapshot"), staleSnapshot = true)
+        if (!coordinateEpochCurrent()) return ActionResult(false, Reasons.of("staleSnapshot", ui), staleSnapshot = true)
         val image = coordinateImage.take(action.screenId)
-            // l10n:keep agent coordinate protocol
-            ?: return ActionResult(false, "没有本任务最近一次已返回图片的后台坐标凭据。请显式 screen(image:true, background:true) 后核对；仍无凭据请用元素操作或交给用户，不要盲点。")
+            ?: return ActionResult(false, ui.get("phone_act_bg_coord_missing",
+                "没有本任务最近一次已返回图片的后台坐标凭据。请显式 screen(image:true, background:true) 后核对；仍无凭据请用元素操作或交给用户，不要盲点。"))
         val gesture = action.gesture.name.lowercase()
         val points = BackgroundCoordinateRequest(image.nonce, gesture, action.x, action.y, action.x2, action.y2, action.durationMs.toInt())
-        // l10n:keep agent coordinate protocol
-        if (!points.fits(image.width, image.height)) return ActionResult(false, "坐标超出原截图范围；未执行，请重新读屏。")
+        if (!points.fits(image.width, image.height)) return ActionResult(false,
+            ui.get("phone_act_bg_coord_outside", "坐标超出原截图范围；未执行，请重新读屏。"))
         val request = Bundle().apply {
             if (after.requested) putInt(Proto.AFTER_LOCAL_VISUAL, 1)
             putString(Proto.OP, Proto.OP_COORDINATE)
@@ -552,23 +562,23 @@ class BackgroundDisplay internal constructor(
         } catch (_: Exception) {
             clearSnapshot()
             // The original lane never replays a request after a missing/throwing reply.
-            return ActionResult(false, COORDINATE_UNKNOWN)
+            return ActionResult(false, ui.get("phone_act_bg_coord_receipt_unknown", COORDINATE_UNKNOWN))
         } ?: return ActionResult(false, PhoneTasks.STOPPED_MESSAGE)
         val result = BackgroundCoordinateImage.Result.parse(image) { response.get(it) }
-        if (result == null) { clearSnapshot(); return ActionResult(false, COORDINATE_UNKNOWN) }
+        if (result == null) { clearSnapshot(); return ActionResult(false, ui.get("phone_act_bg_coord_receipt_unknown", COORDINATE_UNKNOWN)) }
         if (!result.ok) {
             clearSnapshot()
-            // l10n:keep agent coordinate protocol
-            val message = if (result.attempted) "后台坐标手势可能已经产生作用，但后续结果未确认。请重新读屏，不要直接重试。" else
-                "后台坐标动作在注入前被拒绝；原观察不再可用，请重新读屏核对。"
+            val message = if (result.attempted) ui.get("phone_act_bg_coord_unknown",
+                "后台坐标手势可能已经产生作用，但后续结果未确认。请重新读屏，不要直接重试。") else
+                ui.get("phone_act_bg_coord_rejected", "后台坐标动作在注入前被拒绝；原观察不再可用，请重新读屏核对。")
             return ActionResult(false, message)
         }
         val snap = try {
             afterSnapshot(response, after)
         } catch (_: Exception) { clearSnapshot(); null } // The gesture acknowledgement already exists.
         if (snap == null) coordinateImage.invalidateScope()
-        // l10n:keep agent coordinate protocol
-        return ActionResult(true, "后台坐标手势已结束（不表示业务成功）" + backgroundVisualNote(result.change), snap)
+        return ActionResult(true, ui.get("phone_act_bg_coord_done", "后台坐标手势已结束（不表示业务成功）") +
+            backgroundVisualNote(result.change), snap)
     }
 
     override fun foregroundPackage(): String? = currentTarget?.packageName
@@ -658,9 +668,9 @@ class BackgroundDisplay internal constructor(
             // re-reads the screen (as for a stale snapshot) and the next action goes to what it shows.
             clearSnapshot()
             val now = response.getString(Proto.FG_PKG)
-            // l10n:keep agent target identity
-            val detail = if (now == null) "后台屏上现在没有应用界面" else "后台屏上现在是 $now"
-            return ActionResult(false, Reasons.withDetail(message, detail), staleSnapshot = true)
+            val detail = if (now == null) ui.get("phone_act_bg_now_empty", "后台屏上现在没有应用界面")
+                else ui.get("phone_act_bg_now_app", "后台屏上现在是 %1\$s", now)
+            return ActionResult(false, Reasons.withDetail(message, detail, ui), staleSnapshot = true)
         }
         if (!ok) clearSnapshot()
         // The original request's ACK is independent of whether its postread may still publish.
@@ -692,14 +702,14 @@ class BackgroundDisplay internal constructor(
         val switched = shownNote(target, appLabel, response.getString(Proto.SHOWN_NOTE))
         if (response.getBoolean(Proto.SECURE)) {
             lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
-            // l10n:keep agent screen protocol
-            val text = "屏幕 $id · 后台屏 · 受保护页面（支付或密码），已交还用户" + switched
+            val text = ui.get("phone_screen_bg_secure",
+                "屏幕 %1\$s · 后台屏 · 受保护页面（支付或密码），已交还用户", id) + switched
             return@commitObservation ScreenSnapshot(id, text, appLabel, pkg, secure = true, readPackages = setOf(pkg))
         }
         if (response.getBoolean(Proto.FRAME_NOT_READY)) {
             lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
-            // l10n:keep agent screen protocol
-            val text = "屏幕 $id · 后台屏\n" + Reasons.of("frameNotReady") + switched
+            val text = ui.get("phone_screen_bg_frame", "屏幕 %1\$s · 后台屏", id) + "\n" +
+                Reasons.of("frameNotReady", ui) + switched
             return@commitObservation ScreenSnapshot(id, text, appLabel, pkg, secure = false, poorTree = true, readPackages = setOf(pkg))
         }
         val elements = buildElements(response, markNew)
@@ -714,8 +724,8 @@ class BackgroundDisplay internal constructor(
             detailed = detailed,
             treeComplete = if (response.containsKey(Proto.TREE_COMPLETE)) response.getBoolean(Proto.TREE_COMPLETE) else null) + switched
         if (response.getBoolean(Proto.IMAGE_OMITTED)) {
-            // l10n:keep agent screen protocol
-            text += "\n（本页含敏感输入或控件树未完整读取，已省略截图；可继续使用已脱敏的文字信息）"
+            text += "\n" + ui.get("phone_note_bg_image_omitted",
+                "（本页含敏感输入或控件树未完整读取，已省略截图；可继续使用已脱敏的文字信息）")
         }
         previousLabels = elements.map { it.label }.filter { it.isNotEmpty() }.toSet()
         val image = if (response.getBoolean(Proto.IMAGE_OMITTED)) null else response.getByteArray("imageBytes")
@@ -728,11 +738,12 @@ class BackgroundDisplay internal constructor(
         coordinateImage.candidate(id, coordinate, eligible)
         coordinateOcrEpoch = ocrOnlyEpoch
         if (coordinate != null) {
-            // l10n:keep agent coordinate protocol
-            text += "\n截图坐标范围：${coordinate.width}×${coordinate.height}像素；30秒内可单次使用；只有明确普通目标可使用独立的本任务视觉许可，未知目标及长按/滑动仍逐次确认。未证明画布没有敏感内容或目标像素未变。"
+            text += "\n" + ui.get("phone_note_bg_coord_scope",
+                "截图坐标范围：%1\$s×%2\$s像素；30秒内可单次使用；只有明确普通目标可使用独立的本任务视觉许可，未知目标及长按/滑动仍逐次确认。未证明画布没有敏感内容或目标像素未变。",
+                coordinate.width, coordinate.height)
         } else if (image != null && coordinateSupported) {
-            // l10n:keep agent coordinate protocol
-            text += "\n本次截图没有可用坐标凭据（窗口、隐私、几何或帧条件未满足）。请用元素操作或交给用户。"
+            text += "\n" + ui.get("phone_note_bg_coord_missing",
+                "本次截图没有可用坐标凭据（窗口、隐私、几何或帧条件未满足）。请用元素操作或交给用户。")
         }
         if (localText != null) text += "\n" + localText.text
         val shownImage = image.takeIf { publishImage }
@@ -787,18 +798,18 @@ class BackgroundDisplay internal constructor(
     private fun shownNote(shown: PhoneAppIdentity, appLabel: String?, placement: String?): String {
         val opened = openedTarget ?: return ""
         if (opened.packageName == shown.packageName) return ""
-        val name = appLabel?.let { "「$it」（${shown.packageName}）" } ?: shown.packageName
-        // l10n:keep agent target identity
-        return "\n注意：后台屏上现在是$name，不是当初打开的 ${opened.packageName}" + placementNote(placement) +
-            // l10n:keep agent target identity
-            "。上面的内容和元素属于现在这个应用，操作按它自己的规则确认。"
+        val name = appLabel?.let { ui.get("phone_note_bg_app_name", "「%1\$s」（%2\$s）", it, shown.packageName) }
+            ?: shown.packageName
+        return "\n" + ui.get("phone_note_bg_switched", "注意：后台屏上现在是%1\$s，不是当初打开的 %2\$s",
+            name, opened.packageName) + placementNote(placement) +
+            ui.get("phone_note_bg_switched_tail", "。上面的内容和元素属于现在这个应用，操作按它自己的规则确认。")
     }
 
     private fun placementNote(placement: String?): String = when (placement) {
-        // l10n:keep agent target identity
-        "leftDisplay" -> "；${openedTarget?.packageName} 已离开后台屏，现在在主屏上（可能已在主屏运行，或不支持在后台屏运行），可改在主屏操作，或请用户在主屏关掉它后重新打开"
-        // l10n:keep agent target identity
-        "closed" -> "；${openedTarget?.packageName} 已经退出，需要时重新打开"
+        "leftDisplay" -> ui.get("phone_note_bg_left_display",
+            "；%1\$s 已离开后台屏，现在在主屏上（可能已在主屏运行，或不支持在后台屏运行），可改在主屏操作，或请用户在主屏关掉它后重新打开",
+            openedTarget?.packageName.orEmpty())
+        "closed" -> ui.get("phone_note_bg_closed", "；%1\$s 已经退出，需要时重新打开", openedTarget?.packageName.orEmpty())
         else -> ""
     }
 
@@ -809,10 +820,9 @@ class BackgroundDisplay internal constructor(
         coordinateOcrEpoch = null
         val id = "b${++counter}"
         lastScreenId = id; lastElements = emptyList(); previousLabels = emptySet()
-        // l10n:keep agent target identity
-        ScreenSnapshot(id, "屏幕 $id · 后台屏 · 现在没有应用界面" + placementNote(response.getString(Proto.SHOWN_NOTE)) +
-            // l10n:keep agent target identity
-            "。可以用 open 重新打开应用。", null, null)
+        ScreenSnapshot(id, ui.get("phone_screen_bg_empty", "屏幕 %1\$s · 后台屏 · 现在没有应用界面", id) +
+            placementNote(response.getString(Proto.SHOWN_NOTE)) +
+            ui.get("phone_screen_bg_empty_tail", "。可以用 open 重新打开应用。"), null, null)
     }
 
     private fun idleSnapshot(): ScreenSnapshot {
@@ -820,11 +830,10 @@ class BackgroundDisplay internal constructor(
         coordinateImage.clear()
         val id = "b${++counter}"
         lastScreenId = id; lastElements = emptyList()
-        // l10n:keep agent screen protocol
-        return ScreenSnapshot(id, "屏幕 $id · 后台屏 · 空闲，用 open 打开应用", null, null)
+        return ScreenSnapshot(id, ui.get("phone_screen_bg_idle", "屏幕 %1\$s · 后台屏 · 空闲，用 open 打开应用", id),
+            null, null)
     }
     companion object {
-        // l10n:keep agent coordinate protocol
         private const val COORDINATE_UNKNOWN = "后台坐标请求未获得可信回执，可能已产生作用。请重新读屏，不要直接重试。"
     }
 }

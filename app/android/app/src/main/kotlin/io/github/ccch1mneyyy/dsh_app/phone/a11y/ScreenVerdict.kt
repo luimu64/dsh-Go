@@ -1,5 +1,7 @@
 package io.github.ccch1mneyyy.dsh_app.phone.a11y
 
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
+
 /**
  * What an action may honestly say about the screen after it.
  *
@@ -11,7 +13,6 @@ package io.github.ccch1mneyyy.dsh_app.phone.a11y
 internal object ScreenVerdict {
     const val UNCHANGED = "界面没有明显变化。"
     const val SCROLL_END = "内容没有变化，可能已经到头了。"
-    // l10n:keep agent screen result
     const val UNVERIFIABLE = "（动作已提交，但无法验证结果：缺少足够的可读内容，可能受敏感视图策略限制。）"
     const val KEYBOARD_HIDDEN = "键盘已收起。"
     const val KEYBOARD_SHOWN = "键盘已弹出。"
@@ -25,11 +26,20 @@ internal object ScreenVerdict {
      * @param keyboard what happened to the IME, when that is what changed
      * @param scrolled the action was a scroll, so "unchanged" would read as "end of list"
      */
-    fun note(comparable: Boolean, changed: Boolean, keyboard: String?, scrolled: Boolean): String = when {
-        !comparable -> listOfNotNull(keyboard, UNVERIFIABLE).joinToString("")
-        keyboard != null -> keyboard
+    fun note(comparable: Boolean, changed: Boolean, keyboard: String?, scrolled: Boolean,
+             ui: PhoneUiText = PhoneUiText.DEFAULT): String = when {
+        !comparable -> listOfNotNull(keyboard?.let { keyboardNote(it, ui) },
+            ui.get("phone_verdict_unverifiable", UNVERIFIABLE)).joinToString("")
+        keyboard != null -> keyboardNote(keyboard, ui)
         changed -> ""
-        scrolled -> SCROLL_END
-        else -> UNCHANGED
+        scrolled -> ui.get("phone_verdict_scroll_end", SCROLL_END)
+        else -> ui.get("phone_verdict_unchanged", UNCHANGED)
+    }
+
+    /** The keyboard sentence is produced by [ScreenObservation], so its own constant is the key back. */
+    private fun keyboardNote(keyboard: String, ui: PhoneUiText): String = when (keyboard) {
+        KEYBOARD_HIDDEN -> ui.get("phone_verdict_keyboard_hidden", KEYBOARD_HIDDEN)
+        KEYBOARD_SHOWN -> ui.get("phone_verdict_keyboard_shown", KEYBOARD_SHOWN)
+        else -> keyboard
     }
 }

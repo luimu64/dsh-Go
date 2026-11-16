@@ -18,6 +18,8 @@ class PhoneTasks(
     val idleMs: Long = 3 * 60_000L,
     val stopHoldMs: Long = 30_000L,
     private val idSource: (() -> Long)? = null,
+    /** Presentation only; the Chinese constants stay the default and keep tests unchanged. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
 ) {
     enum class StopSource { USER, SCREEN_OFF, ENVIRONMENT }
 
@@ -90,11 +92,12 @@ class PhoneTasks(
         var started = false
         val result: Begin
         synchronized(lock) {
-            if (expectedEpoch != null && expectedEpoch != admissionEpoch) return Begin.Refused(STOPPED_MESSAGE)
+            if (expectedEpoch != null && expectedEpoch != admissionEpoch) return Begin.Refused(ui.get("phone_task_stopped", STOPPED_MESSAGE))
             val now = clock()
             if (now < stoppedUntil) {
                 stoppedUntil = now + stopHoldMs
-                return Begin.Refused(if (stopSource == StopSource.USER) STOPPED_MESSAGE else ENV_STOPPED_MESSAGE)
+                return Begin.Refused(if (stopSource == StopSource.USER) ui.get("phone_task_stopped", STOPPED_MESSAGE)
+                else ui.get("phone_task_env_stopped", ENV_STOPPED_MESSAGE))
             }
             interrupted = false
             // This call is in flight already, so only the pause and the clock count here.
@@ -566,6 +569,16 @@ class PhoneTasks(
         /** No confirmation surface is reachable, so this one action did not run. */
         // l10n:keep agent no-gate protocol
         const val NO_CONFIRM_MESSAGE = "这一条需要你确认，但现在无法弹出确认界面，没有执行；本轮其他手机操作不受影响。请允许 DSH 发通知，或开启无障碍"
+
+        /** Model-facing stop text in the app language; the constants above stay the Chinese default. */
+        fun stoppedMessage(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_task_stopped", STOPPED_MESSAGE)
+        fun cancelledMessage(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_task_cancelled", CANCELLED_MESSAGE)
+        fun envStoppedMessage(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_task_env_stopped", ENV_STOPPED_MESSAGE)
+        fun runEndedMessage(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_task_run_ended", RUN_ENDED_MESSAGE)
+        fun noConfirmMessage(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_task_no_confirm", NO_CONFIRM_MESSAGE)
+
+        /** The full stop that ends a sentence in the app language. */
+        fun sentenceEnd(ui: PhoneUiText = PhoneUiText.DEFAULT): String = ui.get("phone_sentence_end", "。")
 
         /** 本轮授权 key: the app plus the kind of action the person allowed for this turn. */
         fun grantKey(pkg: String?, kind: String): String = (pkg ?: "") + "\u0000" + kind

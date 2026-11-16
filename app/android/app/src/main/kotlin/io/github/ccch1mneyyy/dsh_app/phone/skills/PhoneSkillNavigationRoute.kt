@@ -2,6 +2,7 @@ package io.github.ccch1mneyyy.dsh_app.phone.skills
 
 import io.github.ccch1mneyyy.dsh_app.phone.Json
 import io.github.ccch1mneyyy.dsh_app.phone.PhoneScreen
+import io.github.ccch1mneyyy.dsh_app.phone.PhoneUiText
 import io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillBundleInstaller
 import io.github.ccch1mneyyy.dsh_app.runtime.PhoneSkillBundleReader
 
@@ -18,7 +19,8 @@ internal object PhoneSkillNavigationRoute {
 
     fun build(source: PhoneTaskTrace.Snapshot, template: PhoneSkillDraft.Ready,
         revision: String, draftRevision: Long,
-        descriptors: Map<String, PhoneSkillRoute.Descriptor>): Result {
+        descriptors: Map<String, PhoneSkillRoute.Descriptor>,
+        ui: PhoneUiText = PhoneUiText.DEFAULT): Result {
         val descriptor = descriptors[ID] ?: return Result.NotEligible
         if (relation !in descriptor.steps || "app1" !in descriptor.slots ||
             !source.canDraft || source.steps.size !in 1..16) return Result.NotEligible
@@ -32,7 +34,8 @@ internal object PhoneSkillNavigationRoute {
         }) return Result.NotEligible
         if (source.owner != template.owner) return Result.Invalid(PhoneSkillBundleReader.Reason.INTEGRITY)
         val summary = source.steps.indices.joinToString("\n") { index ->
-            "${index + 1}. 核对当前所选应用、导航页面和唯一更多选项；已选中不再点击，否则只尝试一次，并核对实际选中状态。"
+            "${index + 1}. " + ui.get("phone_skill_route_step",
+                "核对当前所选应用、导航页面和唯一更多选项；已选中不再点击，否则只尝试一次，并核对实际选中状态。")
         }
         val preview = PhoneSkillDraft.withRouteSummary(template, summary)
             ?: return Result.Invalid(PhoneSkillBundleReader.Reason.SIZE)

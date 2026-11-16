@@ -230,6 +230,11 @@ class RuntimePlugin :
                 val intent = PhoneStorage.allFilesAccessIntent(appContext)
                 result.success(intent != null && runCatching { appContext.startActivity(intent) }.isSuccess)
             }
+            "setAppLanguage" -> {
+                // Native resolves en/zh; the engine only rewrites model-facing text.
+                controller.setAppLanguage(call.argument<String>("language") ?: "zh")
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }

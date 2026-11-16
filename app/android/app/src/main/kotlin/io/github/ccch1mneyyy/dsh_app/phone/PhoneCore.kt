@@ -113,17 +113,17 @@ class PhoneCore(
         selections: PhoneSkillReplaySelections, outcomes: PhoneSkillOutcomes,
         owner: PhoneTasks.Owner): Either<ToolOutput, PreparedCall> {
         if (!env.enabled() || !selection.sourceCurrent() || !selections.current(selection))
-            return Either.Left(ToolOutput("原手机路线来源已失效，未执行。", isError = true)) // l10n:keep replay result
+            return Either.Left(ToolOutput(ui.get("phone_replay_source_gone", "原手机路线来源已失效，未执行。"), isError = true))
         val screen = SkillReplaySupport.screen(selection.bundle.route)
-            ?: return Either.Left(ToolOutput("当前执行器不支持这条完整路线，未执行。", isError = true)) // l10n:keep replay result
+            ?: return Either.Left(ToolOutput(ui.get("phone_replay_unsupported", "当前执行器不支持这条完整路线，未执行。"), isError = true))
         val app = PhoneAppIdentity(selection.app.packageName, selection.app.uid)
         val originalDriver = if (screen == PhoneScreen.BACKGROUND) {
             env.existingReplayDriver(owner, app)?.takeIf { it.screen == PhoneScreen.BACKGROUND }
-                ?: return Either.Left(ToolOutput("原任务没有已就绪的目标后台屏，未执行；不会连接或另开应用。", isError = true)) // l10n:keep replay result
+                ?: return Either.Left(ToolOutput(ui.get("phone_replay_no_background", "原任务没有已就绪的目标后台屏，未执行；不会连接或另开应用。"), isError = true))
         } else null
         val key = PhoneSkillOutcomes.Key(selection.request.name, selection.request.revision, selection.bundle.routeSha256)
         if (outcomes.begin(selection.invocation, key) !in setOf(PhoneSkillOutcomes.Result.SAVED, PhoneSkillOutcomes.Result.UNCHANGED))
-            return Either.Left(ToolOutput("路线结果记录不可用，未执行。", isError = true)) // l10n:keep replay result
+            return Either.Left(ToolOutput(ui.get("phone_replay_store_unavailable", "路线结果记录不可用，未执行。"), isError = true))
         return Either.Right(PreparedCall(REPLAY, Args(emptyMap()), owner, listOf(screen),
             replay = selection, replaySelections = selections, replayOutcomes = outcomes,
             replayDriver = originalDriver, replayApp = app.takeIf { screen == PhoneScreen.BACKGROUND }))
@@ -135,18 +135,19 @@ class PhoneCore(
         val outcomes = checkNotNull(call.replayOutcomes)
         fun live() = current(owner) && !tasks.isPaused && !env.isLocked() && env.enabled() &&
             selection.sourceCurrent() && selections.current(selection)
-        fun stop(reason: String): Out = Out(reason + " 已停止路线，不会自动重试；请交回用户或模型。", // l10n:keep replay result
+        fun stop(reason: String): Out = Out(
+            ui.get("phone_replay_stopped", "%1\$s 已停止路线，不会自动重试；请交回用户或模型。", reason),
             error = true, summary = REPLAY, decision = "handed_back")
-        if (!live()) return stop("原任务或路线已不可继续。") // l10n:keep replay result
+        if (!live()) return stop(ui.get("phone_replay_task_gone", "原任务或路线已不可继续。"))
         val screen = call.screens.single()
         val driver = if (screen == PhoneScreen.BACKGROUND) {
-            call.replayDriver ?: return stop("原后台屏已不可用。") // l10n:keep replay result
+            call.replayDriver ?: return stop(ui.get("phone_replay_background_gone", "原后台屏已不可用。"))
         } else when (val result = driverFor(screen, owner)) {
             is Either.Left -> return stop(result.value)
             is Either.Right -> result.value
         }
         for (step in selection.bundle.route.steps) {
-            if (!live()) return stop("原任务或路线已不可继续。") // l10n:keep replay result
+            if (!live()) return stop(ui.get("phone_replay_task_gone", "原任务或路线已不可继续。"))
             val plan = when (val result = driver.prepareSkillReplayStep(SkillReplayStep(selection.app, step))) {
                 is Either.Left -> return stop(result.value)
                 is Either.Right -> result.value
@@ -160,7 +161,7 @@ class PhoneCore(
                 fun writeVerdict() = safety.checkWrite(WriteKind.TAP, target, selection.app.packageName,
                     target?.appLabel, null, false, null, null, screen, null)
                 if (!plan.alreadySatisfied) {
-                    if (target == null) return stop("当前页面没有唯一可操作目标。") // l10n:keep replay result
+                    if (target == null) return stop(ui.get("phone_replay_no_target", "当前页面没有唯一可操作目标。"))
                     val verdict = writeVerdict()
                     when (val result = safety.resolve(verdict, scope, owner)) {
                         is SafetyGate.Result.No -> return stop(result.message)
@@ -175,19 +176,19 @@ class PhoneCore(
                         val denied = when (val verdict = writeVerdict()) {
                             is SafetyGate.Verdict.Refuse -> SafetyGate.Result.No(verdict.message, "refused:${verdict.rule}")
                             is SafetyGate.Verdict.Confirm -> if (confirmed) null else SafetyGate.Result.No(
-                                "策略已变化，原确认不足。", "refused:policy-changed") // l10n:keep replay result
+                                ui.get("phone_replay_policy_changed", "策略已变化，原确认不足。"), "refused:policy-changed")
                             SafetyGate.Verdict.Allow -> null
                         }
                         if (denied != null) refusal.compareAndSet(null, denied)
                     }
                     return refusal.get() == null
                 }
-                if (!allowed()) return stop(refusal.get()?.message ?: "原任务或路线已不可继续。") // l10n:keep replay result
+                if (!allowed()) return stop(refusal.get()?.message ?: ui.get("phone_replay_task_gone", "原任务或路线已不可继续。"))
                 // Durable uncertainty marker precedes a possible click, outside all driver/Tasks locks.
                 // It is NOT evidence that dispatch happened. A known no-attempt result stays not_started.
                 if (!plan.alreadySatisfied && outcomes.markDispatch(selection.invocation) !in
                     setOf(PhoneSkillOutcomes.Result.SAVED, PhoneSkillOutcomes.Result.UNCHANGED))
-                    return stop("路线结果记录暂不可写，未开始下一动作。") // l10n:keep replay result
+                    return stop(ui.get("phone_replay_mark_failed", "路线结果记录暂不可写，未开始下一动作。"))
                 if (!plan.alreadySatisfied) skillTrace.markIncomplete(owner, PhoneTaskTrace.Gap.UNSUPPORTED_EFFECT)
                 // Replay accounting owns this typed route; do not silently omit it from an otherwise
                 // complete Phase1 recording and later certify that shortened recording as reusable.
@@ -196,31 +197,31 @@ class PhoneCore(
                     if (plan.attempted) selections.dispatched(selection)
                     else if (plan.dispatchUncertain) {
                         selections.dispatchUncertain(selection)
-                        return stop("写请求回执不完整，无法排除已有作用；请核对，不要重新执行。") // l10n:keep replay result
+                        return stop(ui.get("phone_replay_dispatch_uncertain", "写请求回执不完整，无法排除已有作用；请核对，不要重新执行。"))
                     }
-                    if (!live()) return stop("任务或来源在步骤期间失效，结果未获完整核对。") // l10n:keep replay result
+                    if (!live()) return stop(ui.get("phone_replay_source_lost", "任务或来源在步骤期间失效，结果未获完整核对。"))
                     refusal.get()?.let { return stop(it.message) }
                     val witness = result.navigationWitness
                     if (!result.ok || plan.post != SkillReplayPost.SATISFIED || witness == null ||
                         witness.uid != selection.app.uid || witness.version != selection.app.version ||
                         witness.updated != selection.app.updated || witness.signingDigest != selection.app.signers) {
                         if (result.ok && plan.post == SkillReplayPost.DIFFERENT) selections.failedPost(selection)
-                        return stop("步骤预期状态未获同次真实后读证明；已开始的动作可能已有部分效果。") // l10n:keep replay result
+                        return stop(ui.get("phone_replay_post_unproven", "步骤预期状态未获同次真实后读证明；已开始的动作可能已有部分效果。"))
                     }
-                    val snapshot = result.screen ?: return stop("步骤缺少同次后读。") // l10n:keep replay result
+                    val snapshot = result.screen ?: return stop(ui.get("phone_replay_missing_readback", "步骤缺少同次后读。"))
                     val policy = env.policies()
                     safety.checkReadSources(policy, snapshot.readPackages + selection.app.packageName)?.let { return stop(it.message) }
-                    if (snapshot.secure) return stop("当前后读不可公开。") // l10n:keep replay result
-                    if (!live() || !selections.completed(selection)) return stop("步骤核对后任务已失效。") // l10n:keep replay result
+                    if (snapshot.secure) return stop(ui.get("phone_replay_readback_private", "当前后读不可公开。"))
+                    if (!live() || !selections.completed(selection)) return stop(ui.get("phone_replay_task_expired", "步骤核对后任务已失效。"))
                 } finally {
                     if (plan.attempted) selections.dispatched(selection)
                     else if (plan.dispatchUncertain) selections.dispatchUncertain(selection)
                 }
             }
         }
-        if (!live()) return stop("路线完成前原任务已失效。") // l10n:keep replay result
+        if (!live()) return stop(ui.get("phone_replay_ended", "路线完成前原任务已失效。"))
         selections.verified(selection)
-        return Out("路线各步骤均取得当前页面预期状态的有限核对；这不证明应用外部业务完成。", // l10n:keep replay result
+        return Out(ui.get("phone_replay_verified", "路线各步骤均取得当前页面预期状态的有限核对；这不证明应用外部业务完成。"),
             summary = REPLAY, decision = "ok")
     }
 
@@ -252,12 +253,11 @@ class PhoneCore(
     /** Cheap refusals must not start a native task or acquire a screen lease. */
     internal fun rejection(name: String): ToolOutput? {
         if (name !in PhoneToolCatalog.names && name != FOCUS_TEXT) {
-            // l10n:keep agent tool result
-            return ToolOutput("没有这个手机工具：$name。可用：${PhoneToolCatalog.names.joinToString("、")}", isError = true)
+            return ToolOutput(ui.get("phone_tool_unknown", "没有这个手机工具：%1\$s。可用：%2\$s",
+                name, PhoneToolCatalog.names.joinToString(" / ")), isError = true)
         }
         if (!env.enabled()) {
-            // l10n:keep agent tool result
-            return ToolOutput("手机操控已在 DSH 设置里关闭。请用户在 设置 → 手机操控 里打开后重启引擎。", isError = true)
+            return ToolOutput(ui.get("phone_tool_disabled", "手机操控已在 DSH 设置里关闭。请用户在 设置 → 手机操控 里打开后重启引擎。"), isError = true)
         }
         return null
     }
@@ -280,23 +280,21 @@ class PhoneCore(
             is SerialWorker.Outcome.Done -> outcome.value
             is SerialWorker.Outcome.TimedOut -> {
                 val text = if (outcome.queued) {
-                    // l10n:keep agent tool result
-                    "前面的手机操作还没结束，这一步没有执行。稍后再试。"
+                    ui.get("phone_tool_busy", "前面的手机操作还没结束，这一步没有执行。稍后再试。")
                 } else {
-                    // l10n:keep agent tool result
-                    "这一步超时了，可能执行了也可能没有。不要自动重试同一个动作：先用 screen 看看现在的屏幕。"
+                    ui.get("phone_tool_timeout", "这一步超时了，可能执行了也可能没有。不要自动重试同一个动作：先用 screen 看看现在的屏幕。")
                 }
                 Out(text, error = true, summary = name, decision = "timeout")
             }
-            SerialWorker.Outcome.Interrupted -> Out(PhoneTasks.STOPPED_MESSAGE + "。", error = true, summary = name, decision = "stopped")
+            SerialWorker.Outcome.Interrupted -> Out(PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui), error = true, summary = name, decision = "stopped")
             is SerialWorker.Outcome.Failed -> failedOut(name, outcome.error)
         }
         return output(name, owner, out)
     }
 
     private fun failedOut(name: String, error: Throwable) = Out(
-        // l10n:keep agent tool result
-        "手机操作出错：${error.javaClass.simpleName}${error.message?.let { "：$it" } ?: ""}",
+        ui.get("phone_tool_error", "手机操作出错：%1\$s",
+            error.javaClass.simpleName + (error.message?.let { "：$it" } ?: "")),
         error = true, summary = name, decision = "error",
     )
 
@@ -308,8 +306,7 @@ class PhoneCore(
             interjections = tasks.drainInterjections()
         }
         val text = buildString {
-            // l10n:keep agent tool result
-            for (line in interjections) append("用户插话：「").append(line).append("」\n\n")
+            for (line in interjections) append(ui.get("phone_interjection_line", "用户插话：「%1\$s」\n\n", line))
             append(out.text)
             out.screen?.let { if (out.text.isNotEmpty()) append("\n\n"); append(it.text) }
         }
@@ -331,7 +328,7 @@ class PhoneCore(
     private fun execute(name: String, a: Args, scope: SerialWorker.Scope, callOwner: AtomicReference<PhoneTasks.Owner?>, prepared: PreparedCall?): Out {
         val admitted = callOwner.get()
         val owner = admitted ?: when (val b = tasks.begin()) {
-            is PhoneTasks.Begin.Refused -> return Out(b.message + "。", error = true, summary = name, decision = "stopped")
+            is PhoneTasks.Begin.Refused -> return Out(b.message + PhoneTasks.sentenceEnd(ui), error = true, summary = name, decision = "stopped")
             is PhoneTasks.Begin.Go -> b.owner.also {
                 callOwner.set(it)
                 if (b.newTask) tasks.runIfCurrent(it) {
@@ -345,15 +342,16 @@ class PhoneCore(
         executionStatus.set(displayGuard)
         try {
             if (tasks.isPaused) {
-                if (admitted != null) return Out("用户已暂停本任务，没有执行。请等待用户恢复。", error = true, summary = name, decision = "paused") // l10n:keep agent pause result
+                if (admitted != null) return Out(ui.get("phone_paused_admitted", "用户已暂停本任务，没有执行。请等待用户恢复。"),
+                    error = true, summary = name, decision = "paused")
                 val go = scope.userWait { tasks.awaitResume(PAUSE_WAIT_MS) }
                 if (!go) {
                     // Stopped, or the task ended under the wait (the engine went away): never go on.
                     return if (tasks.isStopped() || !tasks.isActive) {
-                        Out(PhoneTasks.STOPPED_MESSAGE + "。", error = true, summary = name, decision = "stopped")
+                        Out(PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui), error = true, summary = name, decision = "stopped")
                     } else {
-                        // l10n:keep agent tool result
-                        Out("用户暂停了手机操作，超过 10 分钟没有恢复。停下来，告诉用户可以恢复后再继续。", error = true, summary = name, decision = "paused")
+                        Out(ui.get("phone_paused_timeout", "用户暂停了手机操作，超过 10 分钟没有恢复。停下来，告诉用户可以恢复后再继续。"),
+                            error = true, summary = name, decision = "paused")
                     }
                 }
             }
@@ -384,7 +382,7 @@ class PhoneCore(
                 PhoneToolCatalog.KEY -> key(a, owner)
                 PhoneToolCatalog.HANDOFF -> handoff(a, scope, owner)
                 // l10n:keep agent tool result
-                else -> Out("没有这个手机工具：$name", error = true)
+                else -> Out(ui.get("phone_tool_unknown_short", "没有这个手机工具：%1\$s", name), error = true)
             }
         } finally {
             executionStatus.remove()
@@ -421,14 +419,17 @@ class PhoneCore(
         if (!current(owner)) return stoppedOut("apps")
         val all = listed.filter { it.packageName != SafetyRules.OWN_PACKAGE }.sortedBy { it.label }
         val hits = AppMatch.filter(all, q)
-        if (hits.isEmpty()) return Out(if (q == null) "没读到应用列表。" else "没有找到名称或包名含「$q」的应用。", summary = ui.get("phone_log_apps", "列出应用")) // l10n:keep test default
+        if (hits.isEmpty()) return Out(
+            if (q == null) ui.get("phone_apps_none", "没读到应用列表。")
+            else ui.get("phone_apps_no_match", "没有找到名称或包名含「%1\$s」的应用。", q),
+            summary = ui.get("phone_log_apps", "列出应用"))
         val shown = hits.take(MAX_APPS)
         val text = buildString {
-            // l10n:keep agent tool result
-            append(if (q == null) "共 ${hits.size} 个应用" else "匹配「$q」的应用 ${hits.size} 个").append("（名称 · 包名）：\n")
+            append(if (q == null) ui.get("phone_apps_count", "共 %1\$s 个应用", hits.size)
+            else ui.get("phone_apps_count_filtered", "匹配「%1\$s」的应用 %2\$s 个", q, hits.size))
+                .append(ui.get("phone_apps_list_header", "（名称 · 包名）：\n"))
             shown.forEach { append(it.label).append(" · ").append(it.packageName).append('\n') }
-            // l10n:keep agent tool result
-            if (hits.size > shown.size) append("…另有 ${hits.size - shown.size} 个，用 query 缩小范围\n")
+            if (hits.size > shown.size) append(ui.get("phone_apps_more", "…另有 %1\$s 个，用 query 缩小范围\n", hits.size - shown.size))
         }.trimEnd()
         return Out(text, summary = if (q == null) ui.get("phone_log_apps", "列出应用") else ui.get("phone_log_apps_filtered", "列出应用（筛选）")) // l10n:keep test default
     }
@@ -437,11 +438,11 @@ class PhoneCore(
         when (val r = AppMatch.resolve(env.system().apps(), query)) {
             is AppMatch.Result.Found -> Either.Right(r.app)
             is AppMatch.Result.Ambiguous -> Either.Left(
-                // l10n:keep agent tool result
-                "「$query」对应多个应用，请用包名指定：" + r.candidates.joinToString("；") { "${it.label} · ${it.packageName}" },
+                ui.get("phone_apps_ambiguous", "「%1\$s」对应多个应用，请用包名指定：", query) +
+                    r.candidates.joinToString(ui.get("phone_apps_ambiguous_join", "；")) { "${it.label} · ${it.packageName}" },
             )
-            // l10n:keep agent tool result
-            AppMatch.Result.NotFound -> Either.Left("没找到应用「$query」。用 apps 查一下名称或包名。")
+            AppMatch.Result.NotFound -> Either.Left(
+                ui.get("phone_apps_not_found", "没找到应用「%1\$s」。用 apps 查一下名称或包名。", query))
         }
 
     private fun prepare(name: String, a: Args, owner: PhoneTasks.Owner,
@@ -463,13 +464,13 @@ class PhoneCore(
             PhoneToolCatalog.OPEN -> {
                 val appQ = a.str("app")
                 val url = a.str("url")
-                // l10n:keep agent tool result
-                if ((appQ == null) == (url == null)) return Either.Left(Out("open 需要 app 或 url，二选一。", error = true))
+                if ((appQ == null) == (url == null)) return Either.Left(Out(
+                    ui.get("phone_open_needs_target", "open 需要 app 或 url，二选一。"), error = true))
                 if (env.isLocked()) return Either.Left(locked("open"))
                 if (url != null) {
-                    // l10n:keep agent tool result
-                    if (a.bool("background") == true) return Either.Left(Out("后台屏只能用 app 打开应用，不支持链接。", error = true))
-                    UrlPolicy.check(url)?.let {
+                    if (a.bool("background") == true) return Either.Left(Out(
+                        ui.get("phone_open_background_url", "后台屏只能用 app 打开应用，不支持链接。"), error = true))
+                    UrlPolicy.check(url, ui)?.let {
                         return Either.Left(Out(it, error = true, summary = ui.get("phone_log_open_url", "打开链接"), decision = "refused:url")) // l10n:keep test default
                     }
                     launch = when (val result = env.system().prepareUrl(url)) {
@@ -487,11 +488,11 @@ class PhoneCore(
                         is Either.Right -> result.value
                     }
                     if (a.bool("background") == true && launch.target !is SystemTarget.Known)
-                        return Either.Left(Out(Reasons.of("targetIdentityUnavailable"), error = true))
+                        return Either.Left(Out(Reasons.of("targetIdentityUnavailable", ui), error = true))
                 }
             }
             PhoneToolCatalog.INTENT -> {
-                val spec = when (val parsed = IntentSpec.parse(a, env.zone())) {
+                val spec = when (val parsed = IntentSpec.parse(a, env.zone(), ui)) {
                     is Either.Left -> return Either.Left(Out(parsed.value, error = true))
                     is Either.Right -> parsed.value
                 }
@@ -560,7 +561,7 @@ class PhoneCore(
         }
         val driver = env.driver(PhoneScreen.BACKGROUND, owner)
             ?: return Out(env.backgroundUnavailable(), error = true, app = app.label, summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "unavailable") // l10n:keep test default
-        driver.availability().let { if (!it.ok) return Out(it.reason ?: "后台屏现在不可用。", error = true, summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "unavailable") } // l10n:keep test default
+        driver.availability().let { if (!it.ok) return Out(it.reason ?: ui.get("phone_background_unavailable_default", "后台屏现在不可用。"), error = true, summary = ui.get("phone_log_open_background", "后台屏打开 %1\$s", app.packageName), decision = "unavailable") }
         val mainFront = runCatching { env.driver(PhoneScreen.MAIN, owner)?.foregroundPackage() }.getOrNull()
         var decision = "allowed"
         if (mainFront == app.packageName) {
@@ -662,7 +663,7 @@ class PhoneCore(
 
     /** A later stop does not retract the platform call or replace its attempted target. */
     private fun stoppedAfterSystem(r: SysResult, summary: String): Out = Out(
-        PhoneTasks.STOPPED_MESSAGE + "。\n" + r.message, // l10n:keep agent tool result
+        PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui) + "\n" + r.message,
         error = true, app = r.appLabel,
         summary = if (r.target != null) ui.get("phone_system_attempt_stopped", "%1\$s（已尝试；后续停止）", summary) // l10n:keep test default
             else summary,
@@ -757,10 +758,8 @@ class PhoneCore(
 
     private fun notify(a: Args, owner: PhoneTasks.Owner): Out {
         if (!current(owner)) return stoppedOut("notify")
-        // l10n:keep agent tool result
-        val title = a.str("title") ?: return Out("notify 需要 title 和 text。", error = true)
-        // l10n:keep agent tool result
-        val text = a.str("text") ?: return Out("notify 需要 title 和 text。", error = true)
+        val title = a.str("title") ?: return Out(ui.get("phone_notify_needs_text", "notify 需要 title 和 text。"), error = true)
+        val text = a.str("text") ?: return Out(ui.get("phone_notify_needs_text", "notify 需要 title 和 text。"), error = true)
         skillTrace.markIncomplete(owner)
         val r = env.system().notify(title, text)
         return Out(r.message, error = !r.ok, summary = ui.get("phone_log_notify", "通知"), decision = if (r.ok) "ok" else "failed") // l10n:keep test default
@@ -770,15 +769,13 @@ class PhoneCore(
         if (!current(owner)) return stoppedOut("clipboard")
         val set = a.text("set")
         val get = a.bool("get") == true
-        // l10n:keep agent tool result
-        if (set != null && get) return Out("clipboard 的 set 和 get 一次只能用一个。", error = true)
+        if (set != null && get) return Out(ui.get("phone_clipboard_one_mode", "clipboard 的 set 和 get 一次只能用一个。"), error = true)
         if (set != null) {
             skillTrace.markIncomplete(owner)
             val r = env.system().clipboardSet(set)
             return Out(r.message, error = !r.ok, summary = ui.get("phone_log_clipboard_write", "写剪贴板（%1\$d 字）", set.length), decision = if (r.ok) "ok" else "failed") // l10n:keep test default
         }
-        // l10n:keep agent tool result
-        if (!get) return Out("clipboard 需要 set（写入文字）或 get:true（读取）。", error = true)
+        if (!get) return Out(ui.get("phone_clipboard_needs_mode", "clipboard 需要 set（写入文字）或 get:true（读取）。"), error = true)
         val r = env.system().clipboardGet()
         return Out(r.message, error = !r.ok, summary = ui.get("phone_log_clipboard_read", "读剪贴板"), decision = if (r.ok) "ok" else "failed") // l10n:keep test default
     }
@@ -790,13 +787,11 @@ class PhoneCore(
         PhoneScreen.MAIN -> when (env.a11yState()) {
             A11yState.ENABLED_NOT_CONNECTED -> {
                 env.notifyFix("a11y")
-                // l10n:keep agent tool result
-                "无障碍服务没连上（被系统关了或还在启动）：已通知用户到系统设置重新打开。现在只能用 apps / open / intent / notify / clipboard。"
+                ui.get("phone_a11y_disconnected", "无障碍服务没连上（被系统关了或还在启动）：已通知用户到系统设置重新打开。现在只能用 apps / open / intent / notify / clipboard。")
             }
             else -> {
                 env.notifyFix("a11y")
-                // l10n:keep agent tool result
-                "无障碍没开，看不了屏幕：已通知用户到 DSH 设置 → 手机操控 开启。现在只能用 apps / open / intent / notify / clipboard。"
+                ui.get("phone_a11y_off_message", "无障碍没开，看不了屏幕：已通知用户到 DSH 设置 → 手机操控 开启。现在只能用 apps / open / intent / notify / clipboard。")
             }
         }
     }
@@ -848,16 +843,16 @@ class PhoneCore(
     }
 
     private fun routeScreenId(id: String?, parameterName: String = "screen"): Either<String, PhoneScreen> {
-        // l10n:keep agent tool result
-        if (id == null) return Either.Left("缺少 $parameterName（屏幕号，如 s7）。先调用 screen 拿到屏幕号。")
+        if (id == null) return Either.Left(
+            ui.get("phone_screen_param_missing", "缺少 %1\$s（屏幕号，如 s7）。先调用 screen 拿到屏幕号。", parameterName))
         return PhoneScreen.ofScreenId(id)?.let { Either.Right(it) }
-            // l10n:keep agent tool result
-            ?: Either.Left("屏幕号「$id」不对：主屏以 s 开头（如 s7），后台屏以 b 开头（如 b3）。先调用 screen 拿到屏幕号。")
+            ?: Either.Left(ui.get("phone_screen_id_invalid",
+                "屏幕号「%1\$s」不对：主屏以 s 开头（如 s7），后台屏以 b 开头（如 b3）。先调用 screen 拿到屏幕号。", id))
     }
 
     private fun locked(summary: String) =
-        // l10n:keep agent tool result
-        Out("手机锁着屏，DSH 不在锁屏状态下操作。请用户解锁后再说一声。", error = true, summary = summary, decision = "refused:locked")
+        Out(ui.get("phone_screen_locked", "手机锁着屏，DSH 不在锁屏状态下操作。请用户解锁后再说一声。"),
+            error = true, summary = summary, decision = "refused:locked")
 
     /** Every returned observation passes the final read policy before a driver candidate is
      * committed. This also covers post-action and stale-refresh frames, not just screen(). */
@@ -887,8 +882,7 @@ class PhoneCore(
         val shown = returnedScreen(driver, snap, owner)
         val refused = shown !== snap
         return Out(
-            // l10n:keep agent tool result
-            if (refused) "没有读取这个屏幕的内容。" else "",
+            if (refused) ui.get("phone_screen_not_read", "没有读取这个屏幕的内容。") else "",
             error = refused,
             screen = shown,
             app = snap.appLabel ?: snap.packageName,
@@ -904,8 +898,7 @@ class PhoneCore(
             is Either.Left -> return Out(r.value, error = true)
             is Either.Right -> r.value
         }
-        // l10n:keep agent tool result
-        val list = a.int("list") ?: return Out("collect 需要 list（列表编号）。", error = true)
+        val list = a.int("list") ?: return Out(ui.get("phone_collect_needs_list", "collect 需要 list（列表编号）。"), error = true)
         val pages = (a.int("max_pages") ?: 10).coerceIn(1, 30)
         val summary = ui.get("phone_log_collect", "收集 %1\$s#%2\$d", sid.toString(), list) // l10n:keep test default
         val driver = when (val d = driverFor(which, owner)) {
@@ -958,15 +951,14 @@ class PhoneCore(
         }
         val screen = collectedScreen?.let { returnedScreen(driver, it, owner, readPolicy) }
         val text = buildString {
-            // l10n:keep agent tool result
-            append("收集到 ${r.items.size} 条（翻了 ${r.pages} 页，停下原因：${r.stopReason}）：\n")
+            append(ui.get("phone_collect_summary", "收集到 %1\$s 条（翻了 %2\$s 页，停下原因：%3\$s）：\n",
+                r.items.size, r.pages, r.stopReason))
             var size = 0
             for ((i, item) in r.items.withIndex()) {
                 val line = "${i + 1}. $item\n"
                 size += line.length
                 if (size > MAX_COLLECT_CHARS) {
-                    // l10n:keep agent tool result
-                    append("…其余 ${r.items.size - i} 条超出长度上限，没有列出\n")
+                    append(ui.get("phone_collect_overflow", "…其余 %1\$s 条超出长度上限，没有列出\n", r.items.size - i))
                     break
                 }
                 append(line)
@@ -977,14 +969,15 @@ class PhoneCore(
 
     /** Selection insertion is distinct from type's whole-field replacement and never submits. */
     private fun focusText(a: Args, scope: SerialWorker.Scope, owner: PhoneTasks.Owner): Out {
-        val summary = "焦点输入（内容不记录）" // l10n:keep agent focus result
+        val summary = ui.get("phone_focus_log", "焦点输入（内容不记录）")
         val text = a.strictText("text")
         if (!a.onlyKeys("observation", "text") || text == null || text.isEmpty() || text.length > 500 ||
             text.any { it < ' ' || it == '\u007f' || it == '\u2028' || it == '\u2029' } ||
             text.indices.any { i -> Character.isHighSurrogate(text[i]) &&
                 (i + 1 == text.length || !Character.isLowSurrogate(text[i + 1])) ||
                 Character.isLowSurrogate(text[i]) && (i == 0 || !Character.isHighSurrogate(text[i - 1])) }) {
-            return Out("focus_text 只接受 observation 和非空、最多 500 个 UTF-16 单元的单行 text 字符串；不支持提交。", // l10n:keep agent focus result
+            return Out(ui.get("phone_focus_invalid",
+                "focus_text 只接受 observation 和非空、最多 500 个 UTF-16 单元的单行 text 字符串；不支持提交。"),
                 error = true, summary = summary, decision = "refused:arguments")
         }
         val sid = a.strictText("observation")
@@ -1009,16 +1002,17 @@ class PhoneCore(
             val app = target.appLabel ?: pkg
             if (!current(owner)) return stoppedOut(summary)
             if (target.screenId != sid || !target.isEditable || SafetyRules.isSecretTarget(target))
-                return Out("原焦点不是可用的普通输入框，未输入。密码、验证码及支付框请用户填写。", // l10n:keep agent focus result
+                return Out(ui.get("phone_focus_not_input", "原焦点不是可用的普通输入框，未输入。密码、验证码及支付框请用户填写。"),
                     error = true, app = app, summary = summary, decision = "refused:secret-field")
             fun verdict() = safety.checkWrite(WriteKind.TYPE, target, pkg, target.appLabel,
                 typed = text, submit = false, screen = which)
             (verdict() as? SafetyGate.Verdict.Refuse)?.let {
                 return Out(it.message, error = true, app = app, summary = summary, decision = "refused:${it.rule}")
             }
+            val appName = app ?: ui.get("phone_current_app", "当前应用")
             val sentence = if (plan.method == FocusInput.Method.CLIPBOARD)
-                "将覆盖系统剪贴板，并在「${app ?: "当前应用"}」的原焦点选择区粘贴一次。旧剪贴板不备份、不恢复；输入可能触发应用行为，不会请求提交。是否仅允许这一次？" // l10n:keep agent focus result
-            else "将在「${app ?: "当前应用"}」的原焦点选择区插入一次文本，可能结束输入法组合状态；输入可能触发应用行为，不会请求提交。是否仅允许这一次？" // l10n:keep agent focus result
+                ui.get("phone_focus_confirm_clipboard", "将覆盖系统剪贴板，并在「%1\$s」的原焦点选择区粘贴一次。旧剪贴板不备份、不恢复；输入可能触发应用行为，不会请求提交。是否仅允许这一次？", appName)
+            else ui.get("phone_focus_confirm_insert", "将在「%1\$s」的原焦点选择区插入一次文本，可能结束输入法组合状态；输入可能触发应用行为，不会请求提交。是否仅允许这一次？", appName)
             val decision = when (val consent = safety.resolve(safety.confirmationOnce(sentence, pkg,
                 target.appLabel, "focus_text"), scope, owner)) {
                 is SafetyGate.Result.No -> return Out(consent.message, error = true, app = app,
@@ -1044,7 +1038,7 @@ class PhoneCore(
             if (!current(owner)) return stoppedOut(summary)
             val denied = failure.get()
             return Out(if (denied == null) result.message else
-                "策略已变化，停止继续输入；已开始的步骤可能产生效果，请核对后再决定，不要自动重试。\n${denied.message}", // l10n:keep agent focus result
+                ui.get("phone_focus_policy_changed", "策略已变化，停止继续输入；已开始的步骤可能产生效果，请核对后再决定，不要自动重试。\n%1\$s", denied.message),
                 error = denied != null || !result.ok,
                 screen = result.screen?.let { returnedScreen(driver, it, owner) }, app = app, summary = summary,
                 decision = if (denied != null) "refused:${denied.rule}" else if (result.ok) decision else "failed")
@@ -1070,18 +1064,15 @@ class PhoneCore(
         var summary: String
         when (name) {
             PhoneToolCatalog.TAP -> {
-                // l10n:keep agent tool result
-                id ?: return Out("tap 需要 id（元素编号）。", error = true)
+                id ?: return Out(ui.get("phone_tap_needs_id", "tap 需要 id（元素编号）。"), error = true)
                 val long = a.bool("long") == true
                 action = PhoneAction.Tap(sid, id, long)
                 kind = if (long) WriteKind.LONG_TAP else WriteKind.TAP
                 summary = if (long) ui.get("phone_log_long_tap", "长按 %1\$s#%2\$d", sid.toString(), id) else ui.get("phone_log_tap", "点 %1\$s#%2\$d", sid.toString(), id) // l10n:keep test default
             }
             PhoneToolCatalog.TYPE -> {
-                // l10n:keep agent tool result
-                id ?: return Out("type 需要 id（输入框编号）。", error = true)
-                // l10n:keep agent tool result
-                typed = a.text("text") ?: return Out("type 需要 text。", error = true)
+                id ?: return Out(ui.get("phone_type_needs_id", "type 需要 id（输入框编号）。"), error = true)
+                typed = a.text("text") ?: return Out(ui.get("phone_type_needs_text", "type 需要 text。"), error = true)
                 submit = a.bool("submit") == true
                 action = PhoneAction.Type(sid, id, typed, submit)
                 kind = WriteKind.TYPE
@@ -1094,8 +1085,7 @@ class PhoneCore(
                     "down" -> PhoneAction.Direction.DOWN
                     "left" -> PhoneAction.Direction.LEFT
                     "right" -> PhoneAction.Direction.RIGHT
-                    // l10n:keep agent tool result
-                    else -> return Out("scroll 需要 direction：up / down / left / right。", error = true)
+                    else -> return Out(ui.get("phone_scroll_needs_direction", "scroll 需要 direction：up / down / left / right。"), error = true)
                 }
                 action = PhoneAction.Scroll(sid, id, dir)
                 kind = WriteKind.SCROLL
@@ -1104,22 +1094,22 @@ class PhoneCore(
             else -> {
                 val x = a.int("x")
                 val y = a.int("y")
-                // l10n:keep agent tool result
-                if (x == null || y == null || x < 0 || y < 0) return Out("tap_xy 需要非负整数 x 和 y。", error = true)
+                if (x == null || y == null || x < 0 || y < 0)
+                    return Out(ui.get("phone_tapxy_needs_xy", "tap_xy 需要非负整数 x 和 y。"), error = true)
                 point = x to y
                 val gesture = when (a.str("action") ?: if (a.has("action")) "" else "tap") {
                     "tap" -> PhoneAction.CoordinateGesture.TAP
                     "long" -> PhoneAction.CoordinateGesture.LONG
                     "swipe" -> PhoneAction.CoordinateGesture.SWIPE
-                    else -> return Out("tap_xy 的 action 需要 tap / long / swipe。", error = true) // l10n:keep
+                    else -> return Out(ui.get("phone_tapxy_needs_action", "tap_xy 的 action 需要 tap / long / swipe。"), error = true)
                 }
                 val duration = if (a.has("duration_ms")) a.int("duration_ms") else 400
                 val x2 = a.int("x2"); val y2 = a.int("y2")
                 if (gesture == PhoneAction.CoordinateGesture.SWIPE &&
                     (x2 == null || y2 == null || x2 < 0 || y2 < 0 || duration == null || duration !in 100..2000))
-                    return Out("swipe 需要非负终点 x2/y2，duration_ms 为 100–2000。", error = true) // l10n:keep
+                    return Out(ui.get("phone_swipe_needs_end", "swipe 需要非负终点 x2/y2，duration_ms 为 100–2000。"), error = true)
                 if (gesture != PhoneAction.CoordinateGesture.SWIPE && (a.has("x2") || a.has("y2") || a.has("duration_ms")))
-                    return Out("终点与 duration_ms 只用于 swipe。", error = true) // l10n:keep
+                    return Out(ui.get("phone_swipe_fields_only", "终点与 duration_ms 只用于 swipe。"), error = true)
                 action = PhoneAction.TapXY(sid, x, y, gesture, x2, y2, (duration ?: 400).toLong())
                 kind = WriteKind.TAP_XY
                 summary = ui.get("phone_log_coordinate", "坐标手势 %1\$s · %2\$s", gesture.name.lowercase(), sid) // l10n:keep test default
@@ -1174,7 +1164,8 @@ class PhoneCore(
             val refusal = when (val latest = writeVerdict()) {
                 is SafetyGate.Verdict.Refuse -> SafetyGate.Result.No(latest.message, "refused:${latest.rule}")
                 is SafetyGate.Verdict.Confirm -> if (ordinaryConfirmed) null else SafetyGate.Result.No(
-                    "手机操作策略已变化，本次原授权不足。请重新观察并征得用户确认，不要自动重试。", "refused:policy-changed") // l10n:keep agent safety result
+                    ui.get("phone_policy_revoked_before", "手机操作策略已变化，本次原授权不足。请重新观察并征得用户确认，不要自动重试。"),
+                    "refused:policy-changed")
                 SafetyGate.Verdict.Allow -> null
             }
             if (refusal != null) policyFailure.compareAndSet(null, refusal)
@@ -1202,7 +1193,8 @@ class PhoneCore(
             policyFailure.get()?.let {
                 // A later gate (e.g. submit after text entry) can refuse after a prior side effect.
                 result.copy(ok = false, staleSnapshot = false,
-                    message = "手机操作策略已变化，已停止继续操作；已开始的步骤可能已有部分效果，请先核对，不要自动重试。\n${it.message}") // l10n:keep agent safety result
+                    message = ui.get("phone_policy_revoked_mid",
+                        "手机操作策略已变化，已停止继续操作；已开始的步骤可能已有部分效果，请先核对，不要自动重试。\n%1\$s", it.message))
             } ?: result
         }
         if (!res.ok && res.staleSnapshot) return stale(driver, sid, summary, owner, res.message)
@@ -1252,10 +1244,10 @@ class PhoneCore(
             null
         }
         return Out(
-            // l10n:keep agent tool result
-            refusal ?: if (now != null) "屏幕 $sid 已经过期，或者这个元素变了，没有执行。按下面的新屏幕重新选。"
-            // l10n:keep agent tool result
-            else "屏幕 $sid 已经过期，或者这个元素变了，没有执行。请重新观察后再操作。",
+            refusal ?: if (now != null) ui.get("phone_target_expired_new",
+                "屏幕 %1\$s 已经过期，或者这个元素变了，没有执行。按下面的新屏幕重新选。", sid)
+            else ui.get("phone_target_expired_observe",
+                "屏幕 %1\$s 已经过期，或者这个元素变了，没有执行。请重新观察后再操作。", sid),
             error = true,
             screen = now,
             summary = summary,
@@ -1270,8 +1262,7 @@ class PhoneCore(
             "home" -> PhoneAction.GlobalKey.HOME
             "recents" -> PhoneAction.GlobalKey.RECENTS
             "notifications" -> PhoneAction.GlobalKey.NOTIFICATIONS
-            // l10n:keep agent tool result
-            else -> return Out("key 只能是 back / home / recents / notifications。", error = true)
+            else -> return Out(ui.get("phone_key_invalid", "key 只能是 back / home / recents / notifications。"), error = true)
         }
         val sid = a.str("screen")
         val which = if (sid == null) {
@@ -1316,11 +1307,10 @@ class PhoneCore(
 
     private fun handoff(a: Args, scope: SerialWorker.Scope, owner: PhoneTasks.Owner): Out {
         if (!current(owner)) return stoppedOut("handoff")
-        // l10n:keep agent tool result
-        val reason = a.str("reason") ?: return Out("handoff 需要 reason：一句话告诉用户要做什么。", error = true)
+        val reason = a.str("reason") ?: return Out(
+            ui.get("phone_handoff_needs_reason", "handoff 需要 reason：一句话告诉用户要做什么。"), error = true)
         val gate = env.gate() ?: return Out(
-            // l10n:keep agent tool result
-            "现在没办法把手机交给用户（DSH 不能发通知，悬浮条也没开）。直接在回复里告诉用户要做什么。",
+            ui.get("phone_handoff_no_surface", "现在没办法把手机交给用户（DSH 不能发通知，悬浮条也没开）。直接在回复里告诉用户要做什么。"),
             error = true,
             summary = ui.get("phone_log_handoff", "交还用户"), // l10n:keep test default
             decision = "refused:no-gate",
@@ -1341,16 +1331,16 @@ class PhoneCore(
                 lastScreen = PhoneScreen.MAIN
                 val screen = mainScreenAfter(owner, 0)
                 if (!current(owner)) return stoppedOut("handoff")
-                Out(prefix + "用户点了「继续」。下面是现在的屏幕；接着做之前先确认状态。", screen = screen, summary = ui.get("phone_log_handoff", "交还用户"), decision = "continue") // l10n:keep test default
+                Out(prefix + ui.get("phone_handoff_continued", "用户点了「继续」。下面是现在的屏幕；接着做之前先确认状态。"),
+                    screen = screen, summary = ui.get("phone_log_handoff", "交还用户"), decision = "continue")
             }
             HandoffResult.STOP -> {
                 // l10n:keep agent tool result
                 tasks.stopIfCurrent(owner, "用户在交还时选择了停止")
-                Out(prefix + PhoneTasks.STOPPED_MESSAGE + "。", error = true, summary = ui.get("phone_log_handoff", "交还用户"), decision = "stopped") // l10n:keep test default
+                Out(prefix + PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui), error = true, summary = ui.get("phone_log_handoff", "交还用户"), decision = "stopped") // l10n:keep test default
             }
             HandoffResult.TIMEOUT -> Out(
-                // l10n:keep agent tool result
-                prefix + "等了 10 分钟用户没有回应。停下来，告诉用户回来后可以接着做。",
+                prefix + ui.get("phone_handoff_timeout", "等了 10 分钟用户没有回应。停下来，告诉用户回来后可以接着做。"),
                 error = true,
                 summary = ui.get("phone_log_handoff", "交还用户"), // l10n:keep test default
                 decision = "timeout",
@@ -1358,7 +1348,7 @@ class PhoneCore(
         }
     }
 
-    private fun stoppedOut(summary: String) = Out(PhoneTasks.STOPPED_MESSAGE + "。", error = true,
+    private fun stoppedOut(summary: String) = Out(PhoneTasks.stoppedMessage(ui) + PhoneTasks.sentenceEnd(ui), error = true,
         summary = summary, decision = "stopped")
 
     companion object {

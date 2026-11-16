@@ -8,6 +8,9 @@ class PhoneTaskJournal(
     private val read: () -> String?,
     private val commit: (String) -> Boolean,
     private val processInstance: String = PROCESS_INSTANCE,
+    /** The model-facing refusal follows the app language; the constants stay the Chinese fallback. */
+    private val ui: PhoneUiText = PhoneUiText.DEFAULT,
+    /** Last, so a trailing lambda stays the clock as every existing call site expects. */
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     class Record internal constructor(val token: String, val process: String,
@@ -44,8 +47,8 @@ class PhoneTaskJournal(
 
     /** Runs on the bridge call thread, before Begin/prepare and outside all task locks. */
     fun refusal(): String? = synchronized(lock) {
-        if (!loadLocked() || error != null) STORAGE_MESSAGE
-        else if (batch.isNotEmpty()) INTERRUPTION_MESSAGE else null
+        if (!loadLocked() || error != null) ui.get("phone_journal_storage", STORAGE_MESSAGE)
+        else if (batch.isNotEmpty()) ui.get("phone_journal_interrupted", INTERRUPTION_MESSAGE) else null
     }
 
     fun mark(record: Record): Boolean = synchronized(lock) {
@@ -114,9 +117,7 @@ class PhoneTaskJournal(
 
     companion object {
         private val PROCESS_INSTANCE = UUID.randomUUID().toString()
-        // l10n:keep agent interruption result
         const val INTERRUPTION_MESSAGE = "上次手机任务中断或未能保存结束状态，操作结果可能已经发生。本次未执行。请先在手机操控页核对中断提示。"
-        // l10n:keep agent storage result
         const val STORAGE_MESSAGE = "无法保存或读取任务状态，本次未执行。请在手机操控页重试保存或读取。"
     }
 }

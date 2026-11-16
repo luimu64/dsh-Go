@@ -411,7 +411,7 @@ class PhonePlugin : FlutterPlugin, ActivityAware, MethodChannel.MethodCallHandle
             }
             controlIo.execute {
                 val choices = PhoneSkillReplayApps.choices(appContext, read.route.descriptorId)
-                val summary = PhoneSkillReplayApps.summary(read.route)
+                val summary = PhoneSkillReplayApps.summary(read.route, ui = PhoneStrings.of(appContext))
                 main.post {
                     val inspection = SkillInspection(client, epoch, origin, read, choices)
                     if (skillSelectionRequest !== request || !skillReplayLive(inspection)) {

@@ -107,93 +107,94 @@ sealed interface IntentSpec {
 
     companion object {
         /** Parses `intent` arguments; [Either.Left] is the message for the model. */
-        fun parse(a: Args, zone: ZoneId): Either<String, IntentSpec> {
-            // l10n:keep agent tool validation
-            val kind = a.str("kind") ?: return Either.Left("intent 需要 kind：${PhoneToolCatalog.INTENT_KINDS.joinToString(" / ")}")
+        fun parse(a: Args, zone: ZoneId, ui: PhoneUiText = PhoneUiText.DEFAULT): Either<String, IntentSpec> {
+            val kind = a.str("kind") ?: return Either.Left(ui.get("phone_intent_needs_kind",
+                "intent 需要 kind：%1\$s", PhoneToolCatalog.INTENT_KINDS.joinToString(" / ")))
             return when (kind) {
                 "alarm" -> {
-                    // l10n:keep agent tool validation
-                    val hour = a.int("hour") ?: return Either.Left("alarm 需要 hour（0–23）和 minute（0–59）")
+                    val hour = a.int("hour") ?: return Either.Left(
+                        ui.get("phone_intent_alarm_needs_time", "alarm 需要 hour（0–23）和 minute（0–59）"))
                     val minute = a.int("minute") ?: 0
-                    // l10n:keep agent tool validation
-                    if (hour !in 0..23 || minute !in 0..59) return Either.Left("alarm 的时间不对：hour 0–23，minute 0–59")
+                    if (hour !in 0..23 || minute !in 0..59) return Either.Left(
+                        ui.get("phone_intent_alarm_bad_time", "alarm 的时间不对：hour 0–23，minute 0–59"))
                     val days = a.intList("days") ?: emptyList()
-                    // l10n:keep agent tool validation
-                    if (days.any { it !in 1..7 }) return Either.Left("days 用 1–7 表示周一到周日")
+                    if (days.any { it !in 1..7 }) return Either.Left(
+                        ui.get("phone_intent_days", "days 用 1–7 表示周一到周日"))
                     Either.Right(Alarm(hour, minute, a.str("message"), days.distinct().sorted()))
                 }
                 "timer" -> {
-                    // l10n:keep agent tool validation
-                    val s = a.int("seconds") ?: return Either.Left("timer 需要 seconds（1–86400）")
-                    // l10n:keep agent tool validation
-                    if (s !in 1..86400) return Either.Left("timer 的 seconds 要在 1–86400 之间")
+                    val s = a.int("seconds") ?: return Either.Left(
+                        ui.get("phone_intent_timer_needs", "timer 需要 seconds（1–86400）"))
+                    if (s !in 1..86400) return Either.Left(
+                        ui.get("phone_intent_timer_range", "timer 的 seconds 要在 1–86400 之间"))
                     Either.Right(Timer(s, a.str("message")))
                 }
                 "calendar" -> {
-                    // l10n:keep agent tool validation
-                    val title = a.str("title") ?: return Either.Left("calendar 需要 title 和 begin")
-                    // l10n:keep agent tool validation
-                    val beginText = a.str("begin") ?: return Either.Left("calendar 需要 begin，例如 2026-10-24T19:00")
-                    // l10n:keep agent tool validation
-                    val begin = parseTime(beginText, zone) ?: return Either.Left("begin 看不懂：写成 2026-10-24T19:00，或全天日程写 2026-10-24")
+                    val title = a.str("title") ?: return Either.Left(
+                        ui.get("phone_intent_calendar_needs", "calendar 需要 title 和 begin"))
+                    val beginText = a.str("begin") ?: return Either.Left(
+                        ui.get("phone_intent_calendar_begin", "calendar 需要 begin，例如 2026-10-24T19:00"))
+                    val begin = parseTime(beginText, zone) ?: return Either.Left(ui.get("phone_intent_begin_unreadable",
+                        "begin 看不懂：写成 2026-10-24T19:00，或全天日程写 2026-10-24"))
                     val allDay = a.bool("all_day") ?: begin.dateOnly
-                    // l10n:keep agent tool validation
-                    val end = a.str("end")?.let { parseTime(it, zone) ?: return Either.Left("end 看不懂：写成 2026-10-24T20:00") }
+                    val end = a.str("end")?.let {
+                        parseTime(it, zone) ?: return Either.Left(
+                            ui.get("phone_intent_end_unreadable", "end 看不懂：写成 2026-10-24T20:00"))
+                    }
                     val endMs = end?.ms ?: (begin.ms + if (allDay) 86_400_000L else 3_600_000L)
-                    // l10n:keep agent tool validation
-                    if (endMs < begin.ms) return Either.Left("end 早于 begin")
+                    if (endMs < begin.ms) return Either.Left(ui.get("phone_intent_end_before", "end 早于 begin"))
                     Either.Right(Calendar(title, begin.ms, endMs, allDay, a.str("location"), a.str("description")))
                 }
                 "dial" -> {
-                    // l10n:keep agent tool validation
-                    val n = a.str("number") ?: return Either.Left("dial 需要 number")
-                    // l10n:keep agent tool validation
-                    phoneNumber(n)?.let { Either.Right(Dial(it)) } ?: Either.Left("号码只能含数字、+、-、空格和括号（不支持 * 和 # 这类服务码）")
+                    val n = a.str("number") ?: return Either.Left(ui.get("phone_intent_dial_needs", "dial 需要 number"))
+                    phoneNumber(n)?.let { Either.Right(Dial(it)) } ?: Either.Left(ui.get("phone_intent_number_invalid",
+                        "号码只能含数字、+、-、空格和括号（不支持 * 和 # 这类服务码）"))
                 }
                 "sms_draft" -> {
-                    // l10n:keep agent tool validation
-                    val text = a.str("text") ?: return Either.Left("sms_draft 需要 text")
+                    val text = a.str("text") ?: return Either.Left(ui.get("phone_intent_sms_needs", "sms_draft 需要 text"))
                     val n = a.str("number")
-                    // l10n:keep agent tool validation
-                    val num = n?.let { phoneNumber(it) ?: return Either.Left("号码只能含数字、+、-、空格和括号") }
+                    val num = n?.let {
+                        phoneNumber(it) ?: return Either.Left(
+                            ui.get("phone_intent_number_only", "号码只能含数字、+、-、空格和括号"))
+                    }
                     Either.Right(SmsDraft(num, text))
                 }
                 "share" -> {
-                    // l10n:keep agent tool validation
-                    val text = a.str("text") ?: return Either.Left("share 需要 text")
+                    val text = a.str("text") ?: return Either.Left(ui.get("phone_intent_share_needs", "share 需要 text"))
                     Either.Right(Share(text, a.str("app")))
                 }
                 "navigate" -> {
                     val dest = a.str("destination")
                     val lat = a.double("lat")
                     val lng = a.double("lng")
-                    // l10n:keep agent tool validation
-                    if ((lat == null) != (lng == null)) return Either.Left("lat 和 lng 要一起给")
-                    // l10n:keep agent tool validation
-                    if (lat != null && (lat !in -90.0..90.0 || lng!! !in -180.0..180.0)) return Either.Left("坐标超出范围")
-                    // l10n:keep agent tool validation
-                    if (dest == null && lat == null) return Either.Left("navigate 需要 destination，或者 lat + lng")
+                    if ((lat == null) != (lng == null)) return Either.Left(
+                        ui.get("phone_intent_latlng_pair", "lat 和 lng 要一起给"))
+                    if (lat != null && (lat !in -90.0..90.0 || lng!! !in -180.0..180.0)) return Either.Left(
+                        ui.get("phone_intent_coord_range", "坐标超出范围"))
+                    if (dest == null && lat == null) return Either.Left(
+                        ui.get("phone_intent_navigate_needs", "navigate 需要 destination，或者 lat + lng"))
                     val mode = a.str("mode") ?: "drive"
-                    // l10n:keep agent tool validation
-                    if (mode !in PhoneToolCatalog.NAV_MODES) return Either.Left("mode 只能是 ${PhoneToolCatalog.NAV_MODES.joinToString(" / ")}")
+                    if (mode !in PhoneToolCatalog.NAV_MODES) return Either.Left(ui.get("phone_intent_mode",
+                        "mode 只能是 %1\$s", PhoneToolCatalog.NAV_MODES.joinToString(" / ")))
                     val map = a.str("map")
-                    // l10n:keep agent tool validation
-                    if (map != null && map != "amap" && map != "baidu") return Either.Left("map 只能是 amap 或 baidu")
+                    if (map != null && map != "amap" && map != "baidu") return Either.Left(
+                        ui.get("phone_intent_map", "map 只能是 amap 或 baidu"))
                     Either.Right(Navigate(dest, lat, lng, mode, map))
                 }
                 "settings" -> {
-                    // l10n:keep agent tool validation
-                    val page = a.str("page") ?: return Either.Left("settings 需要 page：${PhoneToolCatalog.SETTINGS_PAGES.joinToString(" / ")}")
+                    val page = a.str("page") ?: return Either.Left(ui.get("phone_intent_settings_needs",
+                        "settings 需要 page：%1\$s", PhoneToolCatalog.SETTINGS_PAGES.joinToString(" / ")))
                     if (page !in PhoneToolCatalog.SETTINGS_PAGES) {
-                        // l10n:keep agent tool validation
-                        return Either.Left("没有这个设置页。可用：${PhoneToolCatalog.SETTINGS_PAGES.joinToString(" / ")}（无障碍、开发者选项、权限等页面不提供）")
+                        return Either.Left(ui.get("phone_intent_settings_unknown",
+                            "没有这个设置页。可用：%1\$s（无障碍、开发者选项、权限等页面不提供）",
+                            PhoneToolCatalog.SETTINGS_PAGES.joinToString(" / ")))
                     }
-                    // l10n:keep agent tool validation
-                    if (page == "app_notifications" && a.str("app") == null) return Either.Left("app_notifications 需要 app（包名或应用名）")
+                    if (page == "app_notifications" && a.str("app") == null) return Either.Left(
+                        ui.get("phone_intent_app_notifications", "app_notifications 需要 app（包名或应用名）"))
                     Either.Right(Settings(page, a.str("app")))
                 }
-                // l10n:keep agent tool validation
-                else -> Either.Left("不支持的 kind「$kind」，只能是 ${PhoneToolCatalog.INTENT_KINDS.joinToString(" / ")}")
+                else -> Either.Left(ui.get("phone_intent_unknown_kind",
+                    "不支持的 kind「%1\$s」，只能是 %2\$s", kind, PhoneToolCatalog.INTENT_KINDS.joinToString(" / ")))
             }
         }
 
@@ -274,15 +275,13 @@ object UrlPolicy {
     private val SCHEME = Regex("^([A-Za-z][A-Za-z0-9+.\\-]*):")
     private val BLOCKED = setOf("intent", "file", "content", "javascript", "data", "android-app", "about", "chrome", "jar", "vnd.youtube.launch")
 
-    fun check(url: String): String? {
-        // l10n:keep agent tool validation
-        if (url.length > 4000) return "链接太长"
-        // l10n:keep agent tool validation
-        if (url.any { it.isWhitespace() || it < ' ' }) return "链接里不能有空白字符（需要的话先做 URL 编码）"
-        // l10n:keep agent tool validation
-        val scheme = SCHEME.find(url)?.groupValues?.get(1)?.lowercase() ?: return "链接要带协议，例如 https:// 或 amapuri://"
-        // l10n:keep agent tool validation
-        if (scheme in BLOCKED) return "不支持 $scheme: 链接"
+    fun check(url: String, ui: PhoneUiText = PhoneUiText.DEFAULT): String? {
+        if (url.length > 4000) return ui.get("phone_url_too_long", "链接太长")
+        if (url.any { it.isWhitespace() || it < ' ' }) return ui.get(
+            "phone_url_whitespace", "链接里不能有空白字符（需要的话先做 URL 编码）")
+        val scheme = SCHEME.find(url)?.groupValues?.get(1)?.lowercase() ?: return ui.get(
+            "phone_url_needs_scheme", "链接要带协议，例如 https:// 或 amapuri://")
+        if (scheme in BLOCKED) return ui.get("phone_url_scheme_blocked", "不支持 %1\$s: 链接", scheme)
         return null
     }
 }
