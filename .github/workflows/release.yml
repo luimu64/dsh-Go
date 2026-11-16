@@ -1,0 +1,252 @@
+# Fork releases follow upstream. When ccch1mneyyy/dsh-Go publishes vX.Y.Z this
+# opens a sync PR with that tag merged into main (conflicts fail loudly), and
+# once main contains the tag it builds the arm64 APK with this fork's English
+# work and publishes it as "DSH Go X.Y.Z English".
+#
+# Trigger: the daily schedule, a push to main (the sync PR merge), or
+# workflow_dispatch. A version that is already released here is skipped, so
+# the schedule is cheap and safe to leave on.
+name: Release
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Upstream version to release, e.g. 1.1.0 (empty: latest upstream release)'
+        required: false
+      dry_run:
+        description: 'Build and verify, but do not create the GitHub release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_REPO: ccch1mneyyy/dsh-Go
+  FLUTTER_VERSION: 3.47.7
+  NODE_VERSION: 24.22.1
+  GRADLE_VERSION: 9.3.1
+  NDK_VERSION: 28.2.13676358
+
+jobs:
+  prepare:
+    name: Resolve version and sync upstream
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      release: ${{ steps.plan.outputs.release }}
+      tag: ${{ steps.plan.outputs.tag }}
+      version: ${{ steps.plan.outputs.version }}
+      title: ${{ steps.plan.outputs.title }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+          fetch-tags: true
+      - id: plan
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/$UPSTREAM_REPO.git"
+          if [ -n "${REQUESTED:-}" ]; then
+            tag="v${REQUESTED#v}"
+          else
+            tag=$(gh api "repos/$UPSTREAM_REPO/releases/latest" --jq .tag_name)
+          fi
+          version=${tag#v}
+          name=$(gh api "repos/$UPSTREAM_REPO/releases/tags/$tag" --jq .name)
+          title="$name English"
+          {
+            echo "tag=$tag"
+            echo "version=$version"
+            echo "title=$title"
+          } >> "$GITHUB_OUTPUT"
+          echo "Upstream: $name ($tag) -> fork release title: $title"
+
+          if gh release view "$tag" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "$tag is already released here; nothing to do."
+            exit 0
+          fi
+
+          git fetch --no-tags upstream "refs/tags/$tag:refs/tags/$tag"
+          if git merge-base --is-ancestor "$tag^{commit}" HEAD; then
+            echo "main already contains $tag."
+          else
+            branch="sync/upstream-$tag"
+            if git rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+              echo "$branch already exists; waiting for its PR to be merged."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git config user.name 'dsh-go release bot'
+            git config user.email 'release-bot@users.noreply.github.com'
+            git switch -c "$branch"
+            if ! git merge --no-edit "$tag"; then
+              echo "::error::Upstream $tag conflicts with this fork's translation work:"
+              git diff --name-only --diff-filter=U | sed 's/^/  /'
+              exit 1
+            fi
+            git push origin "$branch"
+            gh pr create --base main --head "$branch" \
+              --title "Sync upstream $tag" \
+              --body "Merges upstream \`$tag\` ($name) into main. Merging this publishes the English release \`$title\`." \
+              >/dev/null
+            echo "Opened a sync PR for $tag. Merging it triggers the release build."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          built=$(sed -n 's/^version:[[:space:]]*\([^+[:space:]]*\).*/\1/p' app/pubspec.yaml | head -1)
+          if [ "$built" != "$version" ]; then
+            echo "::error::app/pubspec.yaml says '$built' but upstream released '$version'. Set version: $version in app/pubspec.yaml on main (or release a fork version with the workflow input)."
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build and publish
+    needs: prepare
+    if: needs.prepare.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      DSH_MAVEN_MIRRORS: 0
+      # Secrets cannot be read in an `if:`, so the keystore step tests these.
+      ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TITLE: ${{ needs.prepare.outputs.title }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # gradlew is not tracked; Gradle comes from the pinned version, and the
+      # wrapper it generates is what `flutter build apk` calls.
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: ${{ env.GRADLE_VERSION }}
+      - name: Android NDK for the tawcroot launcher
+        run: |
+          sdkmgr="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -d "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/ndk/$NDK_VERSION" ]; then
+            yes | "$sdkmgr" --install "ndk;$NDK_VERSION"
+          fi
+          echo "ANDROID_NDK_HOME=${ANDROID_HOME:-$ANDROID_SDK_ROOT}/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Flutter plugins and local.properties
+        working-directory: app
+        run: |
+          flutter pub get --enforce-lockfile
+          printf 'sdk.dir=%s\nflutter.sdk=%s\n' "$ANDROID_HOME" "$FLUTTER_ROOT" > android/local.properties
+      - name: Generate the Gradle wrapper
+        working-directory: app/android
+        run: gradle wrapper --gradle-version "$GRADLE_VERSION"
+      # The bundled Linux runtime is what makes the APK an APK: build it first
+      # (`tooling/build-apk.sh` refuses a release build without runtime/out).
+      - name: Restore the runtime download cache
+        id: runtime-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: runtime/.cache
+          key: runtime-cache-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('runtime/build-runtime.sh', 'runtime/lib/rtbuild.py', 'runtime/patches/pins.json') }}
+      - name: Build the arm64 runtime
+        run: runtime/build-runtime.sh arm64
+      - name: Save the runtime download cache
+        if: steps.runtime-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: runtime/.cache
+          key: ${{ steps.runtime-cache.outputs.cache-primary-key }}
+      # Optional signing key. Without it the release build falls back to the
+      # debug keystore: installable, but a debug certificate and a new one on
+      # every runner. Set all four secrets to publish under a stable key.
+      - name: Restore the release keystore
+        if: env.ANDROID_KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE: ${{ env.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          path="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE" | base64 -d > "$path"
+          cat > app/android/key.properties <<EOF
+          storeFile=$path
+          storePassword=$STORE_PASSWORD
+          keyAlias=$KEY_ALIAS
+          keyPassword=$KEY_PASSWORD
+          EOF
+          chmod 600 app/android/key.properties "$path"
+      - name: Build the English arm64 APK
+        run: |
+          tooling/build-apk.sh -f arm64 -- \
+            --dart-define=DSH_UPDATE_REPO=$GITHUB_REPOSITORY \
+            --dart-define=DSH_UPDATE_MIRROR= \
+            --dart-define=DSH_UPDATE_FEED=
+      - name: Signing check
+        run: |
+          apk=$(ls app/build/app/outputs/flutter-apk/app-arm64-release.apk)
+          apksigner verify --min-sdk-version 21 --print-certs "$apk" | sed -n '1,12p'
+          if apksigner verify --min-sdk-version 21 --print-certs "$apk" | grep -q 'CN=Android Debug'; then
+            echo "::warning::The APK is debug-signed (no ANDROID_KEYSTORE_* secrets). Installable, but users cannot update across signing keys."
+          fi
+      - name: Release assets
+        env:
+          REQUESTED_TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          gh release view "$TAG" -R "$UPSTREAM_REPO" --json body --jq .body > "$RUNNER_TEMP/notes.md"
+          printf '\n\n---\n\nEnglish fork build of upstream `%s`, by [ccch1mneyyy](https://github.com/ccch1mneyyy/dsh-Go), published here as [%s](https://github.com/%s). `update.json` and `SHA256SUMS` are for the in-app updater; the APK is the only file to install.\n' "$TAG" "$TITLE" "$GITHUB_REPOSITORY" >> "$RUNNER_TEMP/notes.md"
+          python3 tooling/release_assets.py --notes "$RUNNER_TEMP/notes.md" --delta-from 0
+          # The manifest is generated for upstream; point it at this fork's release.
+          jq --arg page "https://github.com/$GITHUB_REPOSITORY/releases/tag/$TAG" \
+             --arg title "$TITLE" '.page = $page | .title = $title' \
+             dist/update.json > dist/update.json.tmp
+          mv dist/update.json.tmp dist/update.json
+          cat dist/SHA256SUMS
+          jq '{version, tag, title, page, assets}' dist/update.json
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        run: |
+          prerelease=()
+          case "$VERSION" in *-*) prerelease=(--prerelease) ;; esac
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target main \
+            --title "$TITLE" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "${prerelease[@]}"
+          gh release view "$TAG" -R "$GITHUB_REPOSITORY" --json url,assets --jq '.url, (.assets[].name)'
+      - name: Keep the built files
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-${{ needs.prepare.outputs.version }}
+          path: dist/
+          retention-days: 7

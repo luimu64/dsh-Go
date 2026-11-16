@@ -1,6 +1,6 @@
 # 参与贡献
 
-[English](CONTRIBUTING.en.md) · [项目首页](README.md)
+[English](CONTRIBUTING.en.md) · [项目首页](README.zh.md)
 
 ## 暂不接受外部 Pull Request
 
@@ -24,7 +24,7 @@
 
 ## 准备开发环境
 
-按 [README](README.md) 完成工具链与运行时准备。普通 App 开发不需要维护者的签名密钥、内测通道令牌或生产部署凭据。
+按 [README](README.zh.md) 完成工具链与运行时准备。普通 App 开发不需要维护者的签名密钥、内测通道令牌或生产部署凭据。
 
 - Flutter/Dart：使用仓库对应的 Flutter 版本和 App 的 Dart SDK 要求。
 - Android：JDK 17，运行时 ABI 与 APK flavor 匹配。
