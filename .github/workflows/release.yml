@@ -35,7 +35,6 @@ env:
   UPSTREAM_REPO: ccch1mneyyy/dsh-Go
   FLUTTER_VERSION: 3.47.7
   NODE_VERSION: 24.22.1
-  GRADLE_VERSION: 9.3.1
   NDK_VERSION: 28.2.13676358
 
 jobs:
@@ -54,9 +53,13 @@ jobs:
           ref: main
           fetch-depth: 0
           fetch-tags: true
+          persist-credentials: false
       - id: plan
+        # A RELEASE_TOKEN (repo-scoped PAT) makes the sync PR and its push run
+        # the other workflows; events caused by GITHUB_TOKEN itself do not.
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           REQUESTED: ${{ inputs.version }}
         run: |
           set -euo pipefail
@@ -82,7 +85,7 @@ jobs:
             exit 0
           fi
 
-          git fetch --no-tags upstream "refs/tags/$tag:refs/tags/$tag"
+          git fetch --no-tags upstream "+refs/tags/$tag:refs/tags/$tag"
           if git merge-base --is-ancestor "$tag^{commit}" HEAD; then
             echo "main already contains $tag."
           else
@@ -100,7 +103,7 @@ jobs:
               git diff --name-only --diff-filter=U | sed 's/^/  /'
               exit 1
             fi
-            git push origin "$branch"
+            git push "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "$branch"
             gh pr create --base main --head "$branch" \
               --title "Sync upstream $tag" \
               --body "Merges upstream \`$tag\` ($name) into main. Merging this publishes the English release \`$title\`." \
@@ -130,7 +133,7 @@ jobs:
       TAG: ${{ needs.prepare.outputs.tag }}
       VERSION: ${{ needs.prepare.outputs.version }}
       TITLE: ${{ needs.prepare.outputs.title }}
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -148,11 +151,13 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
-      # gradlew is not tracked; Gradle comes from the pinned version, and the
-      # wrapper it generates is what `flutter build apk` calls.
-      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
-        with:
-          gradle-version: ${{ env.GRADLE_VERSION }}
+      # gradlew is not tracked: Flutter copies its own wrapper scripts in, and
+      # the tracked gradle-wrapper.properties picks the Gradle version. Point
+      # that at the canonical download; the file's mirror is slow from US runners.
+      - name: Gradle distribution URL
+        run: |
+          sed -i 's#mirrors.cloud.tencent.com/gradle/#services.gradle.org/distributions/#' app/android/gradle/wrapper/gradle-wrapper.properties
+          grep distributionUrl app/android/gradle/wrapper/gradle-wrapper.properties
       - name: Android NDK for the tawcroot launcher
         run: |
           sdkmgr="${ANDROID_HOME:-$ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
@@ -165,9 +170,6 @@ jobs:
         run: |
           flutter pub get --enforce-lockfile
           printf 'sdk.dir=%s\nflutter.sdk=%s\n' "$ANDROID_HOME" "$FLUTTER_ROOT" > android/local.properties
-      - name: Generate the Gradle wrapper
-        working-directory: app/android
-        run: gradle wrapper --gradle-version "$GRADLE_VERSION"
       # The bundled Linux runtime is what makes the APK an APK: build it first
       # (`tooling/build-apk.sh` refuses a release build without runtime/out).
       - name: Restore the runtime download cache
