@@ -1,11 +1,17 @@
 // The language her prompts, bundled words and prompt-adjacent notes are in.
 // Chinese stays the default (and the stored language of user-authored text);
 // English is selected only while the app itself is showing English.
+//
+// This file stays dependency-free: engine-side tests import their Dart sources
+// directly, without Flutter's localization package. `AppLocale.use`
+// (l10n.dart) installs the resolver once; it reads the live UI language, so
+// every getter below follows a switch without further wiring.
 
-import '../l10n/l10n.dart';
+/// `zh` or `en`; the app installs the real answer from its UI language.
+String Function() companionLanguageSource = () => 'zh';
 
 /// `zh` or `en`, from the language the app is showing.
-String get companionLanguage => AppLocale.isEnglish ? 'en' : 'zh';
+String get companionLanguage => companionLanguageSource() == 'en' ? 'en' : 'zh';
 
 /// Whether her prompts are in English right now.
 bool get companionEnglish => companionLanguage == 'en';

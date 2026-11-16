@@ -10,6 +10,7 @@
 import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/widgets.dart';
 
+import '../companion/companion_language.dart' show companionLanguageSource;
 import 'gen/app_localizations.dart';
 
 export 'gen/app_localizations.dart';
@@ -45,6 +46,9 @@ abstract final class AppLocale {
   /// Switches UI text and notifies content consumers of the same language.
   static void use(Locale locale) {
     final next = resolve(locale, null);
+    // Prompt text outside the widget tree (the companion's) reads the same
+    // language through a resolver instead of importing Flutter's l10n.
+    companionLanguageSource = () => isEnglish ? 'en' : 'zh';
     if (next == _locale) return;
     _locale = next;
     _l10n = lookupL10n(next);
