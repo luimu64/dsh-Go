@@ -14,6 +14,7 @@ import { OhosRuntimeStorage } from '../runtime/OhosRuntimeStorage';
 import { DiagnosticEvidenceError, EvidenceFields, OhosDiagnosticEvidence } from './OhosDiagnosticEvidence';
 import { OhosFaultEvents } from './OhosFaultEvents';
 import { OhosKeyboardLog } from './OhosKeyboardLog';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export default class DiagnosticsPlugin implements FlutterPlugin, AbilityAware {
   private binding: FlutterPluginBinding | null = null;
@@ -82,7 +83,7 @@ export default class DiagnosticsPlugin implements FlutterPlugin, AbilityAware {
   onAttachedToAbility(binding: AbilityPluginBinding): void { this.ability = binding; }
   onDetachedFromAbility(): void { this.ability = null; }
   private error(result: MethodResult, code: string): void {
-    try { result.error(code, code === 'busy' ? '诊断读取尚未完成。' : '无法完成设备诊断读取。', null); } catch (_) {}
+    try { result.error(code, code === 'busy' ? AppLanguage.pick('诊断读取尚未完成。', 'The diagnostics read has not finished yet.') : AppLanguage.pick('无法完成设备诊断读取。', 'The device diagnostics read could not be completed.'), null); } catch (_) {}
   }
 
   private record(binding: FlutterPluginBinding, call: MethodCall, result: MethodResult): void {

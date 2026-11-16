@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS / 未编译、未在真机核实。HMS 签名依据共享 hms-contracts.md，非 SDK 编译结果。
 import type { systemShare } from '@kit.ShareKit';
 import { ShareKit, loadShareKit } from './HmsKits';
@@ -46,7 +47,7 @@ class ShareLease {
     try {
       if (!this.valid) this.result.success(SHARE_UNAVAILABLE);
       else if (error instanceof ShareError) this.result.error(error.code, error.message, null);
-      else this.result.error('share_failed', '系统分享未完成，请重试。', null);
+      else this.result.error('share_failed', AppLanguage.pick('系统分享未完成，请重试。', 'The system share did not complete. Try again.'), null);
     } catch (_error) { /* 不重投递已尝试过的旧 transport。 */ }
   }
 }
@@ -85,7 +86,7 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
         HmsShareInbox.consumed(binding, call.argument('shareId')).then((consumed: boolean): void => {
           try { result.success(consumed); } catch (_error) { /* Retired transport does not undo consumption. */ }
         }).catch((_error: Error): void => {
-          try { result.error('share_failed', '分享缓存收尾未完成。', null); } catch (_replyError) { /* Engine retired. */ }
+          try { result.error('share_failed', AppLanguage.pick('分享缓存收尾未完成。', 'Share cache cleanup did not complete.'), null); } catch (_replyError) { /* Engine retired. */ }
         });
       }
     } });
@@ -116,9 +117,9 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
   private share(call: MethodCall, result: MethodResult): void {
     try {
       const request = parseShareRequest(call.args);
-      if (!canIUse('SystemCapability.Collaboration.SystemShare')) throw new ShareError('unsupported', '系统分享在这台设备上不可用。');
-      if (!this.engine || !this.ability) throw new ShareError('no_ability', '请回到应用窗口后再分享。');
-      if (activeShare) throw new ShareError('busy', '已有分享操作，请先关闭系统分享窗口。');
+      if (!canIUse('SystemCapability.Collaboration.SystemShare')) throw new ShareError('unsupported', AppLanguage.pick('系统分享在这台设备上不可用。', 'System share is unavailable on this device.'));
+      if (!this.engine || !this.ability) throw new ShareError('no_ability', AppLanguage.pick('请回到应用窗口后再分享。', 'Return to the app window before sharing.'));
+      if (activeShare) throw new ShareError('busy', AppLanguage.pick('已有分享操作，请先关闭系统分享窗口。', 'A share is already in progress; close the system share sheet first.'));
       const lease = new ShareLease(this, this.engine, this.ability, result, new HmsShareStorage(this.engine.getApplicationContext()));
       activeShare = lease;
       this.prepare(lease, request).catch(async (error: Error): Promise<void> => {
@@ -128,20 +129,20 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
       });
     } catch (error) {
       if (error instanceof ShareError) result.error(error.code, error.message, null);
-      else result.error('share_failed', '系统分享未完成，请重试。', null);
+      else result.error('share_failed', AppLanguage.pick('系统分享未完成，请重试。', 'The system share did not complete. Try again.'), null);
     }
   }
 
   private check(lease: ShareLease): void {
     if (!lease.valid || lease.closed || activeShare !== lease || this.engine !== lease.engine || this.ability !== lease.ability) {
-      throw new ShareError('cancelled', '分享窗口已失效。');
+      throw new ShareError('cancelled', AppLanguage.pick('分享窗口已失效。', 'The share sheet is no longer valid.'));
     }
   }
 
   private async prepare(lease: ShareLease, request: ShareRequest): Promise<void> {
     let kit: ShareKit;
     try { kit = await loadShareKit(); }
-    catch (_) { throw new ShareError('unsupported', '系统分享在这台设备上不可用。'); }
+    catch (_) { throw new ShareError('unsupported', AppLanguage.pick('系统分享在这台设备上不可用。', 'System share is unavailable on this device.')); }
     this.check(lease);
     lease.batch = await lease.storage.outgoing(request, lease.ability.getAbility().context, (): void => this.check(lease));
     this.check(lease);
@@ -162,7 +163,7 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
         title: request.title || request.subject || undefined });
     }
     // 本地预算留出 Want 开销；平台 200KB 的最终判定仍由 show 的错误返回处理。
-    if (utf8Size(JSON.stringify(records)) > SHARE_METADATA_BUDGET) throw new ShareError('too_large', '分享描述过长，请减少项目或文字。');
+    if (utf8Size(JSON.stringify(records)) > SHARE_METADATA_BUDGET) throw new ShareError('too_large', AppLanguage.pick('分享描述过长，请减少项目或文字。', 'The share description is too long; reduce the items or text.'));
     const data = kit.createData(records[0]);
     for (let i = 1; i < records.length; i++) data.addRecord(records[i]);
     const controller = kit.createController(data);
@@ -186,7 +187,7 @@ export default class HmsSharePlugin implements FlutterPlugin, AbilityAware {
     };
     if (request.origin) {
       const density = display.getDefaultDisplaySync().densityPixels;
-      if (!(density > 0) || !Number.isFinite(density)) throw new ShareError('share_failed', '无法读取分享窗口的显示比例。');
+      if (!(density > 0) || !Number.isFinite(density)) throw new ShareError('share_failed', AppLanguage.pick('无法读取分享窗口的显示比例。', 'Could not read the share sheet display scale.'));
       options.anchor = { windowOffset: { x: request.origin[0] * density, y: request.origin[1] * density },
         size: { width: request.origin[2] * density, height: request.origin[3] * density } };
     }

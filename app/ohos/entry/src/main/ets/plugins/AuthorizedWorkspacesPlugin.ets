@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // API 26 folder authorization and native FD handoff; device verification remains separate.
 import picker from '@ohos.file.picker';
 import fs from '@ohos.file.fs';
@@ -35,7 +36,7 @@ interface SavedWorkspace { id: string; uri: string; }
 
 function folderUri(value: string): string {
   const selected = nativeFileUris([value], 1)[0];
-  if (!selected.startsWith('file://docs/')) throw new WorkspaceError('invalid', '请选择文件管理中的文件夹。');
+  if (!selected.startsWith('file://docs/')) throw new WorkspaceError('invalid', AppLanguage.pick('请选择文件管理中的文件夹。', 'Choose a folder in Files.'));
   return selected;
 }
 
@@ -88,14 +89,14 @@ class WorkspaceRecords {
   static async load(context: common.Context): Promise<WorkspaceRecords> {
     const store = await preferences.getPreferences(context, { name: 'dsh-authorized-workspaces-v1' });
     const raw: Any = await store.get('records', '[]');
-    if (typeof raw !== 'string') throw new WorkspaceError('storage', '工作区记录无法读取。');
+    if (typeof raw !== 'string') throw new WorkspaceError('storage', AppLanguage.pick('工作区记录无法读取。', 'The workspace record cannot be read.'));
     const saved: Any = JSON.parse(raw as string);
-    if (!Array.isArray(saved)) throw new WorkspaceError('storage', '工作区记录无法读取。');
+    if (!Array.isArray(saved)) throw new WorkspaceError('storage', AppLanguage.pick('工作区记录无法读取。', 'The workspace record cannot be read.'));
     const ids: Set<string> = new Set(); const uris: Set<string> = new Set();
     const values: WorkspaceRecord[] = [];
     for (const item of saved as SavedWorkspace[]) {
       if (typeof item.id !== 'string' || !/^[0-9a-f-]{36}$/.test(item.id) || typeof item.uri !== 'string' ||
-          ids.has(item.id) || uris.has(item.uri)) throw new WorkspaceError('storage', '工作区记录无法读取。');
+          ids.has(item.id) || uris.has(item.uri)) throw new WorkspaceError('storage', AppLanguage.pick('工作区记录无法读取。', 'The workspace record cannot be read.'));
       values.push(new WorkspaceRecord(item.id, item.uri)); ids.add(item.id); uris.add(item.uri);
     }
     return new WorkspaceRecords(store, values);
@@ -117,7 +118,7 @@ class WorkspaceRecords {
   }
   find(id: Any): WorkspaceRecord {
     const value = this.values.find((item: WorkspaceRecord): boolean => item.id === id);
-    if (value === undefined) throw new WorkspaceError('not_found', '请先通过系统选择器授权此文件夹。');
+    if (value === undefined) throw new WorkspaceError('not_found', AppLanguage.pick('请先通过系统选择器授权此文件夹。', 'Authorize this folder through the system picker first.'));
     return value;
   }
   snapshot(): Map<string, Any> {
@@ -181,7 +182,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     this.cancel(); this.channel?.setMethodCallHandler(null); this.engine = binding; this.ability = null;
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'dsh/authorized-workspaces');
     this.channel.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (this.engine !== binding || ownerEngine !== binding) { this.fail(result, new WorkspaceError('cancelled', '工作区通道已关闭。') as Error); return; }
+      if (this.engine !== binding || ownerEngine !== binding) { this.fail(result, new WorkspaceError('cancelled', AppLanguage.pick('工作区通道已关闭。', 'The workspace channel is closed.')) as Error); return; }
       if (call.method === 'capabilities') {
         this.success(result, new Map<string, Any>([['protocol', 1], ['folderSelection', canIUse(FOLDER_SELECTION)],
           ['folderAuthorization', canIUse(FOLDER_AUTHORIZATION)],
@@ -210,7 +211,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     try {
       if (error instanceof WorkspaceError) result.error(error.code, error.message, error.details);
       else if (error instanceof NativeFileError) result.error(error.code, error.message, null);
-      else result.error('failed', '工作区操作未完成，请重试。', null);
+      else result.error('failed', AppLanguage.pick('工作区操作未完成，请重试。', 'The workspace operation did not complete. Try again.'), null);
     } catch (_) { /* Retired messenger. */ }
   }
   private cancel(): void {
@@ -222,25 +223,25 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     operation.published?.change('needsRevalidation');
     operation.published = null;
     const pending = operation.pending; operation.pending = null;
-    if (pending !== null) this.fail(pending, new WorkspaceError('cancelled', '工作区操作已取消。') as Error);
+    if (pending !== null) this.fail(pending, new WorkspaceError('cancelled', AppLanguage.pick('工作区操作已取消。', 'The workspace operation was cancelled.')) as Error);
     // physicalBusy survives detach/timeout until the OS operation really returns.
   }
   private current(operation: WorkspaceOperation): void {
-    if (!operation.active || this.operation !== operation || this.engine !== ownerEngine) throw new WorkspaceError('cancelled', '工作区操作已取消。');
+    if (!operation.active || this.operation !== operation || this.engine !== ownerEngine) throw new WorkspaceError('cancelled', AppLanguage.pick('工作区操作已取消。', 'The workspace operation was cancelled.'));
   }
   private requireForeground(ability: AbilityPluginBinding | null, operation: WorkspaceOperation): void {
     if (ability === null || !foreground.has(ability.getAbility()) ||
         (foregroundVersions.get(ability.getAbility()) ?? 0) !== operation.foregroundVersion) {
-      throw new WorkspaceError('user_gesture', '请回到应用前台，点击工作区操作。');
+      throw new WorkspaceError('user_gesture', AppLanguage.pick('请回到应用前台，点击工作区操作。', 'Return to the app foreground and tap the workspace action.'));
     }
   }
   private start(call: MethodCall, result: MethodResult): void {
     const engine = this.engine; const ability = this.ability;
     if (engine === null || (call.method !== 'list' && (ability === null ||
         !foreground.has(ability.getAbility()) || call.argument('userGesture') !== true))) {
-      this.fail(result, new WorkspaceError('user_gesture', '请回到应用前台，点击工作区操作。') as Error); return;
+      this.fail(result, new WorkspaceError('user_gesture', AppLanguage.pick('请回到应用前台，点击工作区操作。', 'Return to the app foreground and tap the workspace action.')) as Error); return;
     }
-    if (physicalBusy) { this.fail(result, new WorkspaceError('busy', '上一项系统目录操作尚未结束，请稍后重试。') as Error); return; }
+    if (physicalBusy) { this.fail(result, new WorkspaceError('busy', AppLanguage.pick('上一项系统目录操作尚未结束，请稍后重试。', 'A previous system directory operation has not finished. Try again later.')) as Error); return; }
     const operation = new WorkspaceOperation(result, ability === null ? 0 : foregroundVersions.get(ability.getAbility()) ?? 0);
     this.operation = operation; physicalBusy = true;
     operation.timer = setTimeout((): void => this.cancel(), 5 * 60 * 1000);
@@ -270,7 +271,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     }
     this.requireForeground(ability, operation);
     if (call.method === 'select') {
-      if (!canIUse(FOLDER_SELECTION)) throw new WorkspaceError('unsupported', '此设备没有系统文件夹选择能力。');
+      if (!canIUse(FOLDER_SELECTION)) throw new WorkspaceError('unsupported', AppLanguage.pick('此设备没有系统文件夹选择能力。', 'This device has no system folder picker.'));
       const options = new picker.DocumentSelectOptions();
       options.selectMode = picker.DocumentSelectMode.FOLDER; options.allowsMulFolderSelection = true;
       const selected = await new picker.DocumentViewPicker(ability!.getAbility().context).select(options);
@@ -287,22 +288,22 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     }
     const id: Any = call.argument('id'); const entry = state.find(id);
     if (call.method === 'attach') {
-      if (!['selected', 'activated'].includes(entry.authorization)) throw new WorkspaceError('reauthorize', '请重新选择或激活工作区。');
-      if (entry.pendingFile !== null || entry.nativeState === 'quarantined') throw new WorkspaceError('native_quarantined', '上次目录句柄清理未确认，请重启后重新选择。');
+      if (!['selected', 'activated'].includes(entry.authorization)) throw new WorkspaceError('reauthorize', AppLanguage.pick('请重新选择或激活工作区。', 'Select or activate the workspace again.'));
+      if (entry.pendingFile !== null || entry.nativeState === 'quarantined') throw new WorkspaceError('native_quarantined', AppLanguage.pick('上次目录句柄清理未确认，请重启后重新选择。', 'The last directory handle cleanup was not confirmed; restart and select again.'));
       const generation = entry.generation;
       const host = await loadNativeHost(); this.current(operation); this.requireForeground(ability, operation);
-      if (entry.generation !== generation) throw new WorkspaceError('reauthorize', '授权代际已失效，请重新选择。');
+      if (entry.generation !== generation) throw new WorkspaceError('reauthorize', AppLanguage.pick('授权代际已失效，请重新选择。', 'The authorization generation is no longer valid; select again.'));
       if (entry.nativeGeneration > 0) {
         const previous = host.workspaceGrant('status', entry.nativeKey(), entry.nativeGeneration);
         if (previous.active && previous.generation === generation) return state.snapshot();
-        if (!previous.drained) throw new WorkspaceError('native_draining', '旧工作区任务尚未释放，请等待其结束。');
+        if (!previous.drained) throw new WorkspaceError('native_draining', AppLanguage.pick('旧工作区任务尚未释放，请等待其结束。', 'An old workspace task has not been released; wait for it to finish.'));
       }
       try {
         entry.pendingFile = await fs.open(entry.uri, fs.OpenMode.READ_ONLY | fs.OpenMode.NONBLOCK);
         const stat = await fs.stat(entry.pendingFile.fd);
         this.current(operation); this.requireForeground(ability, operation);
-        if (entry.generation !== generation) throw new WorkspaceError('reauthorize', '授权代际已失效，请重新选择。');
-        if (!stat.isDirectory()) throw new WorkspaceError('not_directory', '所选资源没有可用的目录句柄。');
+        if (entry.generation !== generation) throw new WorkspaceError('reauthorize', AppLanguage.pick('授权代际已失效，请重新选择。', 'The authorization generation is no longer valid; select again.'));
+        if (!stat.isDirectory()) throw new WorkspaceError('not_directory', AppLanguage.pick('所选资源没有可用的目录句柄。', 'The selected resource has no usable directory handle.'));
         // Picker temporary or explicitly activated READ|WRITE grant. Actual
         // operations still undergo OS checks; opening a directory is not proof of writable children.
         host.workspaceGrant('publish', entry.nativeKey(), generation, entry.pendingFile.fd, true);
@@ -311,14 +312,14 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
       finally {
         if (entry.pendingFile !== null) {
           try { await fs.close(entry.pendingFile); entry.pendingFile = null; }
-          catch (_) { entry.retireNative(); entry.nativeState = 'quarantined'; throw new WorkspaceError('native_close_failed', '目录句柄关闭未确认，工作区保持不可用。'); }
+          catch (_) { entry.retireNative(); entry.nativeState = 'quarantined'; throw new WorkspaceError('native_close_failed', AppLanguage.pick('目录句柄关闭未确认，工作区保持不可用。', 'Closing the directory handle was not confirmed; the workspace stays unavailable.')); }
         }
       }
       this.current(operation); return state.snapshot();
     }
     if (call.method === 'forget') {
       entry.change('needsReauthorization');
-      if (entry.pendingFile !== null || entry.nativeState === 'draining' || entry.nativeState === 'quarantined') throw new WorkspaceError('native_draining', '工作区资源尚未释放，暂不能移除记录。');
+      if (entry.pendingFile !== null || entry.nativeState === 'draining' || entry.nativeState === 'quarantined') throw new WorkspaceError('native_draining', AppLanguage.pick('工作区资源尚未释放，暂不能移除记录。', 'Workspace resources have not been released; the record cannot be removed yet.'));
       // This is deliberately not a claim that an OS grant was revoked.
       await state.save(state.values.filter((value: WorkspaceRecord): boolean => value !== entry));
       this.current(operation);
@@ -326,16 +327,16 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
     }
     if (call.method === 'deactivate' || call.method === 'revoke') {
       entry.change('needsRevalidation');
-      if (entry.nativeState === 'quarantined') throw new WorkspaceError('native_quarantined', '原生工作区退休未确认，不能报告撤销完成。');
+      if (entry.nativeState === 'quarantined') throw new WorkspaceError('native_quarantined', AppLanguage.pick('原生工作区退休未确认，不能报告撤销完成。', 'Native workspace retirement is not confirmed; revocation cannot be reported as complete.'));
     }
     if (!canIUse(FOLDER_AUTHORIZATION) || persistencePermission(context) !== 'granted') {
-      throw new WorkspaceError('persistence_unavailable', '此安装没有可用的持久授权能力；请重新选择文件夹使用临时授权。');
+      throw new WorkspaceError('persistence_unavailable', AppLanguage.pick('此安装没有可用的持久授权能力；请重新选择文件夹使用临时授权。', 'This installation has no persistent authorization capability; select the folder again to use a temporary authorization.'));
     }
     const policy = [entry.policy()];
     try {
       if (call.method === 'persist') {
         if (!['selected', 'activated'].includes(entry.authorization)) {
-          throw new WorkspaceError('reauthorize', '请重新选择文件夹后再保存授权。');
+          throw new WorkspaceError('reauthorize', AppLanguage.pick('请重新选择文件夹后再保存授权。', 'Select the folder again before saving the authorization.'));
         }
         await fileShare.persistPermission(policy); entry.change(entry.authorization, 'persisted');
       } else {
@@ -344,7 +345,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
         if (persisted.length !== 1 || persisted[0] !== true) {
           entry.change('needsReauthorization', 'absent');
           if (call.method === 'revoke') return state.snapshot();
-          throw new WorkspaceError('reauthorize', '没有可恢复的持久授权，请重新选择此文件夹。');
+          throw new WorkspaceError('reauthorize', AppLanguage.pick('没有可恢复的持久授权，请重新选择此文件夹。', 'There is no restorable persistent authorization; select this folder again.'));
         }
         entry.persistence = 'persisted';
         if (call.method === 'activate') {
@@ -366,7 +367,7 @@ export default class AuthorizedWorkspacesPlugin implements FlutterPlugin, Abilit
         if (policyFailure !== undefined) details.set('policyCode', policyFailure.code);
       }
       entry.change('needsRevalidation');
-      throw new WorkspaceError('system_authorization_failed', '系统未完成目录授权操作，请重新选择此文件夹。', details);
+      throw new WorkspaceError('system_authorization_failed', AppLanguage.pick('系统未完成目录授权操作，请重新选择此文件夹。', 'The system did not complete the directory authorization; select this folder again.'), details);
     }
     this.current(operation); return state.snapshot();
   }

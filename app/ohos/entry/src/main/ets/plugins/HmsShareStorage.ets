@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS / 未在真机核实。文件操作仅使用公开 OH API；Linux 测试使用真实文件与原生 opener。
 import fs from '@ohos.file.fs';
 import common from '@ohos.app.ability.common';
@@ -29,7 +30,7 @@ export class HmsShareStorage {
     try { await fs.mkdir(path); }
     catch (error) { if ((error as BusinessError).code !== 13900015) throw error as Error; }
     const stat = await fs.lstat(path);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new ShareError('failed', '分享暂存目录不可用。');
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new ShareError('failed', AppLanguage.pick('分享暂存目录不可用。', 'The share staging directory is unavailable.'));
   }
 
   async create(outgoing: boolean): Promise<ShareBatch> {
@@ -89,16 +90,16 @@ export class HmsShareStorage {
         return host.openUserFile(root, path.substring(root.length + 1));
       }
     }
-    throw new ShareError('outside_workspace', '请先把文件保存到本机工作区或应用缓存后分享。');
+    throw new ShareError('outside_workspace', AppLanguage.pick('请先把文件保存到本机工作区或应用缓存后分享。', 'Save the file to the on-device workspace or app cache before sharing.'));
   }
 
   async copy(input: number, batch: ShareBatch, name: string, limit: number, active: () => void): Promise<number> {
     active();
     const before = await fs.stat(input);
     if (!before.isFile() || !Number.isSafeInteger(before.size) || before.size < 0) {
-      throw new ShareError('unreadable', '这个项目不是可读取的普通文件。');
+      throw new ShareError('unreadable', AppLanguage.pick('这个项目不是可读取的普通文件。', 'This item is not a readable regular file.'));
     }
-    if (before.size > limit) throw new ShareError('too_large', '文件超过本次分享的大小限制。');
+    if (before.size > limit) throw new ShareError('too_large', AppLanguage.pick('文件超过本次分享的大小限制。', 'The file exceeds the size limit for this share.'));
     const target = batch.directory + '/' + batch.paths.length.toString() + '-' + safeShareName(name);
     batch.paths.push(target);
     let complete = false;
@@ -112,19 +113,19 @@ export class HmsShareStorage {
           active();
           const count = await fs.read(input, buffer, { offset: offset, length: Math.min(buffer.byteLength, before.size - offset) });
           if (!Number.isInteger(count) || count < 1 || count > Math.min(buffer.byteLength, before.size - offset)) {
-            throw new ShareError('unreadable', '文件在读取期间发生变化。');
+            throw new ShareError('unreadable', AppLanguage.pick('文件在读取期间发生变化。', 'The file changed while it was being read.'));
           }
           let written = 0;
           while (written < count) {
             active();
             const n = await fs.write(output.fd, buffer.slice(written, count), { offset: offset + written });
-            if (!Number.isInteger(n) || n < 1 || n > count - written) throw new ShareError('failed', '分享文件写入未完成。');
+            if (!Number.isInteger(n) || n < 1 || n > count - written) throw new ShareError('failed', AppLanguage.pick('分享文件写入未完成。', 'Writing the shared file did not complete.'));
             written += n;
           }
           offset += count;
         }
         active();
-        if ((await fs.stat(input)).size !== before.size) throw new ShareError('unreadable', '文件在读取期间发生变化。');
+        if ((await fs.stat(input)).size !== before.size) throw new ShareError('unreadable', AppLanguage.pick('文件在读取期间发生变化。', 'The file changed while it was being read.'));
         await fs.fsync(output.fd);
         active();
         complete = true;

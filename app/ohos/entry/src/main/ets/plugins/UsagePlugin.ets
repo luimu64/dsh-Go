@@ -2,6 +2,7 @@
 import bundleManager from '@ohos.bundle.bundleManager';
 import deviceInfo from '@ohos.deviceInfo';
 import { Any, FlutterPlugin, FlutterPluginBinding, MethodCall, MethodChannel, MethodResult } from '@ohos/flutter_ohos';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export default class UsagePlugin implements FlutterPlugin {
   private binding: FlutterPluginBinding | null = null;
@@ -32,7 +33,7 @@ export default class UsagePlugin implements FlutterPlugin {
   }
 
   private fail(result: MethodResult, code: string): void {
-    try { result.error(code, '设备信息暂时不可用。', null); } catch (_) {}
+    try { result.error(code, AppLanguage.pick('设备信息暂时不可用。', 'Device information is temporarily unavailable.'), null); } catch (_) {}
   }
 
   private async device(): Promise<Map<string, Any>> {

@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // 16 kHz、单声道、PCM16LE；不依赖文件、原生音频对象或 HMS。
 import { VoiceFailure } from './VoiceTypes';
 
@@ -9,7 +10,7 @@ export class VoicePcm {
 
   constructor(maxSeconds: number) {
     if (!Number.isInteger(maxSeconds) || maxSeconds < 1 || maxSeconds > 600) {
-      throw new VoiceFailure('arguments', '录音时长必须在 1 到 600 秒之间。', 100);
+      throw new VoiceFailure('arguments', AppLanguage.pick('录音时长必须在 1 到 600 秒之间。', 'The recording duration must be between 1 and 600 seconds.'), 100);
     }
     this.bytes = new Uint8Array(maxSeconds * 16000 * 2);
   }
@@ -19,7 +20,7 @@ export class VoicePcm {
 
   append(buffer: ArrayBuffer): void {
     if (this.discarded || this.full) return;
-    if (buffer.byteLength % 2 !== 0) throw new VoiceFailure('audio', '录音数据格式不完整。', 100);
+    if (buffer.byteLength % 2 !== 0) throw new VoiceFailure('audio', AppLanguage.pick('录音数据格式不完整。', 'The recording data format is incomplete.'), 100);
     const size = Math.min(buffer.byteLength, this.bytes.length - this.used);
     // AudioCapturer may reuse its buffer immediately after readData returns.
     this.bytes.set(new Uint8Array(buffer, 0, size), this.used); this.used += size;

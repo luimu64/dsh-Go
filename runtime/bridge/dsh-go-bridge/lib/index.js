@@ -4,6 +4,7 @@
 //                               slot occupancy report and `routeGuard`, measured on every
 //                               read (see probeGuard)
 //   POST /dsh-go/v1/occupancy   the browser half reports the live slot composition of its page
+//   POST /dsh-go/v1/app-language  rewrite this engine process's model-facing text language
 //   GET  /dsh-go/v1/capabilities protocol major and implemented route families (not permissions)
 //
 //   /dsh-go/v1/{contributions,views,invoke,assets} + WS /dsh-go/v1/stream
@@ -26,6 +27,7 @@ import { createPluginConfig, pluginConfigUnavailable } from "./plugin-config.js"
 import { injectPromiseWithResolvers } from "./web-promise.js";
 import { createSessionDeletion, sessionDeletionUnavailable } from "./session-deletion.js";
 import { createSpeechRoutes } from "./speech.js";
+import { createAppLanguageRoute } from "./app-language.js";
 import { createCompanionRoutes } from "./companion/routes.js";
 import { createCompanionPromptContext, FULL_PRESET } from './companion/prompt-context.js';
 import { createCompanionStore } from "./companion/store.js";
@@ -46,7 +48,7 @@ const VERSION = JSON.parse(readFileSync(new URL("../package.json", import.meta.u
 const CAPABILITIES = [
   "inventory", "occupancy", "native-ui", "native-stream", "native-media", "native-files",
   "plugin-config", "session-deletion", "companion", "companion-prompt-context", "companion-recall", "companion-signals",
-  "speech",
+  "speech", "app-language",
 ];
 const ORIGINAL = Symbol.for("cordis.original");
 const GUARDED = Symbol.for("dsh-go.guarded");
@@ -399,6 +401,7 @@ export function apply(ctx, config) {
     const sessionDeletion = createSessionDeletion(webCtx, { readBody, send });
     const speechRoutes = createSpeechRoutes(webCtx, { send, fetch: options.speech?.fetch, apiKeyEnv: options.speech?.apiKeyEnv });
     webCtx.effect(() => () => speechRoutes.dispose(), "dsh-go-bridge: speech routes");
+    const appLanguageRoutes = createAppLanguageRoute({ readBody, send });
     const companionRoutes = createCompanionRoutes({ send, store: companionStore, recall: companionRecall, signals: companionSignals, ctx: webCtx, promptContext: companionPrompt });
     webCtx.effect(() => () => nativeRoutes.dispose(), "dsh-go-bridge: native routes");
     webCtx.effect(() => webCtx.webServer.registerUpgrade({
@@ -421,6 +424,7 @@ export function apply(ctx, config) {
       if (await sessionDeletion.handle(req, res, path)) return;
       if (await pluginConfig.handle(req, res, path)) return;
       if (await speechRoutes.handle(req, res, path)) return;
+      if (await appLanguageRoutes.handle(req, res, path)) return;
       if (await companionRoutes.handle(req, res, path)) return;
       if (path.startsWith(`${PREFIX}/v1/`) && await nativeRoutes.handle(req, res, path, url)) return;
       if (path === `${PREFIX}/v1/capabilities`) {

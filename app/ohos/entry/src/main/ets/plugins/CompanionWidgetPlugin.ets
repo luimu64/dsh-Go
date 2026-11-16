@@ -4,6 +4,7 @@ import { FlutterPlugin, FlutterPluginBinding, MethodCall, MethodCallHandler, Met
 import { WidgetValue, WidgetValues, widgetPatch } from '../companion/CompanionWidgetData';
 import { CompanionWidgetStore } from '../companion/CompanionWidgetStore';
 import { publishCompanionWidgets } from '../companion/CompanionWidgetForms';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export default class CompanionWidgetPlugin implements FlutterPlugin, MethodCallHandler {
   private channel?: MethodChannel;
@@ -23,7 +24,7 @@ export default class CompanionWidgetPlugin implements FlutterPlugin, MethodCallH
     this.channel = undefined;
     this.context = undefined;
     this.pending.forEach((result: MethodResult): void => {
-      try { result.error('ohos_widget_detached', '卡片数据通道已关闭。', null); } catch (_error) { /* Engine gone. */ }
+      try { result.error('ohos_widget_detached', AppLanguage.pick('卡片数据通道已关闭。', 'The widget data channel is closed.'), null); } catch (_error) { /* Engine gone. */ }
     });
     this.pending.clear();
   }
@@ -32,16 +33,16 @@ export default class CompanionWidgetPlugin implements FlutterPlugin, MethodCallH
     if (call.method !== 'update') { result.notImplemented(); return; }
     let patch: Map<string, WidgetValue> | undefined;
     try { patch = widgetPatch(call.args); }
-    catch (_error) { result.error('ohos_widget_invalid', '伙伴卡片数据无效。', null); return; }
+    catch (_error) { result.error('ohos_widget_invalid', AppLanguage.pick('伙伴卡片数据无效。', 'The companion widget data is invalid.'), null); return; }
     if (patch === undefined) { result.success(null); return; }
     const context: common.ApplicationContext | undefined = this.context;
-    if (!context) { result.error('ohos_widget_detached', '卡片数据通道已关闭。', null); return; }
+    if (!context) { result.error('ohos_widget_detached', AppLanguage.pick('卡片数据通道已关闭。', 'The widget data channel is closed.'), null); return; }
     this.pending.add(result);
     CompanionWidgetStore.at(context.filesDir).transact(patch, (values: WidgetValues): Promise<void> =>
       publishCompanionWidgets(context.applicationInfo.name, values)).then((): void => {
       if (this.pending.delete(result)) result.success(null);
     }, (): void => {
-      if (this.pending.delete(result)) result.error('ohos_widget_update', '伙伴卡片数据保存或刷新失败。', null);
+      if (this.pending.delete(result)) result.error('ohos_widget_update', AppLanguage.pick('伙伴卡片数据保存或刷新失败。', 'Saving or refreshing the companion widget data failed.'), null);
     });
   }
 }

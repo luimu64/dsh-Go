@@ -3,10 +3,14 @@ import common from '@ohos.app.ability.common';
 import window from '@ohos.window';
 import { ComponentContent } from '@ohos.arkui.node';
 import { PromptAction } from '@ohos.arkui.UIContext';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 class PasteActions {
   readonly click: (granted: boolean) => void;
   readonly cancel: () => void;
+  readonly promptText: string = AppLanguage.pick('请点击系统粘贴按钮，允许本次读取剪贴板。',
+    'Tap the system Paste button to allow this clipboard read.');
+  readonly cancelText: string = AppLanguage.pick('取消', 'Cancel');
   constructor(click: (granted: boolean) => void, cancel: () => void) {
     this.click = click;
     this.cancel = cancel;
@@ -16,13 +20,13 @@ class PasteActions {
 @Builder
 function pasteContent(actions: PasteActions) {
   Column({ space: 16 }) {
-    Text($r('app.string.dsh_paste_prompt'))
+    Text(actions.promptText)
     // Genuine system security component: no synthetic clicks, opacity or overlay.
     PasteButton()
       .onClick((_event: ClickEvent, result: PasteButtonOnClickResult): void => {
         actions.click(result === PasteButtonOnClickResult.SUCCESS);
       })
-    Button($r('app.string.dsh_paste_cancel')).onClick((): void => actions.cancel())
+    Button(actions.cancelText).onClick((): void => actions.cancel())
   }.padding(24)
 }
 
@@ -65,9 +69,9 @@ export class PastePrompt {
     });
   }
   // Whether it went up. The result also carries a stable status. Never include clipboard text.
-  feedback(resource: Resource): boolean {
+  feedback(message: ResourceStr): boolean {
     if (this.prompt === null) return false;
-    this.prompt.showToast({ message: resource });
+    this.prompt.showToast({ message: message });
     return true;
   }
   close(): Promise<void> {

@@ -1,6 +1,7 @@
 import {
   Any, FlutterPlugin, FlutterPluginBinding, MethodCall, MethodChannel, MethodResult
 } from '@ohos/flutter_ohos';
+import { AppLanguage } from '../i18n/AppLanguage';
 import { SecretStorageError, SecretVault } from './SecretVault';
 
 // Public HUKS API 26, not an HMS or preferences-backed secret store.
@@ -18,7 +19,7 @@ export default class SecretsPlugin implements FlutterPlugin {
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'dsh/secrets');
     this.channel.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
       const current = (): void => {
-        if (this.engine !== binding) throw new SecretStorageError('cancelled', '窗口已关闭，凭据操作已取消。');
+        if (this.engine !== binding) throw new SecretStorageError('cancelled', AppLanguage.pick('窗口已关闭，凭据操作已取消。', 'The window is closed; the credential operation was cancelled.'));
       };
       if (!['read', 'write', 'delete', 'readAll', 'recover'].includes(call.method)) { result.notImplemented(); return; }
       const work: Promise<Any> = this.invoke(call, current);
@@ -40,32 +41,32 @@ export default class SecretsPlugin implements FlutterPlugin {
   private error(result: MethodResult, error: Error): void {
     try {
       if (error instanceof SecretStorageError) result.error(error.code, error.message, null);
-      else result.error('secrets_unavailable', '本机加密凭据暂不可用，请重试。', null);
+      else result.error('secrets_unavailable', AppLanguage.pick('本机加密凭据暂不可用，请重试。', 'The on-device encrypted credential is temporarily unavailable. Try again.'), null);
     } catch (_) { /* A transport failure is not a second logical reply. */ }
   }
 
   private async invoke(call: MethodCall, current: () => void): Promise<Any> {
     current();
     const vault = this.vault;
-    if (!vault) throw new SecretStorageError('secrets_unavailable', '本机加密凭据暂不可用，请重试。');
+    if (!vault) throw new SecretStorageError('secrets_unavailable', AppLanguage.pick('本机加密凭据暂不可用，请重试。', 'The on-device encrypted credential is temporarily unavailable. Try again.'));
     if (call.method === 'recover') {
       if (call.argument('confirmed') !== true) {
-        throw new SecretStorageError('secrets_invalid', '清除已保存的密钥需要明确确认。');
+        throw new SecretStorageError('secrets_invalid', AppLanguage.pick('清除已保存的密钥需要明确确认。', 'Clearing the saved key requires explicit confirmation.'));
       }
       await vault.recover(current);
       return null;
     }
     if (call.method === 'readAll') return vault.readAll(current);
     const key: Any = call.argument('key');
-    if (typeof key !== 'string') throw new SecretStorageError('secrets_invalid', '凭据参数无效。');
+    if (typeof key !== 'string') throw new SecretStorageError('secrets_invalid', AppLanguage.pick('凭据参数无效。', 'The credential arguments are invalid.'));
     if (call.method === 'read') return vault.read(key as string, current);
     if (call.method === 'delete') { await vault.delete(key as string, current); return null; }
     if (call.method === 'write') {
       const value: Any = call.argument('value');
-      if (typeof value !== 'string') throw new SecretStorageError('secrets_invalid', '凭据参数无效。');
+      if (typeof value !== 'string') throw new SecretStorageError('secrets_invalid', AppLanguage.pick('凭据参数无效。', 'The credential arguments are invalid.'));
       await vault.write(key as string, value as string, current);
       return null;
     }
-    throw new SecretStorageError('secrets_invalid', '凭据方法无效。');
+    throw new SecretStorageError('secrets_invalid', AppLanguage.pick('凭据方法无效。', 'The credential method is invalid.'));
   }
 }

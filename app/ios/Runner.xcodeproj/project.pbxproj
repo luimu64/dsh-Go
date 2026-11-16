@@ -21,6 +21,7 @@
 		D55000000000000000000409 /* IOSPhoneClipboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000408 /* IOSPhoneClipboardTests.swift */; };
 		D55000000000000000000407 /* IOSPhoneOperationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000406 /* IOSPhoneOperationTests.swift */; };
 		D55000000000000000000611 /* IOSPhoneApprovalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000610 /* IOSPhoneApprovalTests.swift */; };
+		D55000000000000000000911 /* AppLanguageTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000910 /* AppLanguageTests.swift */; };
 		D55000000000000000000405 /* IOSPhoneScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000404 /* IOSPhoneScreenTests.swift */; };
 		D55000000000000000000621 /* IOSPhoneDDIBackgroundTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000620 /* IOSPhoneDDIBackgroundTests.swift */; };
 		D55000000000000000000331 /* PhoneRunnerObservation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000330 /* PhoneRunnerObservation.swift */; };
@@ -37,6 +38,8 @@
 		D55000000000000000000305 /* IOSPhoneCoreDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000304 /* IOSPhoneCoreDevice.swift */; };
 		D55000000000000000000307 /* IOSPhoneLink.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000306 /* IOSPhoneLink.swift */; };
 		D55000000000000000000309 /* IOSPetOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000308 /* IOSPetOverlay.swift */; };
+		D55000000000000000000902 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000901 /* AppLanguage.swift */; };
+		D55000000000000000000903 /* AppLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = D55000000000000000000901 /* AppLanguage.swift */; };
 		D5500000000000000000030B /* PetOverlayState.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5500000000000000000030A /* PetOverlayState.swift */; };
 		D5500000000000000000030D /* PetOverlayPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5500000000000000000030C /* PetOverlayPack.swift */; };
 		D5500000000000000000030F /* PetOverlayFrameRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = D5500000000000000000030E /* PetOverlayFrameRenderer.swift */; };
@@ -185,6 +188,7 @@
 		D55000000000000000000408 /* IOSPhoneClipboardTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhoneClipboardTests.swift; sourceTree = "<group>"; };
 		D55000000000000000000406 /* IOSPhoneOperationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhoneOperationTests.swift; sourceTree = "<group>"; };
 		D55000000000000000000610 /* IOSPhoneApprovalTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhoneApprovalTests.swift; sourceTree = "<group>"; };
+		D55000000000000000000910 /* AppLanguageTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguageTests.swift; sourceTree = "<group>"; };
 		D55000000000000000000404 /* IOSPhoneScreenTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhoneScreenTests.swift; sourceTree = "<group>"; };
 		D55000000000000000000620 /* IOSPhoneDDIBackgroundTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSPhoneDDIBackgroundTests.swift; sourceTree = "<group>"; };
 		D55000000000000000000330 /* PhoneRunnerObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneRunnerObservation.swift; sourceTree = "<group>"; };
@@ -201,6 +205,7 @@
 		D55000000000000000000304 /* IOSPhoneCoreDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSPhoneCoreDevice.swift"; sourceTree = "<group>"; };
 		D55000000000000000000306 /* IOSPhoneLink.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSPhoneLink.swift"; sourceTree = "<group>"; };
 		D55000000000000000000308 /* IOSPetOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetOverlay/IOSPetOverlay.swift"; sourceTree = "<group>"; };
+		D55000000000000000000901 /* AppLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppLanguage.swift; sourceTree = "<group>"; };
 		D5500000000000000000030A /* PetOverlayState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetOverlay/PetOverlayState.swift"; sourceTree = "<group>"; };
 		D5500000000000000000030C /* PetOverlayPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetOverlay/PetOverlayPack.swift"; sourceTree = "<group>"; };
 		D5500000000000000000030E /* PetOverlayFrameRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PetOverlay/PetOverlayFrameRenderer.swift"; sourceTree = "<group>"; };
@@ -368,6 +373,7 @@
 				D55000000000000000000408 /* IOSPhoneClipboardTests.swift */,
 				D55000000000000000000406 /* IOSPhoneOperationTests.swift */,
 				D55000000000000000000610 /* IOSPhoneApprovalTests.swift */,
+				D55000000000000000000910 /* AppLanguageTests.swift */,
 				D55000000000000000000404 /* IOSPhoneScreenTests.swift */,
 				D55000000000000000000620 /* IOSPhoneDDIBackgroundTests.swift */,
 				D55000000000000000000400 /* IOSPhonePairingStoreTests.swift */,
@@ -422,6 +428,7 @@
 				D55000000000000000000304 /* IOSPhoneCoreDevice.swift */,
 				D55000000000000000000306 /* IOSPhoneLink.swift */,
 				D55000000000000000000308 /* IOSPetOverlay.swift */,
+				D55000000000000000000901 /* AppLanguage.swift */,
 				D5500000000000000000030A /* PetOverlayState.swift */,
 				D5500000000000000000030C /* PetOverlayPack.swift */,
 				D5500000000000000000030E /* PetOverlayFrameRenderer.swift */,
@@ -774,6 +781,7 @@
 				D55000000000000000000409 /* IOSPhoneClipboardTests.swift in Sources */,
 				D55000000000000000000407 /* IOSPhoneOperationTests.swift in Sources */,
 				D55000000000000000000611 /* IOSPhoneApprovalTests.swift in Sources */,
+				D55000000000000000000911 /* AppLanguageTests.swift in Sources */,
 				D55000000000000000000405 /* IOSPhoneScreenTests.swift in Sources */,
 				D55000000000000000000621 /* IOSPhoneDDIBackgroundTests.swift in Sources */,
 				D55000000000000000000401 /* IOSPhonePairingStoreTests.swift in Sources */,
@@ -783,6 +791,7 @@
 				D5480000000000000000C0A1 /* IOSPhoneActions.swift in Sources */,
 				D5480000000000000000C0A2 /* IOSBrowser.swift in Sources */,
 				D5480000000000000000C0A3 /* IOSSystemTools.swift in Sources */,
+				D55000000000000000000903 /* AppLanguage.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -797,6 +806,7 @@
 				D55000000000000000000305 /* IOSPhoneCoreDevice.swift in Sources */,
 				D55000000000000000000307 /* IOSPhoneLink.swift in Sources */,
 				D55000000000000000000309 /* IOSPetOverlay.swift in Sources */,
+				D55000000000000000000902 /* AppLanguage.swift in Sources */,
 				D5500000000000000000030B /* PetOverlayState.swift in Sources */,
 				D5500000000000000000030D /* PetOverlayPack.swift in Sources */,
 				D5500000000000000000030F /* PetOverlayFrameRenderer.swift in Sources */,

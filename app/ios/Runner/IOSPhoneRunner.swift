@@ -8,10 +8,16 @@ import UserNotifications
 @MainActor
 final class IOSPhoneRunner {
   private static let group = "group.io.github.ccch1mneyyy.dshgo"
-  private static let missing =
-    "手机操控没有运行，所以这一步没有执行。请告诉用户：先在 Mac 上运行 tooling/ios/phone-runner.sh，让手机操控的测试进程跑起来，再重试。不要自动反复重试。"
-  static let coreStopUnconfirmed =
-    "ERR_PHONE_STOP_UNCONFIRMED：开发者连接的清理尚未确认，不能继续操控或切换到 XCTest。请告诉用户：彻底关闭 DSH Go 后重新打开，再由用户发起；不要自动重试。"
+  private static var missing: String {
+    AppLanguage.words(
+      "Phone control is not running, so this step was not executed. Tell the user: first run tooling/ios/phone-runner.sh on the Mac so the phone control test process is running, then try again. Do not retry automatically over and over.",
+      "手机操控没有运行，所以这一步没有执行。请告诉用户：先在 Mac 上运行 tooling/ios/phone-runner.sh，让手机操控的测试进程跑起来，再重试。不要自动反复重试。")
+  }
+  static var coreStopUnconfirmed: String {
+    AppLanguage.words(
+      "ERR_PHONE_STOP_UNCONFIRMED: cleanup of the developer connection is not confirmed, so control cannot continue or switch to XCTest. Tell the user: quit DSH Go completely, open it again, and start from there; do not retry automatically.",
+      "ERR_PHONE_STOP_UNCONFIRMED：开发者连接的清理尚未确认，不能继续操控或切换到 XCTest。请告诉用户：彻底关闭 DSH Go 后重新打开，再由用户发起；不要自动重试。")
+  }
 
   private typealias Endpoint = PhoneRunnerEndpoint
 
@@ -145,7 +151,7 @@ final class IOSPhoneRunner {
     if request.action.kind == "runner-handoff" {
       let result = await handOver(request)
       guard !result.isError, current(), !Task.isCancelled, await authorize(), current() else {
-        return .failure("接手调用已结束或未确认，没有执行自动动作。")
+        return .failure(AppLanguage.words("The handover call ended or was not confirmed; no automatic action was performed.", "接手调用已结束或未确认，没有执行自动动作。"))
       }
       return result
     }
@@ -161,41 +167,45 @@ final class IOSPhoneRunner {
       && request.expiresAt > Date().timeIntervalSince1970 * 1000 }
     guard live() else { return .failure(IOSPhoneSelfRunnerError.cancelled.message) }
     guard !link.isPreparing else {
-      return .failure("连接设置正在处理另一项准备，请等待完成后重新发起；不是增强开关未开启。")
+      return .failure(AppLanguage.words("Connection settings are busy with another preparation; wait for it to finish and start again. This is not the enhancement switch being off.", "连接设置正在处理另一项准备，请等待完成后重新发起；不是增强开关未开启。"))
     }
     guard link.enabled || link.xctestEnabled else {
-      return .failure("手机连接和 XCTest 增强均未启用。请由用户在设置中选择；已保存配对不等于授权操控。")
+      return .failure(AppLanguage.words("Neither the phone connection nor the XCTest enhancement is enabled. The user has to choose in settings; a saved pairing does not mean control is authorized.", "手机连接和 XCTest 增强均未启用。请由用户在设置中选择；已保存配对不等于授权操控。"))
     }
     let plan: IOSPhoneOperation
     do { plan = try IOSPhoneOperation(request) }
-    catch { return .failure((error as? IOSPhoneOperationError)?.message ?? "手机动作参数无效。") }
+    catch { return .failure((error as? IOSPhoneOperationError)?.message ?? AppLanguage.words("The phone action arguments are invalid.", "手机动作参数无效。")) }
     let method = plan.method
     let needsTarget = plan.needsTarget
     let requiresObservation = plan.requiresObservation
     if method == .open { targetApplication = nil }
     if requiresObservation, lastRoute == nil {
-      return .failure("没有本次任务的有效屏幕观察。先用 screen，不要猜编号或重放旧动作。")
+      return .failure(AppLanguage.words("There is no valid screen observation for this task. Use screen first; do not guess numbers or replay old actions.", "没有本次任务的有效屏幕观察。先用 screen，不要猜编号或重放旧动作。"))
     }
     let explicitApp = (plan.parameters["app"] as? String).flatMap { PhoneRunnerAppCatalog.bundleID(for: $0) }
     let preference = explicitApp.flatMap { link.appRoutes[$0] }
     let mustCore = preference == "coredevice"
     let mustXCTest = preference == "xctest"
     let chooseXCTest = mustXCTest || ((requiresObservation || method == .screen) && lastRoute == .xctest)
-    guard !chooseXCTest || link.xctestEnabled else { return .failure("XCTest 增强已关闭，没有启动或调用运行器。") }
-    guard !mustCore || link.enabled else { return .failure("这个应用固定使用 CoreDevice，但本机连接已关闭。") }
+    guard !chooseXCTest || link.xctestEnabled else { return .failure(AppLanguage.words("The XCTest enhancement is off; no runner was started or called.", "XCTest 增强已关闭，没有启动或调用运行器。")) }
+    guard !mustCore || link.enabled else { return .failure(AppLanguage.words("This app is fixed to CoreDevice, but the on-device connection is off.", "这个应用固定使用 CoreDevice，但本机连接已关闭。")) }
     let returnTarget = needsTarget ? targetApplication : nil
     let returnDescription = returnTarget.map {
-      "\n\n本任务已选择目标应用：\($0)。需要离开 DSH Go 时会请求系统将它置于前台，再重新核对画面；不会重复已经派发的动作。"
+      AppLanguage.words(
+        "\n\nThis task has selected a target app: \($0). When leaving DSH Go, the system is asked to bring it to the foreground and the screen is checked again; actions already sent are not repeated.",
+        "\n\n本任务已选择目标应用：\($0)。需要离开 DSH Go 时会请求系统将它置于前台，再重新核对画面；不会重复已经派发的动作。")
     } ?? ""
     let description = plan.consentDescription(targetLabel: coreActions.targetLabel(plan, ownerID: ownerID,
       sessionID: request.owner.sessionId))
-      + "\n\n路线由你的设置和可用性决定；XCTest 只在已启用时使用。已经派发或结果不明时不切换重试。"
+      + AppLanguage.words(
+        "\n\nThe route depends on your settings and availability; XCTest is used only when enabled. After a dispatch or an unclear result it does not switch and retry.",
+        "\n\n路线由你的设置和可用性决定；XCTest 只在已启用时使用。已经派发或结果不明时不切换重试。")
       + returnDescription
     if IOSPhoneClipboard.shared.hasPendingRestore {
       guard await consent.prepareForeground(request, current: live), live(),
         await IOSPhoneClipboard.shared.resolvePending(request, actions: actions, current: live), live() else {
         retireConnection(ownerID: ownerID, invocationID: invocationID)
-        return .failure("请先回到 DSH Go 处理上次剪贴板恢复；没有执行新动作。")
+        return .failure(AppLanguage.words("Return to DSH Go first to handle the previous clipboard restore; no new action was performed.", "请先回到 DSH Go 处理上次剪贴板恢复；没有执行新动作。"))
       }
     }
     let preview = coreActions.approvalPreview(plan, ownerID: ownerID, sessionID: request.owner.sessionId)
@@ -203,7 +213,7 @@ final class IOSPhoneRunner {
       needsTarget: returnTarget == nil && (needsTarget || method == .open), preview: preview, current: live),
       live(), await authorize(), live(), consent.isGranted else {
       retireConnection(ownerID: ownerID, invocationID: invocationID)
-      return .failure("本次任务没有取得仍有效的授权，没有派发手机动作。不要自动重试。")
+      return .failure(AppLanguage.words("This task did not obtain a still-valid authorization; no phone action was sent. Do not retry automatically.", "本次任务没有取得仍有效的授权，没有派发手机动作。不要自动重试。"))
     }
     progress(.connecting)
 
@@ -228,15 +238,19 @@ final class IOSPhoneRunner {
         if capabilities["touch"] == false, mayEnhance, method == .screen || method == .open { break }
         if capabilities["touch"] == false, link.xctestEnabled, requiresObservation {
           return .failure(mayEnhance
-            ? "XCTest 增强已开启。当前编号来自 CoreDevice 的只读观察；请先调用 screen 获取新的 XCTest 屏幕和编号，再操作。本次没有点击、滚动或输入，不需要重复开启开关。"
-            : "XCTest 增强已开启，但当前应用规则不允许自动切换。这次没有派发输入；请用户核对应用后端规则，或 handoff。")
+            ? AppLanguage.words(
+              "The XCTest enhancement is on. The current numbers come from a read-only CoreDevice observation; call screen first to get a new XCTest screen and numbers, then act. Nothing was tapped, scrolled, or typed, and the switch does not need to be turned on again.",
+              "XCTest 增强已开启。当前编号来自 CoreDevice 的只读观察；请先调用 screen 获取新的 XCTest 屏幕和编号，再操作。本次没有点击、滚动或输入，不需要重复开启开关。")
+            : AppLanguage.words(
+              "The XCTest enhancement is on, but the current app rules do not allow switching automatically. No input was sent this time; ask the user to check the app backend rules, or hand off.",
+              "XCTest 增强已开启，但当前应用规则不允许自动切换。这次没有派发输入；请用户核对应用后端规则，或 handoff。"))
         }
         if lastRoute != .coredevice { coreActions.invalidate(); lastXCTestScreen = nil }
         lastRoute = .coredevice; lastEndpoint = nil
         progress(.executing)
         if needsTarget, let target = targetApplication, UIApplication.shared.applicationState == .active {
           guard live(), consent.isGranted, IOSPhoneCoreActions.requestForeground(target) else {
-            return .failure("无法返回本任务的目标应用，没有派发读屏或输入。")
+            return .failure(AppLanguage.words("Could not return to this task's target app; no screen read or input was sent.", "无法返回本任务的目标应用，没有派发读屏或输入。"))
           }
         }
         let outcome = await coreActions.run(plan, request: request, ownerID: ownerID, consent: consent, current: live)
@@ -251,26 +265,28 @@ final class IOSPhoneRunner {
         guard !mustCore, !failure.mayHaveActed, core.maySwitchBackend,
           link.xctestEnabled, !link.appRoutes.values.contains("coredevice"),
           !requiresObservation else {
-          return .failure(failure.code + "：本次未完成连接；不自动重复动作。需要镜像时请到连接设置明确准备。")
+          return .failure(failure.code + AppLanguage.words(": the connection was not completed this time; the action is not repeated automatically. If an image is needed, prepare it explicitly in connection settings.", "：本次未完成连接；不自动重复动作。需要镜像时请到连接设置明确准备。"))
         }
       }
     }
     guard live(), consent.isGranted else { return .failure(IOSPhoneSelfRunnerError.cancelled.message) }
-    guard link.xctestEnabled else { return .failure("XCTest 增强已关闭，没有启动或调用运行器。") }
+    guard link.xctestEnabled else { return .failure(AppLanguage.words("The XCTest enhancement is off; no runner was started or called.", "XCTest 增强已关闭，没有启动或调用运行器。")) }
     // A fresh, unknown route is not guessed. The XCTest server also checks the
     // exact live bundle ID against these rules before every observed input.
     if explicitApp == nil, link.appRoutes.values.contains("coredevice"), lastRoute != .xctest {
-      return .failure("当前应用身份未核实，不能保证遵守 CoreDevice 专用规则；请先用 CoreDevice，或按准确包名打开目标。")
+      return .failure(AppLanguage.words("The current app identity is not verified, so the CoreDevice-only rule cannot be guaranteed; use CoreDevice first, or open the target by its exact bundle ID.", "当前应用身份未核实，不能保证遵守 CoreDevice 专用规则；请先用 CoreDevice，或按准确包名打开目标。"))
     }
     switch await Self.stopCoreForXCTest(core, ownerID: ownerID, current: live) {
     case .success: break
     case .failure(let failure):
       if failure.code == "ERR_PHONE_STOP_UNCONFIRMED" { return .failure(Self.coreStopUnconfirmed) }
       if failure.code == "ERR_PHONE_CANCELLED" { return .failure(IOSPhoneSelfRunnerError.cancelled.message) }
-      return .failure("开发者连接尚未确认停止，不启动 XCTest。")
+      return .failure(AppLanguage.words("The developer connection is not confirmed stopped; XCTest is not started.", "开发者连接尚未确认停止，不启动 XCTest。"))
     }
     guard live(), core.maySwitchBackend else {
-      return .failure(core.isFaulted ? Self.coreStopUnconfirmed : "开发者连接尚未确认停止，不启动 XCTest。")
+      return .failure(core.isFaulted
+        ? Self.coreStopUnconfirmed
+        : AppLanguage.words("The developer connection is not confirmed stopped; XCTest is not started.", "开发者连接尚未确认停止，不启动 XCTest。"))
     }
     let useSelfRunner = link.enabled && selfRunner.isConfigured
     var endpoint = useSelfRunner ? nil : readEndpoint()
@@ -282,7 +298,7 @@ final class IOSPhoneRunner {
       case .failure(let error):
         // A terminal owner can already have launched a test process. Confirmed
         // teardown is not proof that bootstrap was free of side effects.
-        return .failure(error.message + "\n不会在这次失败后自动转向 Mac 运行器；请核对运行器状态后由用户重新发起。")
+        return .failure(error.message + AppLanguage.words("\nIt will not automatically fall back to the Mac runner after this failure; check the runner status and have the user start again.", "\n不会在这次失败后自动转向 Mac 运行器；请核对运行器状态后由用户重新发起。"))
       }
     }
     guard let endpoint, live(), consent.isGranted else { return .failure(Self.missing) }
@@ -300,7 +316,7 @@ final class IOSPhoneRunner {
       let returned = await call(endpoint, request: request, current: live,
         method: "activate", parameters: ["app": returnTarget])
       guard !returned.isError, live(), consent.isGranted else {
-        return .failure("返回已批准目标的结果未确认，未继续派发读屏或输入。\n" + returned.text)
+        return .failure(AppLanguage.words("Returning to the approved target was not confirmed; no further screen read or input was sent.\n", "返回已批准目标的结果未确认，未继续派发读屏或输入。\n") + returned.text)
       }
       #if DSH_PHONE_SELF_RUNNER_DIAGNOSTICS
       IOSPhoneSelfRunner.diagnostic("target return confirmed")
@@ -314,12 +330,12 @@ final class IOSPhoneRunner {
     var arguments = plan.parameters
     if requiresObservation {
       guard let screen = plan.screen ?? lastXCTestScreen, screen == lastXCTestScreen else {
-        return .failure("XCTest 屏幕号已过期；请重新 screen。")
+        return .failure(AppLanguage.words("The XCTest screen number has expired; call screen again.", "XCTest 屏幕号已过期；请重新 screen。"))
       }
       let checked = await call(endpoint, request: request, current: live,
         method: "validate", parameters: ["screen": screen])
       guard !checked.isError, live(), consent.isGranted else {
-        return .failure("批准后未能重新核对 XCTest 屏幕，未派发该动作；请重新 screen。")
+        return .failure(AppLanguage.words("The XCTest screen could not be re-checked after approval; the action was not sent. Call screen again.", "批准后未能重新核对 XCTest 屏幕，未派发该动作；请重新 screen。"))
       }
       // key accepts an omitted screen in the public API, but the actual RPC
       // must carry the exact observation validated in this invocation.
@@ -334,7 +350,7 @@ final class IOSPhoneRunner {
     if method == .open, !outcome.isError {
       guard await consent.waitForTarget(request, current: live), live(), consent.isGranted else {
         lastXCTestScreen = nil
-        return .failure("应用打开请求已派发，但未确认目标画面和后台接续状态。请核对手机；这次不会自动重复打开。")
+        return .failure(AppLanguage.words("The app open request was sent, but the target screen and background continuation were not confirmed. Check the phone; it will not open again automatically this time.", "应用打开请求已派发，但未确认目标画面和后台接续状态。请核对手机；这次不会自动重复打开。"))
       }
     }
     return outcome
@@ -388,7 +404,7 @@ final class IOSPhoneRunner {
     guard let url = URL(string: "http://127.0.0.1:\(endpoint.port)/rpc"),
       let controller = Bundle.main.bundleIdentifier, !controller.isEmpty,
       let arguments = parameters ?? (try? JSONSerialization.jsonObject(with: Data((request.action.params ?? "{}").utf8)) as? [String: Any])
-    else { return .failure("参数无效。") }
+    else { return .failure(AppLanguage.words("Invalid arguments.", "参数无效。")) }
     // This envelope is native-owned; model parameters cannot select a backend,
     // change the controlling app, or remove a user's CoreDevice-only route.
     let now = Date().timeIntervalSince1970 * 1000
@@ -399,7 +415,7 @@ final class IOSPhoneRunner {
       "controllerBundleID": controller, "xctestDeniedBundleIDs": denied]
     if let runId = endpoint.runId { values["runId"] = runId }
     guard let body = try? JSONSerialization.data(withJSONObject: values), body.count <= 192 * 1024 else {
-      return .failure("手机调用上下文或应用规则超过大小边界，没有派发动作。")
+      return .failure(AppLanguage.words("The phone call context or app rules exceed the size limit; no action was sent.", "手机调用上下文或应用规则超过大小边界，没有派发动作。"))
     }
     var http = URLRequest(url: url)
     http.httpMethod = "POST"
@@ -411,17 +427,17 @@ final class IOSPhoneRunner {
       let (data, response) = try await IOSPhoneRPCDispatch.perform(http, permitted: permitted,
         send: { [session] request in try await session.data(for: request) })
       guard permitted() else {
-        return .failure("动作结果抵达时原调用已失效；结果不明，请核对屏幕，不要自动重试。")
+        return .failure(AppLanguage.words("The original call was no longer valid when the action result arrived; the result is unclear. Check the screen and do not retry automatically.", "动作结果抵达时原调用已失效；结果不明，请核对屏幕，不要自动重试。"))
       }
       guard data.count <= 2 * 1024 * 1024 else {
-        return .failure("运行器结果超过大小边界；请核对屏幕，不要自动重试。")
+        return .failure(AppLanguage.words("The runner result exceeds the size limit; check the screen and do not retry automatically.", "运行器结果超过大小边界；请核对屏幕，不要自动重试。"))
       }
       guard let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        return .failure("手机操控返回了无效结果，请核对屏幕，不要自动重试。")
+        return .failure(AppLanguage.words("Phone control returned an invalid result; check the screen and do not retry automatically.", "手机操控返回了无效结果，请核对屏幕，不要自动重试。"))
       }
       guard (response as? HTTPURLResponse)?.statusCode == 200, result["ok"] as? Bool == true else {
-        let message = result["error"] as? String ?? "手机操控没有完成这一步。"
-        return .failure(message + "\n这一步不会自动重试。")
+        let message = result["error"] as? String ?? AppLanguage.words("Phone control did not complete this step.", "手机操控没有完成这一步。")
+        return .failure(message + AppLanguage.words("\nThis step will not be retried automatically.", "\n这一步不会自动重试。"))
       }
       if let app = result["appBundleID"] as? String, app != Bundle.main.bundleIdentifier,
         PhoneRunnerAppCatalog.bundleID(for: app) == app {
@@ -430,27 +446,31 @@ final class IOSPhoneRunner {
       var text = result["text"] as? String ?? ""
       if method != "validate", let screen = result["screen"] as? String {
         lastXCTestScreen = screen
-        text = "XCTest 增强观察（编号仅属于本后端）：\n" + text
+        text = AppLanguage.words("XCTest enhancement observation (numbers belong to this backend only):\n", "XCTest 增强观察（编号仅属于本后端）：\n") + text
       }
-      if let warning = result["warning"] as? String { text += "\n（注意：\(warning)）" }
+      if let warning = result["warning"] as? String {
+        text += AppLanguage.words("\n(Note: \(warning))", "\n（注意：\(warning)）")
+      }
       guard text.utf8.count <= IOSPhoneResultEnvelope.textBytes else {
         lastXCTestScreen = nil
-        return .failure("运行器文字结果超过完整返回边界；本次动作可能已经发生，请核对手机，不要自动重试。")
+        return .failure(AppLanguage.words("The runner text result exceeds the complete return boundary; this action may already have happened. Check the phone and do not retry automatically.", "运行器文字结果超过完整返回边界；本次动作可能已经发生，请核对手机，不要自动重试。"))
       }
       let image: Data?
       if let encoded = result["image"] as? String {
         guard encoded.utf8.count <= 1200 * 1024, let decoded = Data(base64Encoded: encoded), !decoded.isEmpty,
           decoded.count <= 880 * 1024 else {
           lastXCTestScreen = nil
-          return .failure("运行器图片超过完整返回边界；没有截断图片，请重新观察。")
+          return .failure(AppLanguage.words("The runner image exceeds the complete return boundary; the image was not truncated. Observe again.", "运行器图片超过完整返回边界；没有截断图片，请重新观察。"))
         }
         image = decoded
       } else { image = nil }
       return IOSPhoneOutcome(text: text, isError: false, image: image)
     } catch let error as URLError where error.code == .cannotConnectToHost {
-      return .failure(endpoint.runId == nil ? Self.missing : "端上 XCTest 运行器已经不可连接。请检查运行器，不要自动重复这一步。")
+      return .failure(endpoint.runId == nil
+        ? Self.missing
+        : AppLanguage.words("The on-device XCTest runner is no longer reachable. Check the runner and do not repeat this step automatically.", "端上 XCTest 运行器已经不可连接。请检查运行器，不要自动重复这一步。"))
     } catch {
-      return .failure("手机操控这一步的结果未知，请核对屏幕，不要自动重试。")
+      return .failure(AppLanguage.words("The result of this phone control step is unknown; check the screen and do not retry automatically.", "手机操控这一步的结果未知，请核对屏幕，不要自动重试。"))
     }
   }
 
@@ -460,21 +480,24 @@ final class IOSPhoneRunner {
     let reason = request.action.text ?? ""
     if UIApplication.shared.applicationState != .active {
       let content = UNMutableNotificationContent()
-      content.title = "AI 请你接手"
+      content.title = AppLanguage.words("The AI asks you to take over", "AI 请你接手")
       content.body = reason
       try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: request.id, content: content, trigger: nil))
     }
     while !Task.isCancelled, request.expiresAt > Date().timeIntervalSince1970 * 1000 {
       if UIApplication.shared.applicationState == .active, UIApplication.shared.isProtectedDataAvailable {
         let finished = await actions.confirm(
-          request, title: "AI 请你接手", detail: "\(reason)\n\n可以先切到别的应用去做，做完回来点「继续」。",
-          allow: "继续", deny: "停止", waitsForever: true)
-        if finished { return .success("用户说做完了。先用 screen 看一下现在的屏幕。") }
+          request, title: AppLanguage.words("The AI asks you to take over", "AI 请你接手"),
+          detail: AppLanguage.words(
+            "\(reason)\n\nYou can switch to another app to do it; when you are done, come back and tap “Continue”.",
+            "\(reason)\n\n可以先切到别的应用去做，做完回来点「继续」。"),
+          allow: AppLanguage.words("Continue", "继续"), deny: AppLanguage.words("Stop", "停止"), waitsForever: true)
+        if finished { return .success(AppLanguage.words("The user says it is done. Use screen first to look at the current screen.", "用户说做完了。先用 screen 看一下现在的屏幕。")) }
         // Leaving the app dismisses the sheet, which isn't an answer. Asked again on the way back.
-        if UIApplication.shared.applicationState == .active { return .failure("用户选择停止。不要自动重试。") }
+        if UIApplication.shared.applicationState == .active { return .failure(AppLanguage.words("The user chose to stop. Do not retry automatically.", "用户选择停止。不要自动重试。")) }
       }
       try? await Task.sleep(nanoseconds: 1_000_000_000)
     }
-    return .failure("用户没有在时间内回来。")
+    return .failure(AppLanguage.words("The user did not come back in time.", "用户没有在时间内回来。"))
   }
 }

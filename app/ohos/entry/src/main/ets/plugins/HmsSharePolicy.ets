@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS / 未在真机核实。纯协议与预算；HMS 边界见 hms-share.md。
 import util from '@ohos.util';
 import uniformTypeDescriptor from '@ohos.data.uniformTypeDescriptor';
@@ -47,13 +48,13 @@ function field(raw: Map<string, Any>, key: string): string {
   const value: Any = raw.get(key);
   if (value === undefined || value === null) return '';
   if (typeof value !== 'string' || value.length > SHARE_MAX_TEXT || value.includes('\0') || !wellFormed(value)) {
-    throw new ShareError('invalid', '分享内容格式或长度不受支持。');
+    throw new ShareError('invalid', AppLanguage.pick('分享内容格式或长度不受支持。', 'The share content format or length is not supported.'));
   }
   return value;
 }
 
 export function parseShareRequest(raw: Any): ShareRequest {
-  if (!(raw instanceof Map)) throw new ShareError('invalid', '分享参数格式不正确。');
+  if (!(raw instanceof Map)) throw new ShareError('invalid', AppLanguage.pick('分享参数格式不正确。', 'The share arguments are malformed.'));
   const request = new ShareRequest();
   request.text = field(raw, 'text');
   request.subject = field(raw, 'subject');
@@ -61,7 +62,7 @@ export function parseShareRequest(raw: Any): ShareRequest {
   const link = field(raw, 'uri');
   if (link) {
     if (request.text || !/^https?:\/\/[^\s/?#]+(?:[/?#][^\s]*)?$/i.test(link)) {
-      throw new ShareError('invalid', '分享链接必须是完整的 HTTP 或 HTTPS 地址。');
+      throw new ShareError('invalid', AppLanguage.pick('分享链接必须是完整的 HTTP 或 HTTPS 地址。', 'A share link must be a complete HTTP or HTTPS address.'));
     }
     request.text = link; request.link = true;
   }
@@ -69,20 +70,20 @@ export function parseShareRequest(raw: Any): ShareRequest {
   const mimes: Any = raw.get('mimeTypes');
   if (paths !== undefined && paths !== null) {
     if (!Array.isArray(paths) || paths.length < 1 || paths.length > SHARE_MAX_RECORDS ||
-      !Array.isArray(mimes) || mimes.length !== paths.length) throw new ShareError('invalid', '分享文件列表不正确。');
+      !Array.isArray(mimes) || mimes.length !== paths.length) throw new ShareError('invalid', AppLanguage.pick('分享文件列表不正确。', 'The share file list is invalid.'));
     for (let i = 0; i < paths.length; i++) {
       const path: Any = paths[i]; const mime: Any = mimes[i];
       if (typeof path !== 'string' || !path.startsWith('/') || path.length > 16384 ||
         /[\x00-\x1f\x7f]/.test(path) || !wellFormed(path) ||
         typeof mime !== 'string' || mime.length > 200 || !/^[A-Za-z0-9!#$&^_.+*-]+\/[A-Za-z0-9!#$&^_.+*-]+$/.test(mime)) {
-        throw new ShareError('invalid', '分享文件路径或类型不正确。');
+        throw new ShareError('invalid', AppLanguage.pick('分享文件路径或类型不正确。', 'A share file path or type is invalid.'));
       }
       request.paths.push(path); request.mimes.push(mime);
     }
   }
-  if (!request.text && request.paths.length === 0) throw new ShareError('invalid', '没有可以分享的内容。');
+  if (!request.text && request.paths.length === 0) throw new ShareError('invalid', AppLanguage.pick('没有可以分享的内容。', 'There is nothing to share.'));
   if (utf8Size(request.text) + utf8Size(request.title) + utf8Size(request.subject) > SHARE_METADATA_BUDGET) {
-    throw new ShareError('too_large', '分享文字过长，请改为文件分享。');
+    throw new ShareError('too_large', AppLanguage.pick('分享文字过长，请改为文件分享。', 'The shared text is too long; share it as a file instead.'));
   }
   const keys = ['originX', 'originY', 'originWidth', 'originHeight'];
   if (keys.some((key: string) => raw.has(key))) {
@@ -90,7 +91,7 @@ export function parseShareRequest(raw: Any): ShareRequest {
     for (const key of keys) {
       const value: Any = raw.get(key);
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1000000) {
-        throw new ShareError('invalid', '分享窗口的位置不正确。');
+        throw new ShareError('invalid', AppLanguage.pick('分享窗口的位置不正确。', 'The share sheet position is invalid.'));
       }
       values.push(value);
     }

@@ -77,12 +77,12 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
 
   func run(_ request: IOSPhoneRequest, authorize: () async -> Bool, current: () -> Bool) async -> IOSPhoneOutcome {
     guard UIApplication.shared.applicationState == .active, current() else {
-      return .failure("系统工具要用户在 DSH Go 里才能用。没有执行。")
+      return .failure(AppLanguage.words("System tools only work while the user is in DSH Go. Nothing was executed.", "系统工具要用户在 DSH Go 里才能用。没有执行。"))
     }
     let kind = String(request.action.kind.dropFirst("system-".count))
     guard let data = request.action.params?.data(using: .utf8),
       let args = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
-    else { return .failure("参数无效。") }
+    else { return .failure(AppLanguage.words("Invalid arguments.", "参数无效。")) }
     do {
       let value: [String: Any]
       switch kind {
@@ -94,15 +94,15 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
       case "photos_select": value = try await photosSelect(args, request, authorize, current)
       case "location_current": value = try await locationCurrent(request, authorize, current)
       case "vision_ocr": value = try await visionText(args, request, authorize, current)
-      default: throw Failure("没有这个系统工具。")
+      default: throw Failure(AppLanguage.words("There is no such system tool.", "没有这个系统工具。"))
       }
       let json = try JSONSerialization.data(withJSONObject: value, options: [.withoutEscapingSlashes, .sortedKeys])
-      guard json.count <= Self.resultBytes else { return .failure("结果太长了，缩小范围再试。") }
+      guard json.count <= Self.resultBytes else { return .failure(AppLanguage.words("The result is too long; narrow the scope and try again.", "结果太长了，缩小范围再试。")) }
       return .success(String(decoding: json, as: UTF8.self))
     } catch let failure as Failure {
       return .failure(failure.message)
     } catch {
-      return .failure("系统没有完成这一步；请用户检查，不要自动重试。")
+      return .failure(AppLanguage.words("The system did not complete this step; ask the user to check, and do not retry automatically.", "系统没有完成这一步；请用户检查，不要自动重试。"))
     }
   }
 
@@ -111,16 +111,16 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     _ request: IOSPhoneRequest, _ title: String, _ detail: String, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws {
     guard await actions.confirm(request, title: title, detail: detail) else {
-      throw Failure("用户没有同意。不要自动重试。")
+      throw Failure(AppLanguage.words("The user did not agree. Do not retry automatically.", "用户没有同意。不要自动重试。"))
     }
-    guard current(), await authorize(), current() else { throw Failure("这个工具调用已经结束，没有执行。") }
+    guard current(), await authorize(), current() else { throw Failure(AppLanguage.words("This tool call has already ended; nothing was executed.", "这个工具调用已经结束，没有执行。")) }
   }
 
   /// A system permission prompt can sit there longer than the tool call waits.
   private func stillWanted(_ current: () -> Bool) throws {
-    guard current() else { throw Failure("这个工具调用已经结束，没有执行。") }
+    guard current() else { throw Failure(AppLanguage.words("This tool call has already ended; nothing was executed.", "这个工具调用已经结束，没有执行。")) }
     guard UIApplication.shared.applicationState == .active, UIApplication.shared.isProtectedDataAvailable else {
-      throw Failure("请先解锁并打开 DSH Go；没有继续读取或写入。")
+      throw Failure(AppLanguage.words("Unlock the phone and open DSH Go first; nothing was read or written.", "请先解锁并打开 DSH Go；没有继续读取或写入。"))
     }
   }
 
@@ -191,7 +191,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
       granted = (try? await eventStore.requestAccess(to: .reminder)) ?? false
     }
     await backInFront()
-    guard granted else { throw Failure("用户没有给提醒事项权限。可以到系统设置里打开。") }
+    guard granted else { throw Failure(AppLanguage.words("The user did not grant Reminders access. It can be turned on in system settings.", "用户没有给提醒事项权限。可以到系统设置里打开。")) }
   }
 
   /// A reminder made elsewhere can carry its date without saying which calendar that's in.
@@ -211,7 +211,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   nonisolated private static func row(_ reminder: EKReminder) -> [String: Any] {
     var row: [String: Any] = [
       "id": opaque(reminder.calendarItemIdentifier), "version": version(reminder),
-      "title": label(reminder.title, "（无标题）", 256), "completed": reminder.isCompleted,
+      "title": label(reminder.title, AppLanguage.words("(untitled)", "（无标题）"), 256), "completed": reminder.isCompleted,
     ]
     if let due = due(reminder) { row["due"] = instant(due) }
     return row
@@ -223,9 +223,17 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     let query = args["query"] as? String
     let limit = args["limit"] as? Int ?? 20
     let completed = args["include_completed"] as? Bool ?? false
-    let scope = query.map { "标题含「\($0)」的" } ?? "全部"
-    try await asked(
-      request, "允许 AI 读取提醒事项？", "\(scope)\(completed ? "提醒（含已完成）" : "未完成提醒")，最多 \(limit) 条，只有标题和日期。", authorize, current)
+    let detail: String
+    if let query {
+      detail = AppLanguage.words(
+        "Reminders with “\(query)” in the title, \(completed ? "including completed ones" : "incomplete only"), up to \(limit), titles and dates only.",
+        "标题含「\(query)」的\(completed ? "提醒（含已完成）" : "未完成提醒")，最多 \(limit) 条，只有标题和日期。")
+    } else {
+      detail = AppLanguage.words(
+        "All \(completed ? "reminders, including completed ones" : "incomplete reminders"), up to \(limit), titles and dates only.",
+        "全部\(completed ? "提醒（含已完成）" : "未完成提醒")，最多 \(limit) 条，只有标题和日期。")
+    }
+    try await asked(request, AppLanguage.words("Allow the AI to read reminders?", "允许 AI 读取提醒事项？"), detail, authorize, current)
     try await reminderAccess()
     try stillWanted(current)
     let predicate = eventStore.predicateForReminders(in: nil)
@@ -242,24 +250,28 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   private func remindersCreate(
     _ args: [String: Any], _ request: IOSPhoneRequest, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws -> [String: Any] {
-    guard let title = args["title"] as? String else { throw Failure("要给标题。") }
+    guard let title = args["title"] as? String else { throw Failure(AppLanguage.words("A title is required.", "要给标题。")) }
     let notes = args["notes"] as? String
     let due = (args["due"] as? String).flatMap { Self.date($0) }
-    if args["due"] != nil, due == nil { throw Failure("时间格式不对。") }
+    if args["due"] != nil, due == nil { throw Failure(AppLanguage.words("The time format is wrong.", "时间格式不对。")) }
     // Asked first, so the sheet can say which list it's going in.
     try await reminderAccess()
     let target: EKCalendar?
     if let id = args["list_id"] as? String {
       target = Self.unopaque(id).flatMap { eventStore.calendar(withIdentifier: $0) }
-      if target == nil { throw Failure("没有这个提醒列表，没有新建。") }
+      if target == nil { throw Failure(AppLanguage.words("There is no such reminder list; nothing was created.", "没有这个提醒列表，没有新建。")) }
     } else {
       target = eventStore.defaultCalendarForNewReminders()
     }
-    guard let list = target else { throw Failure("没有可用的提醒列表。") }
-    var detail = "标题：\(title)\n列表：\(list.title)"
-    if let due { detail += "\n时间：\(due.formatted(date: .abbreviated, time: .shortened))" }
-    if let notes, !notes.isEmpty { detail += "\n备注：\(notes)" }
-    try await asked(request, "允许 AI 新建这条提醒？", detail, authorize, current)
+    guard let list = target else { throw Failure(AppLanguage.words("There is no available reminder list.", "没有可用的提醒列表。")) }
+    var detail = AppLanguage.words("Title: \(title)\nList: \(list.title)", "标题：\(title)\n列表：\(list.title)")
+    if let due {
+      detail += AppLanguage.words(
+        "\nDue: \(due.formatted(date: .abbreviated, time: .shortened))",
+        "\n时间：\(due.formatted(date: .abbreviated, time: .shortened))")
+    }
+    if let notes, !notes.isEmpty { detail += AppLanguage.words("\nNotes: \(notes)", "\n备注：\(notes)") }
+    try await asked(request, AppLanguage.words("Allow the AI to create this reminder?", "允许 AI 新建这条提醒？"), detail, authorize, current)
     let reminder = EKReminder(eventStore: eventStore)
     reminder.title = title
     reminder.notes = notes
@@ -280,15 +292,18 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   ) async throws -> [String: Any] {
     guard let id = (args["id"] as? String).flatMap({ Self.unopaque($0) }), let version = args["version"] as? String,
       let completed = args["completed"] as? Bool
-    else { throw Failure("参数不对。") }
+    else { throw Failure(AppLanguage.words("The arguments are wrong.", "参数不对。")) }
     try await reminderAccess()
-    guard let shown = eventStore.calendarItem(withIdentifier: id) as? EKReminder else { throw Failure("这条提醒已经不在了。") }
-    guard Self.version(shown) == version else { throw Failure("这条提醒已经改过了。先重新列一遍。") }
+    guard let shown = eventStore.calendarItem(withIdentifier: id) as? EKReminder else { throw Failure(AppLanguage.words("This reminder is gone.", "这条提醒已经不在了。")) }
+    guard Self.version(shown) == version else { throw Failure(AppLanguage.words("This reminder has already changed. List them again first.", "这条提醒已经改过了。先重新列一遍。")) }
     try await asked(
-      request, "允许 AI 改这条提醒？", "把「\(shown.title ?? "")」标为\(completed ? "已完成" : "未完成")。", authorize, current)
+      request, AppLanguage.words("Allow the AI to change this reminder?", "允许 AI 改这条提醒？"),
+      AppLanguage.words(
+        "Mark “\(shown.title ?? "")” as \(completed ? "completed" : "incomplete").",
+        "把「\(shown.title ?? "")」标为\(completed ? "已完成" : "未完成")。"), authorize, current)
     // It can have changed while the user read the sheet.
     guard let reminder = eventStore.calendarItem(withIdentifier: id) as? EKReminder, Self.version(reminder) == version else {
-      throw Failure("这条提醒刚刚改过了，没有动它。先重新列一遍。")
+      throw Failure(AppLanguage.words("This reminder just changed; it was left alone. List them again first.", "这条提醒刚刚改过了，没有动它。先重新列一遍。"))
     }
     reminder.isCompleted = completed
     try eventStore.save(reminder, commit: true)
@@ -300,7 +315,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   private func contactAccess() async throws -> String {
     let granted = (try? await contactStore.requestAccess(for: .contacts)) ?? false
     await backInFront()
-    guard granted else { throw Failure("用户没有给通讯录权限。可以到系统设置里打开。") }
+    guard granted else { throw Failure(AppLanguage.words("The user did not grant Contacts access. It can be turned on in system settings.", "用户没有给通讯录权限。可以到系统设置里打开。")) }
     if #available(iOS 18.0, *), CNContactStore.authorizationStatus(for: .contacts) == .limited { return "limited" }
     return "full"
   }
@@ -308,11 +323,21 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   private func contactsSearch(
     _ args: [String: Any], _ request: IOSPhoneRequest, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws -> [String: Any] {
-    guard let query = args["query"] as? String else { throw Failure("要给查找内容。") }
+    guard let query = args["query"] as? String else { throw Failure(AppLanguage.words("Search text is required.", "要给查找内容。")) }
     let limit = args["limit"] as? Int ?? 10
     let fields = args["fields"] as? [String] ?? []
-    let extra = fields.isEmpty ? "只有姓名" : "姓名和" + fields.map { $0 == "phone" ? "电话" : "邮箱" }.joined(separator: "、")
-    try await asked(request, "允许 AI 查找联系人？", "姓名匹配「\(query)」的联系人，最多 \(limit) 个，\(extra)。", authorize, current)
+    let extra: String
+    if fields.isEmpty {
+      extra = AppLanguage.words("names only", "只有姓名")
+    } else {
+      let parts = fields.map { $0 == "phone" ? AppLanguage.words("phone", "电话") : AppLanguage.words("email", "邮箱") }
+      extra = AppLanguage.words("names and " + parts.joined(separator: " and "), "姓名和" + parts.joined(separator: "、"))
+    }
+    try await asked(
+      request, AppLanguage.words("Allow the AI to search contacts?", "允许 AI 查找联系人？"),
+      AppLanguage.words(
+        "Contacts whose name matches “\(query)”, up to \(limit), \(extra).",
+        "姓名匹配「\(query)」的联系人，最多 \(limit) 个，\(extra)。"), authorize, current)
     let scope = try await contactAccess()
     try stillWanted(current)
     var keys: [CNKeyDescriptor] = [
@@ -336,7 +361,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     let items: [[String: Any]] = found.prefix(limit).map { contact in
       var row: [String: Any] = [
         "id": Self.opaque(contact.identifier),
-        "display_name": Self.label(CNContactFormatter.string(from: contact, style: .fullName), "（无姓名）", 256),
+        "display_name": Self.label(CNContactFormatter.string(from: contact, style: .fullName), AppLanguage.words("(unnamed)", "（无姓名）"), 256),
       ]
       if fields.contains("phone") {
         row["phone"] = contact.phoneNumbers.map { Self.clip($0.value.stringValue, 64) }.filter { !$0.isEmpty }.prefix(3).map { $0 }
@@ -352,14 +377,18 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   private func contactsCreate(
     _ args: [String: Any], _ request: IOSPhoneRequest, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws -> [String: Any] {
-    guard let given = args["given_name"] as? String else { throw Failure("要给名字。") }
+    guard let given = args["given_name"] as? String else { throw Failure(AppLanguage.words("A name is required.", "要给名字。")) }
     let family = args["family_name"] as? String
     let phone = args["phone"] as? String
     let email = args["email"] as? String
-    var detail = "姓名：\([family, given].compactMap { $0 }.joined(separator: " "))"
-    if let phone { detail += "\n电话：\(phone)" }
-    if let email { detail += "\n邮箱：\(email)" }
-    try await asked(request, "允许 AI 新建这个联系人？", detail + "\n\n不会合并或改动已有联系人。", authorize, current)
+    let name = [family, given].compactMap { $0 }.joined(separator: " ")
+    var detail = AppLanguage.words("Name: \(name)", "姓名：\(name)")
+    if let phone { detail += AppLanguage.words("\nPhone: \(phone)", "\n电话：\(phone)") }
+    if let email { detail += AppLanguage.words("\nEmail: \(email)", "\n邮箱：\(email)") }
+    try await asked(
+      request, AppLanguage.words("Allow the AI to create this contact?", "允许 AI 新建这个联系人？"),
+      detail + AppLanguage.words("\n\nExisting contacts will not be merged or changed.", "\n\n不会合并或改动已有联系人。"),
+      authorize, current)
     _ = try await contactAccess()
     try stillWanted(current)
     let contact = CNMutableContact()
@@ -381,7 +410,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     _ args: [String: Any], _ request: IOSPhoneRequest, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws -> [String: Any] {
     guard let host = presenter(), host.viewIfLoaded?.window != nil, host.presentedViewController == nil else {
-      throw Failure("现在弹不出选择器。")
+      throw Failure(AppLanguage.words("The picker cannot be shown right now.", "现在弹不出选择器。"))
     }
     var configuration = PHPickerConfiguration()
     configuration.filter = .images
@@ -395,8 +424,8 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
       pickerShown = picker
       host.present(picker, animated: true)
     }
-    guard !results.isEmpty else { throw Failure("用户没有选图片。") }
-    guard current(), await authorize(), current() else { throw Failure("这个工具调用已经结束，没有执行。") }
+    guard !results.isEmpty else { throw Failure(AppLanguage.words("The user did not pick an image.", "用户没有选图片。")) }
+    guard current(), await authorize(), current() else { throw Failure(AppLanguage.words("This tool call has already ended; nothing was executed.", "这个工具调用已经结束，没有执行。")) }
     forgetExpired()
     try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
     var items: [[String: Any]] = []
@@ -436,9 +465,9 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   }
 
   private func keep(_ result: PHPickerResult, session: String, current: () -> Bool) async throws -> [String: Any] {
-    guard !Task.isCancelled, current() else { throw Failure("这个工具调用已经结束，没有保留图片。") }
+    guard !Task.isCancelled, current() else { throw Failure(AppLanguage.words("This tool call has already ended; the image was not kept.", "这个工具调用已经结束，没有保留图片。")) }
     var bytes = [UInt8](repeating: 0, count: 24)
-    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw Failure("没有存下这张图片。") }
+    guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { throw Failure(AppLanguage.words("The image was not saved.", "没有存下这张图片。")) }
     let handle = Self.base64url(Data(bytes))
     let target = scratch.appendingPathComponent(handle)
     // The provider's file is gone once this callback returns.
@@ -448,10 +477,10 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
         continuation.resume(returning: (try? FileManager.default.copyItem(at: url, to: target)) != nil)
       }
     }
-    guard copied else { throw Failure("这张图片读不出来。可能还在 iCloud 上没有下载。") }
+    guard copied else { throw Failure(AppLanguage.words("This image cannot be read. It may still be in iCloud and not downloaded.", "这张图片读不出来。可能还在 iCloud 上没有下载。")) }
     guard !Task.isCancelled, current() else {
       try? FileManager.default.removeItem(at: target)
-      throw Failure("这个工具调用已经结束，没有保留图片。")
+      throw Failure(AppLanguage.words("This tool call has already ended; the image was not kept.", "这个工具调用已经结束，没有保留图片。"))
     }
     let size = (try? FileManager.default.attributesOfItem(atPath: target.path)[.size] as? Int) ?? 0
     guard let source = CGImageSourceCreateWithURL(target as CFURL, nil),
@@ -460,7 +489,7 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
       size > 0, size <= Self.imageBytes, width <= Self.imageSide, height <= Self.imageSide, width * height <= Self.imagePixels
     else {
       try? FileManager.default.removeItem(at: target)
-      throw Failure("这张图片太大了，最多 10 MB、边长 8192、2400 万像素。")
+      throw Failure(AppLanguage.words("This image is too large: at most 10 MB, 8192 per side, and 24 megapixels.", "这张图片太大了，最多 10 MB、边长 8192、2400 万像素。"))
     }
     let expires = Date().addingTimeInterval(Self.imageLasts)
     picked[handle] = Picked(session: session, file: target, expires: expires)
@@ -472,7 +501,9 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   private func locationCurrent(
     _ request: IOSPhoneRequest, _ authorize: () async -> Bool, _ current: () -> Bool
   ) async throws -> [String: Any] {
-    try await asked(request, "允许 AI 读取当前位置？", "这一次的位置。不会持续跟踪，也不会在后台读取。", authorize, current)
+    try await asked(
+      request, AppLanguage.words("Allow the AI to read the current location?", "允许 AI 读取当前位置？"),
+      AppLanguage.words("The location this once. No continuous tracking, and nothing read in the background.", "这一次的位置。不会持续跟踪，也不会在后台读取。"), authorize, current)
     let manager = CLLocationManager()
     manager.delegate = self
     manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
@@ -492,9 +523,9 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     }
     guard !Task.isCancelled, current(), locationManager === manager,
       UIApplication.shared.applicationState == .active
-    else { throw Failure("原定位调用已结束或 App 已离开前台，没有继续读取。") }
+    else { throw Failure(AppLanguage.words("The original location call ended or the app left the foreground; nothing more was read.", "原定位调用已结束或 App 已离开前台，没有继续读取。")) }
     guard [.authorizedWhenInUse, .authorizedAlways].contains(manager.authorizationStatus) else {
-      throw Failure("用户没有给定位权限。可以到系统设置里打开。")
+      throw Failure(AppLanguage.words("The user did not grant Location access. It can be turned on in system settings.", "用户没有给定位权限。可以到系统设置里打开。"))
     }
     let located: CLLocation? = await withCheckedContinuation { continuation in
       locating = continuation
@@ -502,8 +533,8 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
     }
     guard !Task.isCancelled, current(), locationManager === manager,
       UIApplication.shared.applicationState == .active
-    else { throw Failure("原定位调用已结束或 App 已离开前台，没有继续读取。") }
-    guard let fix = located else { throw Failure("这次没有定位到。") }
+    else { throw Failure(AppLanguage.words("The original location call ended or the app left the foreground; nothing more was read.", "原定位调用已结束或 App 已离开前台，没有继续读取。")) }
+    guard let fix = located else { throw Failure(AppLanguage.words("No location was found this time.", "这次没有定位到。")) }
     return [
       "latitude": fix.coordinate.latitude, "longitude": fix.coordinate.longitude,
       "horizontal_accuracy_m": max(fix.horizontalAccuracy, 0),
@@ -551,8 +582,8 @@ final class IOSSystemTools: NSObject, PHPickerViewControllerDelegate, CLLocation
   ) async throws -> [String: Any] {
     guard let handle = args["image_handle"] as? String, let image = picked[handle], image.session == request.owner.sessionId,
       image.expires > Date()
-    else { throw Failure("这张图片已经过期，或者不是这个对话选的。让用户重新选。") }
-    guard current(), await authorize(), current() else { throw Failure("这个工具调用已经结束，没有执行。") }
+    else { throw Failure(AppLanguage.words("This image has expired or was not picked for this conversation. Ask the user to pick it again.", "这张图片已经过期，或者不是这个对话选的。让用户重新选。")) }
+    guard current(), await authorize(), current() else { throw Failure(AppLanguage.words("This tool call has already ended; nothing was executed.", "这个工具调用已经结束，没有执行。")) }
     let asked = args["languages"] as? [String] ?? []
     // Left to itself it only reads English.
     let languages = asked.isEmpty ? ["zh-Hans", "zh-Hant", "en-US"] : asked

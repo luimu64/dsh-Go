@@ -495,9 +495,7 @@ private final class CaptionPill: UIView {
 
   /// In the language the app shows: `flutter.app_language` is lib/state/locale_state.dart's.
   private static var closeLabel: String {
-    let chosen = UserDefaults.standard.string(forKey: "flutter.app_language")
-    let chinese = chosen == "zh" || (chosen != "en" && Locale.preferredLanguages.first?.hasPrefix("zh") == true)
-    return chinese ? "关闭字幕" : "Close caption"
+    AppLanguage.words("Close caption", "关闭字幕")
   }
 
   init(onClose: @escaping () -> Void) {

@@ -11,6 +11,7 @@ import { NativeMediaError, NativeMediaKey, NativeVoiceIndicator, nativeClipRelat
 import { NativeClipOpener, OhosClipPlayer } from './OhosClipPlayer';
 import { VoiceMicLease, VoiceMicToken } from './VoiceMicLease';
 import { OhosSpeechActivity } from './OhosSpeechActivity';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 class MediaOwner {
   readonly key: NativeMediaKey;
@@ -77,7 +78,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       }
       this.handle(call, binding).then((value: Any): void => { try { result.success(value); } catch (_) {} },
         (error: Error): void => {
-          const failure = error instanceof NativeMediaError ? error : new NativeMediaError('audio', '音频操作未完成。');
+          const failure = error instanceof NativeMediaError ? error : new NativeMediaError('audio', AppLanguage.pick('音频操作未完成。', 'The audio operation did not complete.'));
           try { result.error(failure.code, failure.message, null); } catch (_) {}
         });
     } });
@@ -108,7 +109,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       this.sink === owner.sink && this.onScreen();
   }
   private assertCurrent(owner: MediaOwner): void {
-    if (!this.current(owner)) throw new NativeMediaError('stale-owner', '媒体操作的所有者已失效。');
+    if (!this.current(owner)) throw new NativeMediaError('stale-owner', AppLanguage.pick('媒体操作的所有者已失效。', "The media operation's owner is no longer valid."));
   }
   private notice(owner: MediaOwner, kind: string, reason: string = '', localStopped: boolean = false): void {
     if (this.engine !== owner.engine || this.owner !== owner || this.sink !== owner.sink) return;
@@ -123,7 +124,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
     if (this.engine !== owner.engine || this.owner !== owner || this.sink !== owner.sink) return;
     // A stream failure makes Dart request disposal; no terminal event claims the
     // resource/file is closed when AVPlayer.release or fs.close failed.
-    try { this.sink?.error('close', '音频资源尚未确认关闭。', null); } catch (_) {}
+    try { this.sink?.error('close', AppLanguage.pick('音频资源尚未确认关闭。', 'The audio resource is not confirmed closed.'), null); } catch (_) {}
   }
   private retire(reason: string): void {
     const owner = this.owner;
@@ -145,12 +146,12 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       if (owner.player === player) owner.player = null;
     }, (): void => { failed = true; });
     await voiceClosed; await audioClosed;
-    if (failed) throw new NativeMediaError('close', '媒体资源尚未确认关闭。');
+    if (failed) throw new NativeMediaError('close', AppLanguage.pick('媒体资源尚未确认关闭。', 'The media resource is not confirmed closed.'));
   }
 
   private async grantVoice(owner: MediaOwner): Promise<boolean> {
     this.assertCurrent(owner);
-    if (VoiceMicLease.permissionOpen) throw new NativeMediaError('busy', '麦克风权限窗口尚未关闭。');
+    if (VoiceMicLease.permissionOpen) throw new NativeMediaError('busy', AppLanguage.pick('麦克风权限窗口尚未关闭。', 'The microphone permission prompt has not closed.'));
     VoiceMicLease.permissionOpen = true;
     try {
       const context = owner.ability.getAbility().context;
@@ -162,7 +163,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       this.assertCurrent(owner); owner.voiceGranted = answer.authResults[0] === 0; return owner.voiceGranted;
     } catch (error) {
       if (error instanceof NativeMediaError) throw error as Error;
-      throw new NativeMediaError('permission', '无法确认麦克风权限。');
+      throw new NativeMediaError('permission', AppLanguage.pick('无法确认麦克风权限。', 'The microphone permission could not be confirmed.'));
     } finally { VoiceMicLease.permissionOpen = false; }
   }
   private voiceCurrent(owner: MediaOwner, generation: number): boolean {
@@ -170,35 +171,35 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
   }
   private async startVoice(owner: MediaOwner): Promise<void> {
     this.assertCurrent(owner);
-    if (!this.indicator) throw new NativeMediaError('indicator', '主线应用尚未接入可见的停止控件。');
-    if (!owner.voiceGranted) throw new NativeMediaError('permission', '请先允许使用麦克风。');
-    if (owner.voice || owner.voiceOpening || owner.voiceClosing) throw new NativeMediaError('busy', '上一语音活动检测尚未关闭。');
+    if (!this.indicator) throw new NativeMediaError('indicator', AppLanguage.pick('主线应用尚未接入可见的停止控件。', 'The mainline app has not connected a visible stop control.'));
+    if (!owner.voiceGranted) throw new NativeMediaError('permission', AppLanguage.pick('请先允许使用麦克风。', 'Allow microphone access first.'));
+    if (owner.voice || owner.voiceOpening || owner.voiceClosing) throw new NativeMediaError('busy', AppLanguage.pick('上一语音活动检测尚未关闭。', 'The previous voice activity capture has not closed.'));
     const generation = ++owner.voiceGeneration;
     const work = this.openVoice(owner, generation); owner.voiceOpening = work;
     try { await work; }
     catch (error) {
-      try { await this.stopVoice(owner); } catch (_) { throw new NativeMediaError('close', '麦克风尚未确认释放。'); }
+      try { await this.stopVoice(owner); } catch (_) { throw new NativeMediaError('close', AppLanguage.pick('麦克风尚未确认释放。', 'The microphone is not confirmed released.')); }
       if (error instanceof NativeMediaError) throw error as Error;
-      throw new NativeMediaError('capture', '语音活动采集未能启动。');
+      throw new NativeMediaError('capture', AppLanguage.pick('语音活动采集未能启动。', 'Voice activity capture could not start.'));
     } finally { if (owner.voiceOpening === work) owner.voiceOpening = null; }
   }
   private async openVoice(owner: MediaOwner, generation: number): Promise<void> {
-    if (!canIUse('SystemCapability.Multimedia.Audio.Capturer')) throw new NativeMediaError('capture', '当前设备不支持音频采集。');
+    if (!canIUse('SystemCapability.Multimedia.Audio.Capturer')) throw new NativeMediaError('capture', AppLanguage.pick('当前设备不支持音频采集。', 'This device does not support audio capture.'));
     const context = owner.ability.getAbility().context;
     const grant = await abilityAccessCtrl.createAtManager().checkAccessToken(context.applicationInfo.accessTokenId, 'ohos.permission.MICROPHONE');
-    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', '语音活动检测已退役。');
-    if (grant !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) throw new NativeMediaError('permission', '麦克风权限已关闭。');
+    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', AppLanguage.pick('语音活动检测已退役。', 'The voice activity capture has been retired.'));
+    if (grant !== abilityAccessCtrl.GrantStatus.PERMISSION_GRANTED) throw new NativeMediaError('permission', AppLanguage.pick('麦克风权限已关闭。', 'Microphone access is turned off.'));
     const token = new VoiceMicToken('plugin', async (): Promise<void> => {
       await this.closeOwner(owner); this.notice(owner, 'owner.revoked', 'dictation');
       if (this.owner === owner) this.owner = null;
     });
-    if (!VoiceMicLease.plugin(token)) throw new NativeMediaError('busy', '听写正在使用麦克风。');
+    if (!VoiceMicLease.plugin(token)) throw new NativeMediaError('busy', AppLanguage.pick('听写正在使用麦克风。', 'Dictation is using the microphone.'));
     owner.voiceMic = token;
     const indicator = this.indicator;
-    if (!indicator) throw new NativeMediaError('indicator', '没有可见的停止控件。');
+    if (!indicator) throw new NativeMediaError('indicator', AppLanguage.pick('没有可见的停止控件。', 'There is no visible stop control.'));
     owner.indicatorRequested = true; // Attempt ownership, not proof that UI is visible.
     await indicator.show(owner.key, (): void => { if (this.owner === owner) this.retire('user'); });
-    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', '语音活动检测已退役。');
+    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', AppLanguage.pick('语音活动检测已退役。', 'The voice activity capture has been retired.'));
     const capture = new OhosSpeechActivity(
       (): boolean => this.voiceCurrent(owner, generation),
       (speaking: boolean): void => {
@@ -212,7 +213,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       (): void => { VoiceMicLease.release(token); if (owner.voiceMic === token) owner.voiceMic = null; });
     owner.voice = capture; capture.setPlaying(owner.player !== null);
     await capture.start();
-    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', '语音活动检测已退役。');
+    if (!this.voiceCurrent(owner, generation)) throw new NativeMediaError('stale-owner', AppLanguage.pick('语音活动检测已退役。', 'The voice activity capture has been retired.'));
   }
   private async drainVoice(owner: MediaOwner, generation: number): Promise<void> {
     if (owner.voiceDraining) return; owner.voiceDraining = true;
@@ -242,7 +243,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
   private async closeVoice(owner: MediaOwner): Promise<void> {
     try { if (owner.voiceOpening) await owner.voiceOpening; } catch (_) {}
     if (owner.voice) {
-      try { await owner.voice.stop(); } catch (_) { throw new NativeMediaError('close', '麦克风尚未确认释放。'); }
+      try { await owner.voice.stop(); } catch (_) { throw new NativeMediaError('close', AppLanguage.pick('麦克风尚未确认释放。', 'The microphone is not confirmed released.')); }
       owner.voice = null;
     }
     else if (owner.voiceMic) { VoiceMicLease.release(owner.voiceMic); owner.voiceMic = null; }
@@ -251,7 +252,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
   }
 
   private async handle(call: MethodCall, binding: FlutterPluginBinding): Promise<Any> {
-    if (this.engine !== binding) throw new NativeMediaError('stale-owner', '媒体通道已关闭。');
+    if (this.engine !== binding) throw new NativeMediaError('stale-owner', AppLanguage.pick('媒体通道已关闭。', 'The media channel is closed.'));
     if (call.method === 'capabilities') {
       const value: Map<string, Any> = new Map<string, Any>();
       const features: string[] = canIUse('SystemCapability.Multimedia.Media.AVPlayer') ? ['audio'] : [];
@@ -262,20 +263,20 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       const key = NativeMediaKey.parse(call);
       const ability = this.ability;
       const sink = this.sink;
-      if (ability === null || !this.onScreen()) throw new NativeMediaError('not-foreground', '请先回到应用窗口。');
-      if (sink === null) throw new NativeMediaError('stale-owner', '媒体事件通道已经关闭。');
-      if (this.activating) throw new NativeMediaError('busy', '上一项媒体授权尚未关闭。');
+      if (ability === null || !this.onScreen()) throw new NativeMediaError('not-foreground', AppLanguage.pick('请先回到应用窗口。', 'Return to the app window first.'));
+      if (sink === null) throw new NativeMediaError('stale-owner', AppLanguage.pick('媒体事件通道已经关闭。', 'The media event channel is already closed.'));
+      if (this.activating) throw new NativeMediaError('busy', AppLanguage.pick('上一项媒体授权尚未关闭。', 'The previous media grant has not closed.'));
       this.activating = true;
       try {
         if (this.owner !== null) await this.closeOwner(this.owner);
-        if (this.engine !== binding || this.ability !== ability || this.sink !== sink || !this.onScreen()) throw new NativeMediaError('stale-owner', '媒体操作已取消。');
+        if (this.engine !== binding || this.ability !== ability || this.sink !== sink || !this.onScreen()) throw new NativeMediaError('stale-owner', AppLanguage.pick('媒体操作已取消。', 'The media operation was cancelled.'));
         this.owner = new MediaOwner(key, binding, ability, sink); return null;
       } finally { this.activating = false; }
     }
     const owner = this.owner;
     if (owner === null || !owner.key.matches(call)) {
       if (call.method === 'disposeOwner') return null;
-      throw new NativeMediaError('stale-owner', '不是当前媒体操作的所有者。');
+      throw new NativeMediaError('stale-owner', AppLanguage.pick('不是当前媒体操作的所有者。', 'This is not the owner of the current media operation.'));
     }
     if (call.method === 'disposeOwner') {
       await this.closeOwner(owner); if (this.owner === owner) this.owner = null; return null;
@@ -287,7 +288,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
       owner.audioGeneration++;
       if (owner.player !== null) {
         const player = owner.player;
-        try { await player.stop(); } catch (_) { throw new NativeMediaError('close', '音频资源尚未确认关闭。'); }
+        try { await player.stop(); } catch (_) { throw new NativeMediaError('close', AppLanguage.pick('音频资源尚未确认关闭。', 'The audio resource is not confirmed closed.')); }
         if (owner.player === player) owner.player = null;
       }
       return null;
@@ -295,23 +296,23 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
     this.assertCurrent(owner);
     if (call.method === 'requestVoiceGrant') {
       // No system prompt for a microphone this build can't listen with.
-      if (!this.indicator) throw new NativeMediaError('unsupported', '此媒体通道尚未启用语音活动检测。');
+      if (!this.indicator) throw new NativeMediaError('unsupported', AppLanguage.pick('此媒体通道尚未启用语音活动检测。', 'This media channel has not enabled voice activity capture.'));
       return await this.grantVoice(owner);
     }
     if (call.method === 'startVoice') { await this.startVoice(owner); return null; }
     if (['showOverlay', 'updateOverlay', 'hideOverlay'].includes(call.method)) {
-      throw new NativeMediaError('unsupported', '此媒体通道尚未启用原生字幕。');
+      throw new NativeMediaError('unsupported', AppLanguage.pick('此媒体通道尚未启用原生字幕。', 'This media channel has not enabled native captions.'));
     }
-    if (owner.busy) throw new NativeMediaError('busy', '上一项播放器操作尚未完成。');
+    if (owner.busy) throw new NativeMediaError('busy', AppLanguage.pick('上一项播放器操作尚未完成。', 'The previous player operation has not finished.'));
     owner.busy = true;
     try {
       if (call.method === 'play') {
         const generation = ++owner.audioGeneration;
-        if (!canIUse('SystemCapability.Multimedia.Media.AVPlayer')) throw new NativeMediaError('unsupported', '当前设备不支持音频播放。');
+        if (!canIUse('SystemCapability.Multimedia.Media.AVPlayer')) throw new NativeMediaError('unsupported', AppLanguage.pick('当前设备不支持音频播放。', 'This device does not support audio playback.'));
         const relative = nativeClipRelative(owner.context.cacheDir, owner.key, call.argument('privatePath'), call.argument('contentType'));
         if (owner.player !== null) await owner.player.stop();
         this.assertCurrent(owner);
-        if (owner.audioGeneration !== generation) throw new NativeMediaError('stale-owner', '音频请求已被停止。');
+        if (owner.audioGeneration !== generation) throw new NativeMediaError('stale-owner', AppLanguage.pick('音频请求已被停止。', 'The audio request has been stopped.'));
         const player: OhosClipPlayer = new OhosClipPlayer(this.opener,
           (): boolean => this.current(owner) && owner.audioGeneration === generation,
           (kind: string, reason: string): void => {
@@ -322,7 +323,7 @@ export default class NativeMediaPlugin implements FlutterPlugin, AbilityAware {
         this.assertCurrent(owner);
         return null;
       }
-      if (owner.player === null) throw new NativeMediaError('audio', '没有当前音频片段。');
+      if (owner.player === null) throw new NativeMediaError('audio', AppLanguage.pick('没有当前音频片段。', 'There is no current audio clip.'));
       await owner.player.setPlaying(call.method === 'resume');
       owner.voice?.setPlaying(call.method === 'resume');
       this.assertCurrent(owner); return null;

@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // dsh/companion_voice matches Android's system voice channel. 未在真机核实。
 // Core Speech Kit API 11+, offline zh-CN; no microphone or background permission.
 import UIAbility from '@ohos.app.ability.UIAbility';
@@ -78,7 +79,7 @@ export default class CompanionVoicePlugin implements FlutterPlugin, AbilityAware
     this.handle(call, binding).then((value: Any): void => {
       try { result.success(value); } catch (_) {}
     }, (_error: Error): void => {
-      try { result.error('speech-output', '系统朗读尚未停止，请重试或重新打开应用。', null); } catch (_) {}
+      try { result.error('speech-output', AppLanguage.pick('系统朗读尚未停止，请重试或重新打开应用。', 'System speech has not stopped; try again or reopen the app.'), null); } catch (_) {}
     });
   }
 

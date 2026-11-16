@@ -1,4 +1,6 @@
 // 未经目标 SDK / 真机核实；页面与资源接线见 companion-widget.md。
+import { AppLanguage } from '../i18n/AppLanguage';
+
 export type WidgetValue = string | number | null;
 
 export class WidgetValues {
@@ -15,6 +17,7 @@ export class WidgetValues {
 
 export interface WidgetView {
   ready: boolean;
+  language: string;
   name: string;
   nameDefault: boolean;
   status: string;
@@ -97,7 +100,7 @@ export function widgetView(values: WidgetValues, now: Date, ready: boolean = tru
   else if (night) { status = values.statusAsleep; if (status === undefined) fallback = 'asleep'; }
   else { status = values.statusWaiting; if (status === undefined) fallback = 'waiting'; }
   const view: WidgetView = {
-    ready: ready, name: values.name ?? '', nameDefault: values.name === undefined,
+    ready: ready, language: AppLanguage.language(), name: values.name ?? '', nameDefault: values.name === undefined,
     status: status ?? '', statusDefault: fallback,
     line: time - (values.saidAt ?? 0) < 12 * 3600000 ? values.line ?? '' : '',
     pearls: bond >= 0 ? '●'.repeat(bond + 1) + '○'.repeat(3 - bond) : '',

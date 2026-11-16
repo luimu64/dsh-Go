@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // System selection only: no storage permission, persistent grant, or cache copy.
 // Byte access begins in Dart's separate read call, never inside the PhotoPicker callback.
 import fs from '@ohos.file.fs';
@@ -83,7 +84,7 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
     this.engine = binding; this.ability = null;
     this.channel = new MethodChannel(binding.getBinaryMessenger(), 'dsh/native-files');
     this.channel.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (this.engine !== binding) { this.error(result, new NativeFileError('cancelled', '文件通道已关闭。')); return; }
+      if (this.engine !== binding) { this.error(result, new NativeFileError('cancelled', AppLanguage.pick('文件通道已关闭。', 'The file channel is closed.'))); return; }
       if (call.method === 'capabilities') {
         const value: Map<string, Any> = new Map<string, Any>(); value.set('files', canIUse('SystemCapability.FileManagement.UserFileService'));
         this.success(result, value);
@@ -110,12 +111,12 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
     return value.active && this.selection === value && this.engine === value.engine && this.ability === value.ability;
   }
   private assertCurrent(value: NativeSelection): void {
-    if (!this.current(value)) throw new NativeFileError('cancelled', '文件选择已取消或过期。');
+    if (!this.current(value)) throw new NativeFileError('cancelled', AppLanguage.pick('文件选择已取消或过期。', 'File selection was cancelled or expired.'));
   }
   private error(result: MethodResult, error: Error | NativeFileError): void {
     try {
       if (error instanceof NativeFileError) result.error(error.code, error.message, null);
-      else result.error('failed', '无法读取所选文件，请重试。', null);
+      else result.error('failed', AppLanguage.pick('无法读取所选文件，请重试。', 'Could not read the selected file. Try again.'), null);
     } catch (_) { /* Never turn a failed transport into a second method reply. */ }
   }
   private success(result: MethodResult, value: Any): void {
@@ -127,7 +128,7 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
       const request = NativeFileRequest.parse(call.args);
       const engine = this.engine; const ability = this.ability;
       if (engine === null || ability === null || !foregroundAbilities.has(ability.getAbility())) {
-        throw new NativeFileError('unavailable', '请在应用前台点击选择文件。');
+        throw new NativeFileError('unavailable', AppLanguage.pick('请在应用前台点击选择文件。', 'Tap to select files while the app is in the foreground.'));
       }
       if (fileLease !== null) {
         // A detached plugin has no method handler left to retry a failed close.
@@ -136,11 +137,11 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
         if (this.selection !== fileLease || fileLease.engine !== engine || fileLease.request.owner !== request.owner) {
           this.closeWhenIdle(fileLease);
         }
-        throw new NativeFileError('busy', '上一项文件选择或读取尚未关闭，请稍后重试。');
+        throw new NativeFileError('busy', AppLanguage.pick('上一项文件选择或读取尚未关闭，请稍后重试。', 'A previous file selection or read has not closed. Try again later.'));
       }
       const photos = request.images || request.visual;
       const syscap = photos ? 'SystemCapability.FileManagement.PhotoAccessHelper.Core' : 'SystemCapability.FileManagement.UserFileService';
-      if (!canIUse(syscap)) throw new NativeFileError('unavailable', '当前设备没有所需的系统文件选择器。');
+      if (!canIUse(syscap)) throw new NativeFileError('unavailable', AppLanguage.pick('当前设备没有所需的系统文件选择器。', 'This device has no required system file picker.'));
       const selected = new NativeSelection(request, engine, ability, result);
       fileLease = selected; this.selection = selected;
       selected.timer = setTimeout((): void => this.revoke(selected), 5 * 60 * 1000);
@@ -175,7 +176,7 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
         selected.picking = false;
         const reply = selected.pending; selected.pending = null;
         this.revoke(selected);
-        if (reply !== null) this.error(reply, new NativeFileError('unavailable', '系统文件选择未完成。'));
+        if (reply !== null) this.error(reply, new NativeFileError('unavailable', AppLanguage.pick('系统文件选择未完成。', 'The system file selection did not complete.')));
       });
     } catch (error) { this.error(result, error as Error); }
   }
@@ -185,22 +186,22 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
     const handle: Any = call.argument('handle');
     const entry = selected?.files.find((value: SelectedNativeFile): boolean => value.handle === handle);
     if (selected === null || !this.current(selected) || selected.request.owner !== call.argument('owner') || entry === undefined) {
-      this.error(result, new NativeFileError('cancelled', '文件选择已取消或过期。')); return;
+      this.error(result, new NativeFileError('cancelled', AppLanguage.pick('文件选择已取消或过期。', 'File selection was cancelled or expired.'))); return;
     }
     if (selected.ioBusy || selected.closing || selected.picking) {
-      this.error(result, new NativeFileError('busy', '文件读取尚未结束。')); return;
+      this.error(result, new NativeFileError('busy', AppLanguage.pick('文件读取尚未结束。', 'File reading has not finished.'))); return;
     }
     selected.ioBusy = true;
     this.readChunk(selected, entry).then((value: Uint8Array | null): void => {
       selected.ioBusy = false;
       if (this.current(selected)) this.success(result, value);
-      else this.error(result, new NativeFileError('cancelled', '文件选择已取消或过期。'));
+      else this.error(result, new NativeFileError('cancelled', AppLanguage.pick('文件选择已取消或过期。', 'File selection was cancelled or expired.')));
       this.closeWhenIdle(selected);
     }, (error: Error): void => {
       selected.ioBusy = false;
       const active = this.current(selected);
       this.revoke(selected);
-      this.error(result, active ? error : new NativeFileError('cancelled', '文件选择已取消或过期。'));
+      this.error(result, active ? error : new NativeFileError('cancelled', AppLanguage.pick('文件选择已取消或过期。', 'File selection was cancelled or expired.')));
     });
   }
 
@@ -213,14 +214,14 @@ export default class NativeFilesPlugin implements FlutterPlugin, AbilityAware {
       this.assertCurrent(selected);
       const stat = await fs.stat(entry.file.fd);
       this.assertCurrent(selected);
-      if (!stat.isFile()) throw new NativeFileError('invalid', '所选资源不是普通文件。');
+      if (!stat.isFile()) throw new NativeFileError('invalid', AppLanguage.pick('所选资源不是普通文件。', 'The selected resource is not a regular file.'));
       selected.request.budget.known(entry.handle, stat.size);
     }
     const countLimit = selected.request.budget.chunkSize(entry.handle);
     const buffer = new ArrayBuffer(countLimit);
     const count = await fs.read(entry.file.fd, buffer, { offset: entry.offset, length: countLimit });
     this.assertCurrent(selected);
-    if (!Number.isSafeInteger(count) || count < 0 || count > countLimit) throw new NativeFileError('failed', '文件读取返回了无效长度。');
+    if (!Number.isSafeInteger(count) || count < 0 || count > countLimit) throw new NativeFileError('failed', AppLanguage.pick('文件读取返回了无效长度。', 'File reading returned an invalid length.'));
     if (count === 0) {
       await fs.close(entry.file); entry.file = null; entry.ended = true;
       this.assertCurrent(selected); return null;

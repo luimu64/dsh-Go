@@ -21,7 +21,7 @@ struct IOSPhoneOperation {
       let method = Method(rawValue: name), let raw = request.action.params,
       raw.utf8.count <= 16_384,
       let parameters = try? JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any] else {
-      throw IOSPhoneOperationError(message: "手机动作参数无效，没有执行。")
+      throw IOSPhoneOperationError(message: AppLanguage.words("The phone action arguments are invalid; nothing was executed.", "手机动作参数无效，没有执行。"))
     }
     self.method = method; self.parameters = parameters
     let allowed: Set<String>
@@ -48,16 +48,16 @@ struct IOSPhoneOperation {
       // Both native ASCII and XCTest typeText can turn LF/TAB into keys. A
       // literal text argument cannot authorize Enter or move focus implicitly.
       guard !text.unicodeScalars.contains(where: Self.isConsentControl) else {
-        throw IOSPhoneOperationError(message: "输入含不支持的控制或不可见字符，没有派发任何按键。")
+        throw IOSPhoneOperationError(message: AppLanguage.words("The input contains unsupported control or invisible characters; no keys were sent.", "输入含不支持的控制或不可见字符，没有派发任何按键。"))
       }
       if text.utf8.allSatisfy({ $0 < 128 }), text.utf8.count > 1024 {
-        throw IOSPhoneOperationError(message: "ASCII 输入超过 1024 字节，没有截断或分批输入。")
+        throw IOSPhoneOperationError(message: AppLanguage.words("The ASCII input exceeds 1024 bytes; it was not truncated or split into batches.", "ASCII 输入超过 1024 字节，没有截断或分批输入。"))
       }
       // Short all-digit strings commonly represent OTP/PIN/CVV. Refuse this
       // conservative class even if OCR failed to recognize the nearby label.
       let numeric = text.unicodeScalars.filter { !Self.isNumericSeparator($0) }
       if (3...8).contains(numeric.count), numeric.allSatisfy({ CharacterSet.decimalDigits.contains($0) }) {
-        throw IOSPhoneOperationError(message: "这段输入可能是验证码或安全码，请用 handoff 交给用户。")
+        throw IOSPhoneOperationError(message: AppLanguage.words("This input may be a verification code or security code; use handoff to give it to the user.", "这段输入可能是验证码或安全码，请用 handoff 交给用户。"))
       }
       try optionalBool("submit")
     case .scroll:
@@ -65,7 +65,7 @@ struct IOSPhoneOperation {
       _ = try requiredString("screen", limit: 96)
       if parameters["id"] != nil { _ = try integer("id", in: 1...400) }
       guard ["up", "down", "left", "right"].contains(try requiredString("direction", limit: 16)) else {
-        throw IOSPhoneOperationError(message: "滚动方向无效。")
+        throw IOSPhoneOperationError(message: AppLanguage.words("The scroll direction is invalid.", "滚动方向无效。"))
       }
     case .collect:
       allowed = ["screen", "list", "max_pages", "until"]
@@ -75,11 +75,11 @@ struct IOSPhoneOperation {
     case .key:
       allowed = ["key", "screen"]; try optionalString("screen", limit: 96)
       guard ["home", "back", "notifications"].contains(try requiredString("key", limit: 32)) else {
-        throw IOSPhoneOperationError(message: "iOS 只支持 back、home、notifications；要切应用请用 open。")
+        throw IOSPhoneOperationError(message: AppLanguage.words("iOS supports only back, home, and notifications; use open to switch apps.", "iOS 只支持 back、home、notifications；要切应用请用 open。"))
       }
     }
     guard Set(parameters.keys).isSubset(of: allowed), parameters["background"] as? Bool != true else {
-      throw IOSPhoneOperationError(message: "参数含不支持的选项；iOS 不提供隐藏后台屏幕操控。")
+      throw IOSPhoneOperationError(message: AppLanguage.words("The arguments contain unsupported options; iOS does not provide hidden background screen control.", "参数含不支持的选项；iOS 不提供隐藏后台屏幕操控。"))
     }
   }
 
@@ -105,46 +105,85 @@ struct IOSPhoneOperation {
   /// Identifiers are quoted and bounded; input has a complete visible rendering.
   /// Clipboard contents and pairing data are never consulted to build this text.
   func consentDescription(targetLabel: String?) -> String {
-    let target = targetLabel.map { "\n上次观察中的目标：\(Self.quotedDisplay($0))" } ?? ""
+    let target = targetLabel.map {
+      AppLanguage.words("\nTarget in the last observation: \(Self.quotedDisplay($0))", "\n上次观察中的目标：\(Self.quotedDisplay($0))")
+    } ?? ""
     switch method {
-    case .apps: return "读取可启动应用的名称和包名，并发送给本次会话。" + ((parameters["query"] as? String).map { "\n筛选：\(Self.quotedDisplay($0))" } ?? "")
-    case .open: return "打开应用：\(Self.quotedDisplay(parameters["app"] as? String ?? ""))。\n可能建立屏幕控制通道并读取打开后的屏幕；系统接受启动不代表应用已到前台。"
-    case .screen: return "建立本次任务的屏幕控制通道（系统可能显示共享提示），读取一张屏幕并在本机识别文字。识别出的文字" + (wantsImage ? "和标号截图" : "") + "将发送给本次会话。"
-    case .tap: return (parameters["long"] as? Bool == true ? "长按" : "点击") + "屏幕 \(Self.quotedDisplay(screen ?? "")) 的编号 \(parameters["id"] as? Int ?? 0)。" + target
-    case .tapXY: return "点击截图 \(Self.quotedDisplay(screen ?? "")) 中的像素坐标 (\(parameters["x"] as? Int ?? 0), \(parameters["y"] as? Int ?? 0))。"
+    case .apps: return AppLanguage.words(
+      "Read the names and bundle IDs of launchable apps and send them to this conversation.",
+      "读取可启动应用的名称和包名，并发送给本次会话。")
+      + ((parameters["query"] as? String).map {
+        AppLanguage.words("\nFilter: \(Self.quotedDisplay($0))", "\n筛选：\(Self.quotedDisplay($0))")
+      } ?? "")
+    case .open: return AppLanguage.words(
+      "Open app: \(Self.quotedDisplay(parameters["app"] as? String ?? "")).\nA screen control channel may be established and the screen read after opening; the system accepting the launch does not mean the app is in the foreground.",
+      "打开应用：\(Self.quotedDisplay(parameters["app"] as? String ?? ""))。\n可能建立屏幕控制通道并读取打开后的屏幕；系统接受启动不代表应用已到前台。")
+    case .screen: return AppLanguage.words(
+      "Set up this task's screen control channel (the system may show a sharing prompt), read one screen, and recognize text on this device. The recognized text"
+        + (wantsImage ? " and the numbered screenshot" : "") + " will be sent to this conversation.",
+      "建立本次任务的屏幕控制通道（系统可能显示共享提示），读取一张屏幕并在本机识别文字。识别出的文字"
+        + (wantsImage ? "和标号截图" : "") + "将发送给本次会话。")
+    case .tap:
+      let verb = parameters["long"] as? Bool == true
+        ? AppLanguage.words("Long-press", "长按")
+        : AppLanguage.words("Tap", "点击")
+      return AppLanguage.words(
+        "\(verb) number \(parameters["id"] as? Int ?? 0) on screen \(Self.quotedDisplay(screen ?? "")).",
+        "\(verb)屏幕 \(Self.quotedDisplay(screen ?? "")) 的编号 \(parameters["id"] as? Int ?? 0)。") + target
+    case .tapXY: return AppLanguage.words(
+      "Tap pixel coordinates (\(parameters["x"] as? Int ?? 0), \(parameters["y"] as? Int ?? 0)) in screenshot \(Self.quotedDisplay(screen ?? "")).",
+      "点击截图 \(Self.quotedDisplay(screen ?? "")) 中的像素坐标 (\(parameters["x"] as? Int ?? 0), \(parameters["y"] as? Int ?? 0))。")
     case .type:
       let displayedText = Self.quotedDisplay(text ?? "", scalarLimit: nil)
-      var message = "在屏幕 \(Self.quotedDisplay(screen ?? "")) 的编号 \(parameters["id"] as? Int ?? 0) 输入以下全文，并替换原内容：\n\(displayedText)" + target
-      message += "\n\n显示说明：连续空白显示为一个空格；反斜线转义表示原始特殊字符。实际输入保留原文。"
+      var message = AppLanguage.words(
+        "Type the following full text into number \(parameters["id"] as? Int ?? 0) on screen \(Self.quotedDisplay(screen ?? "")), replacing the existing content:\n\(displayedText)",
+        "在屏幕 \(Self.quotedDisplay(screen ?? "")) 的编号 \(parameters["id"] as? Int ?? 0) 输入以下全文，并替换原内容：\n\(displayedText)") + target
+      message += AppLanguage.words(
+        "\n\nDisplay note: consecutive whitespace appears as a single space; backslash escapes mark literal special characters. The actual input keeps the original text.",
+        "\n\n显示说明：连续空白显示为一个空格；反斜线转义表示原始特殊字符。实际输入保留原文。")
       if usesClipboard {
-        message += "\n\nCoreDevice 路线输入非 ASCII 文字时会临时使用剪贴板：原内容只在本 App 内存保存，不发送给模型。请在粘贴后回到 DSH Go 恢复原内容；若本 App 在恢复前终止，保存内容会丢失。恢复内容仅在此设备可用。"
-        message += "\nCoreDevice 的后台粘贴无法核实来源，可能粘贴其他内容；这次只返回固定状态，不回传粘贴后的读屏文字或图片，请你核对。"
+        message += AppLanguage.words(
+          "\n\nOn the CoreDevice route, typing non-ASCII text temporarily uses the clipboard: the original content is kept only in this app's memory and is not sent to the model. After pasting, return to DSH Go to restore the original content; if the app terminates before restoring, the saved content is lost. The restored content is only usable on this device.",
+          "\n\nCoreDevice 路线输入非 ASCII 文字时会临时使用剪贴板：原内容只在本 App 内存保存，不发送给模型。请在粘贴后回到 DSH Go 恢复原内容；若本 App 在恢复前终止，保存内容会丢失。恢复内容仅在此设备可用。")
+        message += AppLanguage.words(
+          "\nCoreDevice's background paste cannot verify its source and may paste other content; this time it returns a fixed status only and does not return the screen text or image after pasting, so please check.",
+          "\nCoreDevice 的后台粘贴无法核实来源，可能粘贴其他内容；这次只返回固定状态，不回传粘贴后的读屏文字或图片，请你核对。")
       }
       if submits {
         if usesClipboard {
-          message += "\n\n还请求按回车／发送。CoreDevice 的剪贴板路径不能核实完整输入文字的来源，不会自动派发回车／发送按键，请你核对完成；XCTest 路线仍须核对完整焦点值后才可能继续。"
+          message += AppLanguage.words(
+            "\n\nIt also requests Return/Send. The CoreDevice clipboard path cannot verify the source of the complete input text, so it will not send Return/Send automatically; check that it is done. The XCTest route still has to verify the complete focused value before it can continue.",
+            "\n\n还请求按回车／发送。CoreDevice 的剪贴板路径不能核实完整输入文字的来源，不会自动派发回车／发送按键，请你核对完成；XCTest 路线仍须核对完整焦点值后才可能继续。")
         } else {
-          message += "\n\n还请求按回车／发送。只有新的读屏能核对完整输入文字时才继续；核对不了就交给你。"
+          message += AppLanguage.words(
+            "\n\nIt also requests Return/Send. It continues only when a new screen read can verify the complete input text; otherwise it hands that to you.",
+            "\n\n还请求按回车／发送。只有新的读屏能核对完整输入文字时才继续；核对不了就交给你。")
         }
       }
       return message
     case .scroll:
-      return "按 \(parameters["direction"] as? String ?? "down") 方向滚动一次，再读取新屏幕。CoreDevice 的编号表示 OCR 文字框，不能证明它是一个列表。" + target
+      return AppLanguage.words(
+        "Scroll once in the \(parameters["direction"] as? String ?? "down") direction, then read the new screen. CoreDevice numbers are OCR text boxes and do not prove it is a list.",
+        "按 \(parameters["direction"] as? String ?? "down") 方向滚动一次，再读取新屏幕。CoreDevice 的编号表示 OCR 文字框，不能证明它是一个列表。") + target
     case .collect:
-      return "围绕编号 \(parameters["list"] as? Int ?? 0) 的横向位置，最多读取 \(pages) 页并向下滚动 \(max(0, pages - 1)) 次；收集文字发送给本次会话。滚动会改变界面。" + target
+      return AppLanguage.words(
+        "Around the horizontal position of number \(parameters["list"] as? Int ?? 0), read at most \(pages) pages and scroll down \(max(0, pages - 1)) times; collect the text and send it to this conversation. Scrolling changes the screen.",
+        "围绕编号 \(parameters["list"] as? Int ?? 0) 的横向位置，最多读取 \(pages) 页并向下滚动 \(max(0, pages - 1)) 次；收集文字发送给本次会话。滚动会改变界面。") + target
     case .key:
-      return "执行一次系统操作：\(parameters["key"] as? String ?? "")，再读取新屏幕。"
+      return AppLanguage.words(
+        "Perform one system action: \(parameters["key"] as? String ?? ""), then read the new screen.",
+        "执行一次系统操作：\(parameters["key"] as? String ?? "")，再读取新屏幕。")
     }
   }
 
   private func requiredString(_ key: String, limit: Int) throws -> String {
     guard let value = parameters[key] as? String, !value.isEmpty, value.utf8.count <= limit,
-      !value.contains("\0") else { throw IOSPhoneOperationError(message: "参数 \(key) 无效。") }
+      !value.contains("\0") else { throw IOSPhoneOperationError(message: AppLanguage.words("Parameter \(key) is invalid.", "参数 \(key) 无效。")) }
     // Non-text strings also reach native consent. They must not inject lines,
     // directional controls or paragraph separators into trusted explanation.
     // The text branch uses the same predicate and preserves its specific error.
     guard key == "text" || !value.unicodeScalars.contains(where: Self.isConsentControl) else {
-      throw IOSPhoneOperationError(message: "参数 \(key) 无效。")
+      throw IOSPhoneOperationError(message: AppLanguage.words("Parameter \(key) is invalid.", "参数 \(key) 无效。"))
     }
     return value
   }
@@ -256,14 +295,14 @@ struct IOSPhoneOperation {
   private func optionalBool(_ key: String) throws {
     guard let value = parameters[key] else { return }
     guard let number = value as? NSNumber, CFGetTypeID(number) == CFBooleanGetTypeID() else {
-      throw IOSPhoneOperationError(message: "参数 \(key) 必须是布尔值。")
+      throw IOSPhoneOperationError(message: AppLanguage.words("Parameter \(key) must be a boolean.", "参数 \(key) 必须是布尔值。"))
     }
   }
   private func integer(_ key: String, in range: ClosedRange<Int>) throws -> Int {
     guard let number = parameters[key] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
       number.doubleValue.isFinite, number.doubleValue.rounded() == number.doubleValue,
       number.doubleValue >= Double(range.lowerBound), number.doubleValue <= Double(range.upperBound) else {
-      throw IOSPhoneOperationError(message: "参数 \(key) 必须是范围内的整数。")
+      throw IOSPhoneOperationError(message: AppLanguage.words("Parameter \(key) must be an integer in range.", "参数 \(key) 必须是范围内的整数。"))
     }
     return number.intValue
   }

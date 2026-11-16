@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // UNCOMPILED_HMS、未在真机核实。PDFKit 独立于公开文件/选择器/媒体接口；使用安全 openUserFile。
 import fs from '@ohos.file.fs';
 import picker from '@ohos.file.picker';
@@ -45,14 +46,14 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
     this.files = new MethodChannel(binding.getBinaryMessenger(), 'dsh/files');
     this.media = new MethodChannel(binding.getBinaryMessenger(), 'dsh/media');
     this.files.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (this.engineBinding !== binding) { result.error('cancelled', '窗口已关闭，操作已取消。', null); return; }
+      if (this.engineBinding !== binding) { result.error('cancelled', AppLanguage.pick('窗口已关闭，操作已取消。', 'The window is closed; the operation was cancelled.'), null); return; }
       if (!['resolveGuest', 'listOutputs', 'open', 'saveToDownloads', 'pdfInfo', 'pdfPage', 'pdfClose'].includes(call.method)) {
         result.notImplemented(); return;
       }
       this.reply(this.fileCall(call), result);
     } });
     this.media.setMethodCallHandler({ onMethodCall: (call: MethodCall, result: MethodResult): void => {
-      if (this.engineBinding !== binding) { result.error('cancelled', '窗口已关闭，操作已取消。', null); return; }
+      if (this.engineBinding !== binding) { result.error('cancelled', AppLanguage.pick('窗口已关闭，操作已取消。', 'The window is closed; the operation was cancelled.'), null); return; }
       if (!['saveImage', 'saveVideoFile', 'openSettings'].includes(call.method)) { result.notImplemented(); return; }
       this.reply(this.mediaCall(call), result);
     } });
@@ -79,16 +80,16 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
   private reply(work: Promise<Any>, result: MethodResult): void {
     work.then((value: Any) => result.success(value)).catch((error: Error) => {
       if (error instanceof FileChannelError || error instanceof PdfChannelError) result.error(error.code, error.message, null);
-      else result.error('failed', '文件操作未完成，请重试或使用已连接的电脑。', null);
+      else result.error('failed', AppLanguage.pick('文件操作未完成，请重试或使用已连接的电脑。', 'The file operation did not complete. Try again or use a connected computer.'), null);
     });
   }
 
   private active(generation: number): void {
-    if (generation !== this.generation || !this.context) throw new FileChannelError('cancelled', '窗口已关闭，操作已取消。');
+    if (generation !== this.generation || !this.context) throw new FileChannelError('cancelled', AppLanguage.pick('窗口已关闭，操作已取消。', 'The window is closed; the operation was cancelled.'));
   }
 
   private ui(): common.UIAbilityContext {
-    if (!this.ability) throw new FileChannelError('no_ability', '请先回到应用窗口再操作。');
+    if (!this.ability) throw new FileChannelError('no_ability', AppLanguage.pick('请先回到应用窗口再操作。', 'Return to the app window first.'));
     return this.ability.getAbility().context;
   }
 
@@ -106,7 +107,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
         return host.openUserFile(root, path.substring(root.length + 1));
       }
     }
-    throw new FileChannelError('outside_workspace', '请将文件放入本机工作区，或从已连接的电脑下载后再操作。');
+    throw new FileChannelError('outside_workspace', AppLanguage.pick('请将文件放入本机工作区，或从已连接的电脑下载后再操作。', 'Put the file in the on-device workspace, or download it from a connected computer first.'));
   }
 
   private safeName(input: string): string {
@@ -130,7 +131,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
     try { await fs.mkdir(path); }
     catch (error) { if ((error as BusinessError).code !== 13900015) throw error as Error; }
     const stat = await fs.lstat(path);
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new FileChannelError('invalid', '文件缓存目录不可用。');
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new FileChannelError('invalid', AppLanguage.pick('文件缓存目录不可用。', 'The file cache directory is unavailable.'));
   }
 
   private async slot(key: string): Promise<string> {
@@ -168,12 +169,12 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
     while (offset < size) {
       this.active(generation);
       const count = await fs.read(input, buffer, { offset: offset, length: Math.min(buffer.byteLength, size - offset) });
-      if (count === 0) throw new FileChannelError('failed', '源文件在复制时缩短，请重试。');
+      if (count === 0) throw new FileChannelError('failed', AppLanguage.pick('源文件在复制时缩短，请重试。', 'The source file shrank while copying. Try again.'));
       let written = 0;
       while (written < count) {
         this.active(generation);
         const n = await fs.write(output, buffer.slice(written, count), { offset: offset + written });
-        if (n === 0) throw new FileChannelError('failed', '文件写入未完成，请检查可用空间。');
+        if (n === 0) throw new FileChannelError('failed', AppLanguage.pick('文件写入未完成，请检查可用空间。', 'File writing did not complete; check available space.'));
         written += n;
       }
       offset += count;
@@ -255,14 +256,14 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
       }
       case 'saveToDownloads': {
         const context = this.ui();
-        if (this.picking) throw new FileChannelError('busy', '已有文件选择窗口，请先完成或取消。');
+        if (this.picking) throw new FileChannelError('busy', AppLanguage.pick('已有文件选择窗口，请先完成或取消。', 'A file picker is already open; finish or cancel it first.'));
         this.picking = true;
         try {
           const check = await this.openLocal(path, generation); await fs.close(check);
           this.active(generation);
           const selected = await new picker.DocumentViewPicker(context).save({ newFileNames: [name] });
           this.active(generation);
-          if (selected.length !== 1) throw new FileChannelError('cancelled', '保存已取消。');
+          if (selected.length !== 1) throw new FileChannelError('cancelled', AppLanguage.pick('保存已取消。', 'Saving was cancelled.'));
           const input = await this.openLocal(path, generation);
           try {
             const output = await fs.open(selected[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
@@ -282,7 +283,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
     if (!await fs.access(root)) return result;
     const rootStat = await fs.lstat(root);
     if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
-      throw new FileChannelError('outside_workspace', '输出目录必须是本机工作区内的普通目录。');
+      throw new FileChannelError('outside_workspace', AppLanguage.pick('输出目录必须是本机工作区内的普通目录。', 'The output directory must be a regular directory inside the on-device workspace.'));
     }
     const walk = async (directory: string, level: number): Promise<void> => {
       this.active(generation);
@@ -321,10 +322,10 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
       case 'image/jpeg': extension = 'jpg'; break;
       case 'image/gif': extension = 'gif'; break;
       case 'image/webp': extension = 'webp'; break;
-      default: throw new FileChannelError('invalid', '此图片格式不能保存到相册。');
+      default: throw new FileChannelError('invalid', AppLanguage.pick('此图片格式不能保存到相册。', 'This image format cannot be saved to the gallery.'));
     }
-    if (bytes.byteLength === 0) throw new FileChannelError('invalid', '图片为空。');
-    if (this.picking) throw new FileChannelError('busy', '已有文件选择窗口，请先完成或取消。');
+    if (bytes.byteLength === 0) throw new FileChannelError('invalid', AppLanguage.pick('图片为空。', 'The image is empty.'));
+    if (this.picking) throw new FileChannelError('busy', AppLanguage.pick('已有文件选择窗口，请先完成或取消。', 'A file picker is already open; finish or cancel it first.'));
     this.picking = true;
     const name = this.safeName(call.argument('name') as string);
     const dot = name.lastIndexOf('.');
@@ -342,7 +343,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
           this.active(generation);
           const chunk = bytes.slice(offset, Math.min(offset + 256 * 1024, bytes.byteLength));
           const written = await fs.write(file.fd, chunk.buffer, { offset: offset });
-          if (written === 0) throw new FileChannelError('failed', '图片写入未完成。');
+          if (written === 0) throw new FileChannelError('failed', AppLanguage.pick('图片写入未完成。', 'Image writing did not complete.'));
           offset += written;
         }
         await fs.fsync(file.fd);
@@ -352,7 +353,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
       const uris = await helper.showAssetsCreationDialog([fileUri.getUriFromPath(path)],
         [{ title: title, fileNameExtension: extension, photoType: photoAccessHelper.PhotoType.IMAGE }]);
       this.active(generation);
-      if (uris.length !== 1) throw new FileChannelError('cancelled', '保存图片已取消。');
+      if (uris.length !== 1) throw new FileChannelError('cancelled', AppLanguage.pick('保存图片已取消。', 'Saving the image was cancelled.'));
       const input = await this.openLocal(path, generation);
       try {
         const output = await fs.open(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
@@ -378,9 +379,9 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
     const dot = name.lastIndexOf('.');
     const extension = dot > 0 ? name.substring(dot + 1).toLowerCase() : '';
     if (!['mp4', 'm4v', 'mov', '3gp', 'mkv', 'webm'].includes(extension)) {
-      throw new FileChannelError('invalid', '此视频格式不能保存到相册。');
+      throw new FileChannelError('invalid', AppLanguage.pick('此视频格式不能保存到相册。', 'This video format cannot be saved to the gallery.'));
     }
-    if (this.picking) throw new FileChannelError('busy', '已有文件选择窗口，请先完成或取消。');
+    if (this.picking) throw new FileChannelError('busy', AppLanguage.pick('已有文件选择窗口，请先完成或取消。', 'A file picker is already open; finish or cancel it first.'));
     this.picking = true;
     let helper: photoAccessHelper.PhotoAccessHelper | undefined;
     try {
@@ -390,7 +391,7 @@ export default class FilesMediaPlugin implements FlutterPlugin, AbilityAware {
         const uris = await helper.showAssetsCreationDialog([fileUri.getUriFromPath(source)],
           [{ title: name.substring(0, dot), fileNameExtension: extension, photoType: photoAccessHelper.PhotoType.VIDEO }]);
         this.active(generation);
-        if (uris.length !== 1) throw new FileChannelError('cancelled', '保存视频已取消。');
+        if (uris.length !== 1) throw new FileChannelError('cancelled', AppLanguage.pick('保存视频已取消。', 'Saving the video was cancelled.'));
         const output = await fs.open(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
         try { await this.copy(input, output.fd, generation); }
         finally { await fs.close(output); }

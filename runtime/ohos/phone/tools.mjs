@@ -1,6 +1,7 @@
 import { HarnessError } from '@deepseek-ai/dsh-llm';
 import { ToolArgsError, validateJsonSchemaValue } from '@deepseek-ai/dsh-tools';
-import { phoneCatalog, phoneResultSchema } from './catalog.mjs';
+import { phoneCatalogIn, phoneResultSchema } from './catalog.mjs';
+import { appLanguageHub } from '../../bridge/dsh-go-bridge/lib/app-language.js';
 
 const rejected = (code, message) => ({ status: 'failed', effect: 'none', evidence: 'unknown', dispatched: false, code, message });
 const render = value => [{ type: 'text', text: JSON.stringify(value) }];
@@ -30,35 +31,37 @@ function askBeforeRunning(ctx, queue) {
 
 export function registerPhoneTools(ctx, queue) {
   const disposers = [];
+  const registered = [];
+  const hub = appLanguageHub();
   try {
   disposers.push(askBeforeRunning(ctx, queue));
-  for (const definition of phoneCatalog) {
+  for (const definition of phoneCatalogIn(hub.language)) {
     const outcomes = new WeakMap();
-    disposers.push(ctx.tools.register({ ...definition,
+    const tool = { ...definition,
       // Cooperative backstop; the queue/native permit enforce 30s/600s BOOTTIME deadlines.
       timeoutMs: 640_000,
       output: { schema: phoneResultSchema, render: (_args, value) => render(value) },
       async execute(args, exec) {
-        const invalid = validateJsonSchemaValue(definition.parameters, args);
+        const invalid = validateJsonSchemaValue(tool.parameters, args);
         if (invalid.length) throw new ToolArgsError(invalid);
         let result;
         if (typeof exec.agent?.id !== 'string' || !exec.agent.id || typeof exec.callId !== 'string' || !exec.callId) {
           result = rejected('missing_call_identity', '手机操作需要真实会话和工具调用身份。');
-        } else if (definition.name === 'mcp__phone__open') {
+        } else if (tool.name === 'mcp__phone__open') {
           if (Boolean(args.app?.trim()) === Boolean(args.url?.trim())) result = rejected('invalid_args', 'open需要app或url，二选一。');
           else if (args.background === true) result = rejected('unsupported', '鸿蒙不支持后台屏；请让DSH保持前台，使用background:false。');
-        } else if (definition.name === 'mcp__phone__clipboard') {
+        } else if (tool.name === 'mcp__phone__clipboard') {
           if (args.set !== undefined && args.get === true) result = rejected('invalid_args', 'clipboard的set和get一次只能用一个。');
           else if (args.get === true) result = rejected('unsupported', '鸿蒙手机回调只支持写剪贴板；请让用户直接粘贴需要的内容。');
           else if (args.set === undefined) result = rejected('invalid_args', 'clipboard需要set写入文字。');
-        } else if (definition.name === 'mcp__phone__notify' && (!args.title.trim() || !args.text.trim())) {
+        } else if (tool.name === 'mcp__phone__notify' && (!args.title.trim() || !args.text.trim())) {
           result = rejected('invalid_args', 'notify需要非空title和text。');
-        } else if (definition.name === 'mcp__phone__handoff' && !args.reason.trim()) {
+        } else if (tool.name === 'mcp__phone__handoff' && !args.reason.trim()) {
           result = rejected('invalid_args', 'handoff需要reason说明用户要做什么。');
         }
         if (!result) {
           try { result = await queue.enqueue({ sessionId: exec.agent.id, callId: exec.callId,
-            tool: definition.name, args, signal: exec.signal }); }
+            tool: tool.name, args, signal: exec.signal }); }
           catch (error) { result = rejected(error.code ?? 'unavailable', error.message); }
         }
         outcomes.set(exec, result);
@@ -72,8 +75,21 @@ export function registerPhoneTools(ctx, queue) {
         const { status, effect, evidence, dispatched, code } = phone;
         return [...result.content, { type: 'text', text: `手机端结果证据：${JSON.stringify({ status, effect, evidence, dispatched, code })}` }];
       },
-    }));
+    };
+    registered.push(tool);
+    disposers.push(ctx.tools.register(tool));
   }
+  // Rewrite only the wording. The definition objects stay registered, so a step
+  // that already admitted them keeps executing and in-flight calls do not move.
+  disposers.push(hub.subscribe((language) => {
+    const next = phoneCatalogIn(language);
+    if (next.length !== registered.length) throw new Error('phone catalog size changed with the app language');
+    for (let index = 0; index < next.length; index++) {
+      if (registered[index].name !== next[index].name) throw new Error('phone catalog order changed with the app language');
+      registered[index].description = next[index].description;
+      registered[index].parameters = next[index].parameters;
+    }
+  }));
   } catch (error) {
     for (const dispose of disposers.reverse()) dispose();
     throw error;

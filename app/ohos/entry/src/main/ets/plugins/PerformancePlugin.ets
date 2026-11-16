@@ -5,6 +5,7 @@ import {
 } from '@ohos/flutter_ohos';
 import { performanceDeviceFacts } from './OhosDeviceFacts';
 import { ohosThermal } from './OhosThermalState';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 let performanceSequence: number = 0;
 // Null until Dart chooses. Dart can answer before the window exists, so this outlives the
@@ -80,11 +81,11 @@ export default class PerformancePlugin implements FlutterPlugin {
   private setFrameCache(call: MethodCall, result: MethodResult): void {
     const enabled: Any = call.argument('enabled');
     try {
-      if (typeof enabled !== 'boolean') { result.error('bad_args', '帧缓存参数无效。', null); return; }
+      if (typeof enabled !== 'boolean') { result.error('bad_args', AppLanguage.pick('帧缓存参数无效。', 'The frame cache argument is invalid.'), null); return; }
       frameCacheChoice = enabled;
       PerformancePlugin.applyFrameCache();
       result.success(null);
-    } catch (_) { try { result.error('frame_cache', '帧缓存设置未生效。', null); } catch (_) {} }
+    } catch (_) { try { result.error('frame_cache', AppLanguage.pick('帧缓存设置未生效。', 'The frame cache setting did not take effect.'), null); } catch (_) {} }
   }
-  private fail(result: MethodResult): void { try { result.error('detached', '性能通道已关闭。', null); } catch (_) {} }
+  private fail(result: MethodResult): void { try { result.error('detached', AppLanguage.pick('性能通道已关闭。', 'The performance channel is closed.'), null); } catch (_) {} }
 }

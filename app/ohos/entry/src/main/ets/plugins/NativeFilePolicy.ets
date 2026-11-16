@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 // Public OH SDK. Target compiler and device results belong to the integration report.
 import uri from '@ohos.uri';
 import { Any } from '@ohos/flutter_ohos';
@@ -21,7 +22,7 @@ export class NativeFileBudget {
     if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > (own ? 1 : 4) ||
         !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > fileLimit ||
         !Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > totalLimit) {
-      throw new NativeFileError('invalid', '文件选择的数量或字节预算无效。');
+      throw new NativeFileError('invalid', AppLanguage.pick('文件选择的数量或字节预算无效。', 'Invalid file selection count or byte budget.'));
     }
     this.maxFiles = maxFiles; this.maxBytes = maxBytes; this.maxTotalBytes = maxTotalBytes;
   }
@@ -47,7 +48,7 @@ export class NativeFileBudget {
     this.counts.set(handle, next); this.total += count;
   }
 
-  private tooLarge(): never { throw new NativeFileError('too-large', '所选文件超过请求允许的字节预算。'); }
+  private tooLarge(): never { throw new NativeFileError('too-large', AppLanguage.pick('所选文件超过请求允许的字节预算。', 'The selected files exceed the allowed byte budget.')); }
 }
 
 export class NativeFileRequest {
@@ -60,16 +61,16 @@ export class NativeFileRequest {
   }
 
   static parse(raw: Any): NativeFileRequest {
-    if (!(raw instanceof Map)) throw new NativeFileError('invalid', '文件选择参数无效。');
+    if (!(raw instanceof Map)) throw new NativeFileError('invalid', AppLanguage.pick('文件选择参数无效。', 'Invalid file selection arguments.'));
     const owner: Any = raw.get('owner');
     const maxFiles: Any = raw.get('maxFiles') ?? 1;
     const maxBytes: Any = raw.get('maxBytes');
     const maxTotalBytes: Any = raw.get('maxTotalBytes');
     if (typeof owner !== 'string' || !/^[A-Za-z0-9_-]{32}$/.test(owner) ||
         typeof maxFiles !== 'number' || typeof maxBytes !== 'number' || typeof maxTotalBytes !== 'number') {
-      throw new NativeFileError('invalid', '文件选择所有者或预算无效。');
+      throw new NativeFileError('invalid', AppLanguage.pick('文件选择所有者或预算无效。', 'Invalid file selection owner or budget.'));
     }
-    if (raw.get('userGesture') !== true) throw new NativeFileError('unavailable', '请在应用前台点击选择文件。');
+    if (raw.get('userGesture') !== true) throw new NativeFileError('unavailable', AppLanguage.pick('请在应用前台点击选择文件。', 'Tap to select files while the app is in the foreground.'));
     return new NativeFileRequest(owner, raw.get('images') === true, raw.get('visual') === true,
       new NativeFileBudget(maxFiles, maxBytes, maxTotalBytes, raw.get('own') === true));
   }
@@ -77,14 +78,14 @@ export class NativeFileRequest {
 
 export function nativeFileUris(values: string[], maxFiles: number): string[] {
   if (!Array.isArray(values) || values.length > maxFiles) {
-    throw new NativeFileError('too-large', '所选文件数量超过请求上限。');
+    throw new NativeFileError('too-large', AppLanguage.pick('所选文件数量超过请求上限。', 'The number of selected files exceeds the request limit.'));
   }
   const output: string[] = [];
   for (let i = 0; i < values.length; i++) {
     const value: Any = values[i];
     if (typeof value !== 'string' || value.length > 16384 || /[\x00-\x1f\x7f\\]/.test(value) ||
         !/^file:\/\/(docs|media)\//.test(value) || /%(?![0-9a-fA-F]{2})/.test(value)) {
-      throw new NativeFileError('invalid', '系统选择器返回了不支持的文件 URI。');
+      throw new NativeFileError('invalid', AppLanguage.pick('系统选择器返回了不支持的文件 URI。', 'The system picker returned an unsupported file URI.'));
     }
     try {
       const parsed = new uri.URI(value);
@@ -99,8 +100,8 @@ export function nativeFileUris(values: string[], maxFiles: number): string[] {
         const decoded = decodeURIComponent(part);
         if (decoded === '.' || decoded === '..' || /[\x00-\x1f\x7f/\\]/.test(decoded)) throw new Error('invalid path');
       }
-    } catch (_) { throw new NativeFileError('invalid', '系统选择器返回了无效的文件 URI。'); }
-    if (output.includes(value)) throw new NativeFileError('invalid', '系统选择器重复返回了同一个文件。');
+    } catch (_) { throw new NativeFileError('invalid', AppLanguage.pick('系统选择器返回了无效的文件 URI。', 'The system picker returned an invalid file URI.')); }
+    if (output.includes(value)) throw new NativeFileError('invalid', AppLanguage.pick('系统选择器重复返回了同一个文件。', 'The system picker returned the same file twice.'));
     output.push(value);
   }
   return output;

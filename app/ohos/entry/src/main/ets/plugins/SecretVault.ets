@@ -1,3 +1,4 @@
+import { AppLanguage } from '../i18n/AppLanguage';
 import fs from '@ohos.file.fs';
 import util from '@ohos.util';
 import hilog from '@ohos.hilog';
@@ -12,7 +13,7 @@ export class SecretStorageError extends Error {
 
 // These failures describe the service call, not invalid ciphertext or key material.
 class RetryableSecretStorageError extends SecretStorageError {
-  constructor() { super('secrets_unavailable', '系统安全密钥暂不可用，请重试。'); }
+  constructor() { super('secrets_unavailable', AppLanguage.pick('系统安全密钥暂不可用，请重试。', 'The system security key is temporarily unavailable. Try again.')); }
 }
 
 class SecretRecord {
@@ -39,15 +40,15 @@ export class SecretVault {
   }
 
   private unreadable(): SecretStorageError {
-    return new SecretStorageError('secrets_unreadable', '已保存的凭据无法验证或读取，原加密数据未被覆盖。');
+    return new SecretStorageError('secrets_unreadable', AppLanguage.pick('已保存的凭据无法验证或读取，原加密数据未被覆盖。', 'The saved credential could not be verified or read; the original encrypted data was not overwritten.'));
   }
 
   private unavailable(): SecretStorageError {
-    return new SecretStorageError('secrets_unavailable', '系统安全密钥暂不可用，请重试。');
+    return new SecretStorageError('secrets_unavailable', AppLanguage.pick('系统安全密钥暂不可用，请重试。', 'The system security key is temporarily unavailable. Try again.'));
   }
 
   private keyUnusable(): SecretStorageError {
-    return new SecretStorageError('secrets_key_unusable', '本应用的系统密钥无法使用，需要清除后重新保存凭据。');
+    return new SecretStorageError('secrets_key_unusable', AppLanguage.pick('本应用的系统密钥无法使用，需要清除后重新保存凭据。', 'The system key for this app cannot be used; clear it and save the credential again.'));
   }
 
   private queue<T>(operation: () => Promise<T>): Promise<T> {
@@ -55,7 +56,7 @@ export class SecretVault {
     SecretVault.tail = work.then((): void => {}, (): void => {});
     return work.catch((error: Error): T => {
       if (error instanceof SecretStorageError) throw error;
-      throw new SecretStorageError('secrets_io', '无法读写本机加密凭据，请重试。');
+      throw new SecretStorageError('secrets_io', AppLanguage.pick('无法读写本机加密凭据，请重试。', 'Could not read or write the on-device encrypted credential. Try again.'));
     });
   }
 
@@ -80,7 +81,7 @@ export class SecretVault {
     try {
       if (await this.hasKey()) return;
       if (existingCiphertext) {
-        throw new SecretStorageError('secrets_key_missing', '已保存的凭据缺少系统密钥，原加密数据已保留。');
+        throw new SecretStorageError('secrets_key_missing', AppLanguage.pick('已保存的凭据缺少系统密钥，原加密数据已保留。', 'The saved credential is missing its system key; the original encrypted data was kept.'));
       }
       const generation: huks.HuksOptions = { properties: this.generationParameters() };
       try { await huks.generateKeyItem(SecretVault.alias, generation); }
@@ -301,7 +302,7 @@ export class SecretVault {
           const part = bytes.slice(offset, offset + SecretVault.chunkSize);
           const count = await fs.write(file.fd, part.buffer, { offset: offset });
           if (!Number.isSafeInteger(count) || count <= 0 || count > part.byteLength) {
-            throw new SecretStorageError('secrets_io', '加密凭据未完整保存，请重试。');
+            throw new SecretStorageError('secrets_io', AppLanguage.pick('加密凭据未完整保存，请重试。', 'The encrypted credential was not saved completely. Try again.'));
           }
           offset += count;
         }
@@ -353,7 +354,7 @@ export class SecretVault {
       try { await huks.deleteKeyItem(SecretVault.alias, options); }
       catch (error) {
         if ((error as BusinessError).code !== 12000011) {
-          throw new SecretStorageError('secrets_recovery_failed', '凭据恢复未完成，请重试以清理本应用的系统密钥。');
+          throw new SecretStorageError('secrets_recovery_failed', AppLanguage.pick('凭据恢复未完成，请重试以清理本应用的系统密钥。', 'Credential recovery did not complete; try again to clean up the system key for this app.'));
         }
       }
     });

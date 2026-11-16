@@ -5,6 +5,7 @@ import audio from '@ohos.multimedia.audio';
 import fs from '@ohos.file.fs';
 import { BusinessError } from '@ohos.base';
 import { NativeMediaError } from './NativeMediaPolicy';
+import { AppLanguage } from '../i18n/AppLanguage';
 
 export type NativeClipOpener = (root: string, relative: string) => Promise<number>;
 let playbackLease: OhosClipPlayer | null = null;
@@ -30,20 +31,20 @@ export class OhosClipPlayer {
   }
 
   async start(root: string, relative: string): Promise<void> {
-    if (this.begun) throw new NativeMediaError('busy', '此播放器已经启动过。');
+    if (this.begun) throw new NativeMediaError('busy', AppLanguage.pick('此播放器已经启动过。', 'This player has already been started.'));
     this.begun = true; this.live = true;
     // Store the in-flight work before invoking even a synchronous opener hook.
     this.opening = Promise.resolve().then((): Promise<void> => this.acquire(root, relative));
     try { await this.opening; }
     catch (error) {
       try { await this.stop(); }
-      catch (_) { throw new NativeMediaError('close', '音频资源尚未确认关闭。'); }
+      catch (_) { throw new NativeMediaError('close', AppLanguage.pick('音频资源尚未确认关闭。', 'The audio resource is not confirmed closed.')); }
       throw error as Error;
     }
   }
 
   private assertLive(): void {
-    if (!this.live || !this.current()) throw new NativeMediaError('stale-owner', '媒体操作的所有者已失效。');
+    if (!this.live || !this.current()) throw new NativeMediaError('stale-owner', AppLanguage.pick('媒体操作的所有者已失效。', "The media operation's owner is no longer valid."));
   }
 
   private async acquire(root: string, relative: string): Promise<void> {
@@ -56,12 +57,12 @@ export class OhosClipPlayer {
       this.assertLive();
       if (playbackLease === previous) {
         try { await previous.stop(); }
-        catch (_) { throw new NativeMediaError('busy', '上一段音频的原生资源尚未释放。'); }
+        catch (_) { throw new NativeMediaError('busy', AppLanguage.pick('上一段音频的原生资源尚未释放。', 'The native resource of the previous audio clip has not been released.')); }
       }
       this.assertLive();
     }
     // Two replacements can both await the old close; only one may acquire.
-    if (playbackLease !== null) throw new NativeMediaError('busy', '上一段音频的原生资源尚未释放。');
+    if (playbackLease !== null) throw new NativeMediaError('busy', AppLanguage.pick('上一段音频的原生资源尚未释放。', 'The native resource of the previous audio clip has not been released.'));
     playbackLease = this;
     await this.setup(root, relative);
   }
@@ -70,14 +71,14 @@ export class OhosClipPlayer {
     this.assertLive();
     this.fd = await this.opener(root, relative);
     this.assertLive();
-    if (!Number.isSafeInteger(this.fd) || this.fd < 0) throw new NativeMediaError('media-invalid', '音频文件句柄无效。');
+    if (!Number.isSafeInteger(this.fd) || this.fd < 0) throw new NativeMediaError('media-invalid', AppLanguage.pick('音频文件句柄无效。', 'The audio file handle is invalid.'));
     const info = await fs.stat(this.fd);
     this.assertLive();
     if (!info.isFile() || !Number.isSafeInteger(info.size) || info.size < 1 || info.size > 16 * 1024 * 1024) {
-      throw new NativeMediaError('media-invalid', '音频片段必须为 1 字节至 16 MiB 的普通文件。');
+      throw new NativeMediaError('media-invalid', AppLanguage.pick('音频片段必须为 1 字节至 16 MiB 的普通文件。', 'The audio clip must be a regular file from 1 byte to 16 MiB.'));
     }
     const player = await media.createAVPlayer();
-    if (player === undefined) throw new NativeMediaError('unsupported', '此设备无法创建音频播放器。');
+    if (player === undefined) throw new NativeMediaError('unsupported', AppLanguage.pick('此设备无法创建音频播放器。', 'This device cannot create an audio player.'));
     this.player = player;
     this.assertLive();
     player.on('stateChange', (state: media.AVPlayerState): void => {
@@ -112,17 +113,17 @@ export class OhosClipPlayer {
 
   async setPlaying(wanted: boolean): Promise<void> {
     this.assertLive(); this.desiredPlaying = wanted;
-    if (this.operation !== null) throw new NativeMediaError('busy', '播放器操作尚未完成。');
+    if (this.operation !== null) throw new NativeMediaError('busy', AppLanguage.pick('播放器操作尚未完成。', 'The player operation has not finished.'));
     if (this.opening !== null) await this.opening;
     if (this.transition !== null) { try { await this.transition; } catch (_) { this.assertLive(); } }
     this.assertLive();
     const player = this.player;
-    if (player === null) throw new NativeMediaError('audio', '没有当前音频片段。');
+    if (player === null) throw new NativeMediaError('audio', AppLanguage.pick('没有当前音频片段。', 'There is no current audio clip.'));
     let work: Promise<void> | null = null;
     if (!wanted && player.state === 'playing') work = player.pause();
     else if (wanted && ['prepared', 'paused'].includes(player.state)) work = player.play();
     else if (['idle', 'initialized', 'prepared', 'playing', 'paused'].includes(player.state)) return;
-    else throw new NativeMediaError('audio', '播放器当前状态不能完成该操作。');
+    else throw new NativeMediaError('audio', AppLanguage.pick('播放器当前状态不能完成该操作。', "The player's current state cannot complete this operation."));
     this.operation = work;
     try { if (work !== null) await work; this.assertLive(); }
     catch (error) { this.finish('audio.error', 'player'); throw error as Error; }

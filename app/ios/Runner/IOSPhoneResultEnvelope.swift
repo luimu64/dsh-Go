@@ -11,7 +11,9 @@ enum IOSPhoneResultEnvelope {
 
   static func values(requestID: String, runID: String, outcome: IOSPhoneOutcome) -> [String: Any] {
     let failure: [String: Any] = ["id": requestID, "runId": runID, "isError": true,
-      "text": "手机操控结果超过完整传输边界，未截断或重做动作。本次动作可能已经发生；请核对手机，不要自动重试。"]
+      "text": AppLanguage.words(
+        "The phone control result exceeds the complete transfer boundary; the action was not truncated or redone. This action may already have happened; check the phone and do not retry automatically.",
+        "手机操控结果超过完整传输边界，未截断或重做动作。本次动作可能已经发生；请核对手机，不要自动重试。")]
     guard outcome.text.utf8.count <= textBytes else { return failure }
     var result: [String: Any] = ["id": requestID, "runId": runID,
       "text": outcome.text, "isError": outcome.isError]
