@@ -1,0 +1,101 @@
+# Translation checks. The fork's reason to exist is the English translation, so
+# every test that looks at a catalog, a locale or an English string runs here on
+# its own, fast enough to wait for, instead of only inside the sharded Flutter job.
+# CI (ci.yml) still runs the whole suite; this is the gate that names the failure.
+name: Translations
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: translations-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  FLUTTER_VERSION: 3.47.7
+  NODE_VERSION: 24.22.1
+
+jobs:
+  translations:
+    name: Translation tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      DSH_TEST_FONT_DIR: /usr/share/fonts/opentype/noto
+      NOTO_CJK_VERSION: 1:20230817+repack1-3
+      NOTO_EMOJI_VERSION: v2.051
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      # Widget tests load real fonts (`app/test/support/test_fonts.dart` is
+      # strict), and these are the files the goldens were drawn with.
+      - name: Restore the fonts the tests read
+        id: fonts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-fonts
+          key: test-fonts-${{ env.NOTO_CJK_VERSION }}-${{ env.NOTO_EMOJI_VERSION }}
+      - name: Download the fonts
+        if: steps.fonts.outputs.cache-hit != 'true'
+        working-directory: ${{ runner.temp }}
+        run: |
+          sudo apt-get update -q
+          apt-get download fonts-noto-cjk="$NOTO_CJK_VERSION" fonts-noto-cjk-extra="$NOTO_CJK_VERSION"
+          for deb in fonts-noto-cjk*.deb; do dpkg-deb -x "$deb" unpacked; done
+          mkdir -p ~/test-fonts
+          cp unpacked/usr/share/fonts/opentype/noto/NotoSansCJK-{Regular,Bold,Light}.ttc ~/test-fonts/
+          curl -fsSL --retry 3 -o ~/test-fonts/NotoColorEmoji.ttf "https://raw.githubusercontent.com/googlefonts/noto-emoji/$NOTO_EMOJI_VERSION/fonts/NotoColorEmoji.ttf"
+          echo "72a635cb3d2f3524c51620cdde406b217204e8a6a06c6a096ff8ed4b5fd6e27b  $HOME/test-fonts/NotoColorEmoji.ttf" | sha256sum -c -
+      - name: Save the fonts
+        if: steps.fonts.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/test-fonts
+          key: ${{ steps.fonts.outputs.cache-primary-key }}
+      - name: Install the fonts
+        run: |
+          sudo install -Dm644 -t "$DSH_TEST_FONT_DIR" ~/test-fonts/NotoSansCJK-*.ttc
+          sudo install -Dm644 ~/test-fonts/NotoColorEmoji.ttf /usr/share/fonts/noto/NotoColorEmoji.ttf
+      - name: Catalog is valid and zh/en agree
+        run: python3 app/tool/l10n_merge.py --check
+      - name: Localization tooling tests
+        run: python3 -m unittest discover -s app/tool -p 'test_l10n_*.py'
+      - working-directory: app
+        run: flutter pub get --enforce-lockfile
+      - name: Generated localization is committed
+        working-directory: app
+        run: |
+          python3 tool/l10n_merge.py
+          git diff --exit-code -- lib/l10n
+      - name: Translation and locale tests
+        working-directory: app
+        run: |
+          # Every test file that reads a catalog, picks a locale, or asserts
+          # English text. Keep the pattern in step with new test names.
+          files=$(find test -name '*_test.dart' | grep -Ei 'l10n|locale|translat|language|english' | sort)
+          echo "$files"
+          flutter test --no-pub --reporter github $files
+      - name: Keep golden diffs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: translation-golden-failures
+          path: app/test/**/failures/*.png
+          if-no-files-found: ignore
+          retention-days: 7
