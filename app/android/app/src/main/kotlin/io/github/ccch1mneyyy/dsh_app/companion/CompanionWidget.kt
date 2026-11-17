@@ -12,8 +12,8 @@ import android.widget.RemoteViews
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import io.github.ccch1mneyyy.dsh_app.R;
-import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings;
+import io.github.ccch1mneyyy.dsh_app.R
+import io.github.ccch1mneyyy.dsh_app.i18n.AppStrings
 import java.util.Calendar
 
 /**
