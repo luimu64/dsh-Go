@@ -12,10 +12,14 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: dsh-go-companion
-        name: !!js |-
-          String(process.env.DSH_APP_LANGUAGE || '').toLowerCase().startsWith('en') ? "Companion" : "伙伴"
-        description: !!js |-
-          String(process.env.DSH_APP_LANGUAGE || '').toLowerCase().startsWith('en') ? "Companion room conversation: persona only, without tools." : "伙伴小屋的对话：只有角色人设，没有工具。"
+        # Labels stay literal, like `id` and `order`: this row is an entry group, and the
+        # loader never evaluates `!!js` in a group's own config (it keeps expressions for the
+        # child plugins to resolve when they activate). An expression here reaches the preset
+        # schema as an object, `name` fails "expected string", and the whole row is dropped
+        # with "2 entries did not activate". Chinese is the host default; the app localizes
+        # both names by preset id (app/lib/ui/features/feature_format.dart).
+        name: 伙伴
+        description: 伙伴小屋的对话：只有角色人设，没有工具。
         order: 90
         plugins:
           - id: persona
@@ -79,10 +83,10 @@
       name: '@deepseek-ai/dsh-agent-preset'
       config:
         id: dsh-go-companion-full
-        name: !!js |-
-          String(process.env.DSH_APP_LANGUAGE || '').toLowerCase().startsWith('en') ? "Companion · Full" : "伙伴·完整"
-        description: !!js |-
-          String(process.env.DSH_APP_LANGUAGE || '').toLowerCase().startsWith('en') ? "Keep the companion persona with this host's standard tools and connected phone tools." : "保留伙伴人设，使用当前主机的标准工具与已连接的手机工具。"
+        # Literal for the same reason as `preset-dsh-go-companion`: group config is not
+        # interpolated. The app picks the English copy by id.
+        name: 伙伴·完整
+        description: 保留伙伴人设，使用当前主机的标准工具与已连接的手机工具。
         order: 91
         plugins:
           # This scoped provider owns persona-prefix + fixed persona-suffix.

@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dsh_app/companion/companion_language.dart' show companionLanguageSource;
 import 'package:dsh_app/state/commands_state.dart';
 import 'package:dsh_app/ui/chat/slash_palette.dart';
 import 'package:dsh_app/ui/engine_settings/runtime_settings_pages.dart';
@@ -234,6 +235,22 @@ void main() {
       expect(agentPresetName(const AgentPresetInfo(id: 'cordis')), '创造模式');
       expect(agentPresetName(const AgentPresetInfo(id: 'mine', name: '我的')), '我的');
       expect(agentPresetName(const AgentPresetInfo(id: 'mine')), 'mine');
+
+      // The companion presets ship literal Chinese labels because a preset row is a
+      // loader entry group and its own config is never interpolated; the English copy
+      // lives here, chosen by preset id.
+      expect(agentPresetName(const AgentPresetInfo(id: 'dsh-go-companion')), '伙伴');
+      expect(agentPresetName(const AgentPresetInfo(id: 'dsh-go-companion-full')), '伙伴·完整');
+      final source = companionLanguageSource;
+      try {
+        companionLanguageSource = () => 'en';
+        expect(agentPresetName(const AgentPresetInfo(id: 'dsh-go-companion')), 'Companion');
+        expect(agentPresetName(const AgentPresetInfo(id: 'dsh-go-companion-full')), 'Companion · Full');
+        expect(agentPresetDescription(const AgentPresetInfo(id: 'dsh-go-companion')),
+            'Companion room conversation: persona only, without tools');
+      } finally {
+        companionLanguageSource = source;
+      }
     });
   });
 

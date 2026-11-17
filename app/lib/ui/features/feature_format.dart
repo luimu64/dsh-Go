@@ -6,6 +6,7 @@
 import 'package:dsh_client/dsh_client.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../companion/companion_language.dart' show companionPick;
 import '../../l10n/l10n.dart';
 import '../../state/engine_error_text.dart';
 import '../chat/run_info.dart';
@@ -104,13 +105,17 @@ String? permissionHint(String value, [String? hostDescription]) => switch (value
   _ => hostDescription,
 };
 
-/// Official names of the built-in agent presets.
+/// Official names of the built-in agent presets, plus the two companion presets
+/// the app's own overlay declares (their YAML labels are literal Chinese because
+/// a preset row is a loader entry group and never evaluates `!!js`).
 String agentPresetName(AgentPresetInfo preset) =>
     switch (preset.id) {
       'standard' => appL10n.featuresPresetStandard,
       'ptc' => appL10n.featuresPresetPtc,
       'minimal' => appL10n.featuresPresetMinimal,
       'cordis' => appL10n.featuresPresetCreator,
+      'dsh-go-companion' => companionPick('伙伴', 'Companion'),
+      'dsh-go-companion-full' => companionPick('伙伴·完整', 'Companion · Full'),
       _ => null,
     } ??
     (preset.name?.trim().isNotEmpty ?? false ? preset.name!.trim() : preset.id);
@@ -122,6 +127,12 @@ String? agentPresetDescription(AgentPresetInfo preset) =>
       'ptc' => appL10n.featuresPresetPtcDescription,
       'minimal' => appL10n.featuresPresetMinimalDescription,
       'cordis' => appL10n.featuresPresetCreatorDescription,
+      'dsh-go-companion' => companionPick(
+          '伙伴小屋的对话：只有角色人设，没有工具',
+          'Companion room conversation: persona only, without tools'),
+      'dsh-go-companion-full' => companionPick(
+          '保留伙伴人设，使用当前主机的标准工具与已连接的手机工具',
+          "Keep the companion persona with this host's standard tools and connected phone tools"),
       _ => null,
     } ??
     preset.description;
