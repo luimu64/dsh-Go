@@ -1,5 +1,49 @@
 # AGENTS.md
 
+## This fork (read first)
+
+Everything from `## 仓库布局` down is upstream's Chinese agent charter and applies here unchanged.
+This section only adds what is specific to the fork.
+
+### What this checkout is
+
+`luimu64/dsh-Go` is a personal build fork of
+[ccch1mneyyy/dsh-Go](https://github.com/ccch1mneyyy/dsh-Go): the dsh-Go phone app for DeepSeek
+Harness (Flutter UI, pure Dart client, patched DSH engine runtime). `origin` is the fork,
+`upstream` is `ccch1mneyyy/dsh-Go`, and `main` is upstream `main` plus one extra line of work.
+[FORK.md](FORK.md) is the fork's own charter; keep it in sync when the rules below change.
+
+### Purpose of the fork
+
+Upstream is Chinese-first. This fork exists to make the same app **fully English-compatible** while
+staying **feature-identical to upstream**:
+
+- English is a complete locale, not a partial translation. Any UI string, doc page, or release
+  artifact that reaches a user should read as native English; half-translated screens are the thing
+  this fork is fixing.
+- Feature parity is a constraint, not an ambition. Nothing lands on `main` that upstream does not
+  have, and upstream `main` is merged in on a regular cadence (routine in [FORK.md](FORK.md)).
+  No fork-only features, no behavior changes on Android or ohos.
+- Upstream files stay upstream. English material is added next to the Chinese sources
+  (`README.en.md`, `CONTRIBUTING.en.md`, `SECURITY.en.md`, `app/lib/l10n/parts/*.en.arb`,
+  `docs/guide/`), never by rewriting the Chinese pages.
+- Keep the diff against upstream small. Every edited upstream file is one that has to be merged by
+  hand at the next sync, so new fork-only material goes in fork-only files.
+
+### Working here
+
+- Repo root is the workspace root; the full validation matrix is the one in `CONTRIBUTING.md` and in
+  the command block below. Run the checks for whatever area you touched and record the commands.
+- Fork-specific checks gate the English pass: `python3 app/tool/l10n_merge.py --check` must show no
+  untranslated or diverged strings, and `python3 app/tool/guide_sync.py --check` covers the guides.
+- Upstream refuses external pull requests; this fork has no PR workflow. Work lands on `main`.
+- Commit and push by default. When a task is finished and its checks pass, commit it and push to
+  `origin/main` without waiting to be asked. This overrides the upstream `Git 安全` rule that says
+  not to commit or push unprompted; the rest of that section still applies (stage explicit paths,
+  no force push, no history rewriting, no stray branches left behind).
+
+## Upstream charter
+
 dsh-Go 是 DeepSeek Harness 的手机应用：Flutter 原生界面 + 纯 Dart 客户端 + 打过补丁的 DSH 引擎运行时。Android 版在 PRoot 里运行 `dsh web`；鸿蒙版共用同一套 Dart，宿主是 ArkTS（`app/ohos/`），引擎跑在 App 进程内的 Node 里（`runtime/ohos/`，见 [docs/architecture.md §3B](docs/architecture.md)）。改动前先读 [CONTRIBUTING.md](CONTRIBUTING.md)（贡献与验证契约）与 [docs/architecture.md](docs/architecture.md)。
 
 ## 仓库布局
