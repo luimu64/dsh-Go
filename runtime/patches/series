@@ -148,7 +148,11 @@ fork-default-effort.diff
 config-editor-lock-order.diff
 piai-overflow-output-limit.diff
 schedule-authorization-availability.diff
+deepseek-refusal.diff
+deepseek-unnamed-stream-error.diff
+web-empty-reply-notice.diff
 zzzzzzzzzzzzzzz-native-app-locale-override.diff
+# HarmonyOS-only overlays (pins.json targetSets.ohos), after the whole common chain.
 ohos-attachment-publication.diff
 ohos-attachment-diagnostic.diff
 ohos-hap-native-libraries.diff
