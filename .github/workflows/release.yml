@@ -218,6 +218,11 @@ jobs:
       - name: Signing check
         run: |
           apk=app/build/app/outputs/flutter-apk/app-arm64-release.apk
+          # apksigner ships in build-tools, which the runner does not put on PATH.
+          sdk=${ANDROID_HOME:-$ANDROID_SDK_ROOT}
+          tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          [[ -n $tools ]] || { echo "::error::no Android build-tools under $sdk"; exit 1; }
+          export PATH="$tools:$PATH"
           apksigner verify "$apk"
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
             # Release key: v1 must be there too (legacy installers and scanners),
