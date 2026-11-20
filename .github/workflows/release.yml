@@ -209,7 +209,9 @@ jobs:
           chmod 600 app/android/key.properties "$path"
       - name: Build the English arm64 APK
         run: |
-          tooling/build-apk.sh -f arm64 -- \
+          # --no-companion: the fork has no license for the companion pack
+          # (assets/companion/whale-girl.zip is gitignored upstream too).
+          tooling/build-apk.sh -f arm64 --no-companion -- \
             --dart-define=DSH_UPDATE_REPO=$GITHUB_REPOSITORY \
             --dart-define=DSH_UPDATE_MIRROR= \
             --dart-define=DSH_UPDATE_FEED=
